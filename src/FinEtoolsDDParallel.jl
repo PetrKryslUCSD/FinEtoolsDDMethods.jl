@@ -1,4 +1,4 @@
-module FinEtoolsDomDecomp
+module FinEtoolsDDParallel
 
 # Enable LSP look up in test modules
 if false
@@ -8,7 +8,7 @@ end
 using FinEtools
 
 include("FENodeToPartitionMapModule.jl")
-
+using .FENodeToPartitionMapModule: FENodeToPartitionMap
 export FENodeToPartitionMap
 
-end # module FinEtoolsDomDecomp
+end # module FinEtoolsDDParallel

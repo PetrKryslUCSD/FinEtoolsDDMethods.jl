@@ -25,13 +25,12 @@ end
 
 function _make_map(n2e, element_partitioning)
     map = Vector{Vector{eltype(element_partitioning)}}(undef, length(n2e.map))
-    Threads.@threads for i in eachindex(n2e.map) 
+    Threads.@threads     for i in eachindex(n2e.map) 
+        map[i] = Vector{eltype(element_partitioning)}()
         for j in n2e.map[i]
-            if map[i] === nothing
-                map[i] = Vector{eltype(element_partitioning)}()
-            end
             push!(map[i], element_partitioning[j])
         end
+        map[i] = unique(map[i])
     end
     return map
 end
