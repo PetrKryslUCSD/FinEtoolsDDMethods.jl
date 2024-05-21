@@ -1,1 +1,1 @@
-# FinEtoolsDomDecomp.jl
+# FinEtoolsDDParallel.jl
