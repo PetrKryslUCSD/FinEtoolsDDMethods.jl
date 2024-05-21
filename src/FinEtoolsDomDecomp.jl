@@ -7,4 +7,8 @@ end
 
 using FinEtools
 
+include("FENodeToPartitionMapModule.jl")
+
+export FENodeToPartitionMap
+
 end # module FinEtoolsDomDecomp
