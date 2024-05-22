@@ -1,0 +1,7 @@
+[deps]
+FinEtools = "91bb5406-6c9a-523d-811d-0644c4229550"
+FinEtoolsDDParallel = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
+FinEtoolsHeatDiff = "972d1c22-8bdd-11e9-11cf-cdcb7577b041"
+Metis = "2679e427-3c69-5b7f-982b-ece356f1e94b"
+PlotlyLight = "ca7969ec-10b3-423e-8d99-40f33abb42bf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
