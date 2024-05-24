@@ -43,8 +43,8 @@ function make_partition_mesh(fens, fes, n2p, element_partitioning, partition)
     return fens, pfes, global_node_numbers
 end
 function test()
-    ndoms = 3
-    fens, fes = T3block(1.0, 1.0, 7, 9)
+    ndoms = 13
+    fens, fes = T3block(1.0, 1.0, 27, 39)
     femm1 = FEMMBase(IntegDomain(fes, SimplexRule(3, 1)))
     C = dualconnectionmatrix(femm1, fens, nodesperelem(boundaryfe(fes)))
     g = Metis.graph(C; check_hermitian=true)

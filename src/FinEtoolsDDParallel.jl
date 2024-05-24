@@ -10,5 +10,6 @@ using FinEtools
 include("FENodeToPartitionMapModule.jl")
 using .FENodeToPartitionMapModule: FENodeToPartitionMap
 export FENodeToPartitionMap
+include("mesh.jl")
 
 end # module FinEtoolsDDParallel
