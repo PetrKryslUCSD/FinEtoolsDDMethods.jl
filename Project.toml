@@ -5,3 +5,8 @@ version = "0.1.0"
 
 [deps]
 FinEtools = "91bb5406-6c9a-523d-811d-0644c4229550"
+Metis = "2679e427-3c69-5b7f-982b-ece356f1e94b"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+julia = "^1.10"
