@@ -45,6 +45,9 @@ function mul!(y, Sop::SLinearOperator{T}, v) where {T}
 end
 size(Sop::SLinearOperator) = size(Sop.K_ii)
 eltype(Sop::SLinearOperator) = eltype(Sop.K_ii)
+function mul!(y::Vector{Float64}, F::SparseArrays.CHOLMOD.Factor{Float64, Int64}, v::Vector{Float64})
+    y .= F \ v
+end
 function test()
 
     # println("""
@@ -64,7 +67,7 @@ function test()
     ndoms = 7
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 500 # number of subdivisions along the sides of the square domain
+    N = 1100 # number of subdivisions along the sides of the square domain
 
     fens, fes = T3block(A, A, N, N)
 
@@ -157,7 +160,9 @@ function test()
     # S = K_ii - K_if * (K_ff \ Matrix(K_fi))
     Sop = SLinearOperator(K_ii, K_fi, K_if, K_ff)
     b = (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
-    @time (T_i, stats) = cg(Sop, b)
+    P = cholesky(Sop.K_ii)
+    @time (T_i, stats) = cg(Sop, b; M=P)
+    # @time (T_i, stats) = cg(Sop, b)
     show(stats)
     # T_i = S \ (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
     @time T_f = K_ff \ (F_f - K_fd * T_d - K_fi * T_i)
