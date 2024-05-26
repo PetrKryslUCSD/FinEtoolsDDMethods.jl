@@ -66,7 +66,7 @@ function mul!(y, mc::MatrixCache{T}, v) where {T}
     mul!(mc.temp_f, mc.K_fi, v)
     mul!(mc.temp_i, mc.K_if, (mc.K_ff_factor \ mc.temp_f))
     mul!(y, mc.K_ii, v) 
-    y .-= mc.tempi
+    y .-= mc.temp_i
     y
 end
 
@@ -133,54 +133,36 @@ function mark_interfaces!(u::F, n2p::FENodeToPartitionMap) where {F<:NodalField}
     end
 end
 
-# function partition_v_from_global_field!(v, global_u, global_node_numbers, partition_u)
-#     for i in eachindex(global_node_numbers)
-#         g = global_node_numbers[i]
-#         for j in 1:ndofs(global_u)
-#             if global_u.kind[g, j] == DOF_KIND_INTERFACE
-#                 l = partition_u.dofnums[i, j]
-#                 v[l] = global_u.values[g, j]
-#             end
-#         end
-#     end
-#     return u
-# end
-
-function partition_v_from_global_v!(partition_v, global_u, global_node_numbers, partition_u)
+function partition_v_from_global_v!(partition_v, global_u, global_node_numbers, partition_u, global_v)
+    global_from = first(dofrange(global_u, DOF_KIND_INTERFACE))
+    partition_from = first(dofrange(partition_u, DOF_KIND_INTERFACE))
     for i in eachindex(global_node_numbers)
         g = global_node_numbers[i]
         for j in 1:ndofs(global_u)
             if global_u.kind[g, j] == DOF_KIND_INTERFACE
                 l = partition_u.dofnums[i, j]
                 gl = global_u.dofnums[g, j]
-                partition_v[l] = global_v[gl]
+                gd = gl - global_from + 1
+                pd = l - partition_from + 1
+                partition_v[pd] = global_v[gd]
             end
         end
     end
-    return u
+    return partition_v
 end
 
-# function add_v_to_global_field!(v, global_u, global_node_numbers, partition_u)
-#     for i in eachindex(global_node_numbers)
-#         g = global_node_numbers[i]
-#         for j in 1:ndofs(global_u)
-#             if global_u.kind[g, j] == DOF_KIND_INTERFACE
-#                 l = partition_u.dofnums[i, j]
-#                 global_u.values[g, j] += v[l] 
-#             end
-#         end
-#     end
-#     return u
-# end
-
 function add_partition_v_to_global_v!(global_v, global_u, global_node_numbers, partition_u, partition_v)
+    global_from = first(dofrange(global_u, DOF_KIND_INTERFACE))
+    partition_from = first(dofrange(partition_u, DOF_KIND_INTERFACE))
     for i in eachindex(global_node_numbers)
         g = global_node_numbers[i]
         for j in 1:ndofs(global_u)
             if global_u.kind[g, j] == DOF_KIND_INTERFACE
                 l = partition_u.dofnums[i, j]
                 gl = global_u.dofnums[g, j]
-                global_v[gl] += partition_v[l] 
+                gd = gl - global_from + 1
+                pd = l - partition_from + 1
+                global_v[gd] += partition_v[pd] 
             end
         end
     end
@@ -189,7 +171,7 @@ end
 
 function mul_S_v!(partition::PartitionSchurDD, v)
     mc = partition.mc
-    partition_v_from_global_v!(mc.temp_i, partition.global_u, partition.global_node_numbers, partition.u)
+    partition_v_from_global_v!(mc.temp_i, partition.global_u, partition.global_node_numbers, partition.u, v)
     mul!(mc.result_i, mc, mc.temp_i)
     return partition
 end

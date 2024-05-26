@@ -30,7 +30,9 @@ function spy_matrix(A::SparseMatrixCSC, name="")
     display(p)
 end
 
-struct SLinearOperator
+struct SLinearOperator{T, IT}
+    s::IT
+    z::T
     partitions::Vector{PartitionSchurDD}
 end
 
@@ -42,8 +44,8 @@ function mul!(y, Sop::SLinearOperator, v)
     end
     y
 end
-size(Sop::SLinearOperator) = size(Sop.K_ii)
-eltype(Sop::SLinearOperator) = eltype(Sop.K_ii)
+size(Sop::SLinearOperator) = (Sop.s, Sop.s)
+eltype(Sop::SLinearOperator) = typeof(Sop.z)
 
 function test()
 
@@ -61,8 +63,8 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 100 # number of subdivisions along the sides of the square domain
-    ndoms = 7
+    N = 10 # number of subdivisions along the sides of the square domain
+    ndoms = 3
 
     fens, fes = T3block(A, A, N, N)
 
@@ -115,7 +117,7 @@ function test()
     end
 
     # Create partitions
-    partitions = []
+    partitions = PartitionSchurDD[]
     for p  in 1:ndoms
         push!(partitions,
             PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, p)..., Temp,
@@ -124,12 +126,14 @@ function test()
         )
     end
 
-    Sop = SLinearOperator(partitions)
+    Sop = SLinearOperator(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
+    @show size(b)
     for p in Sop.partitions
         assemble_rhs!(b,  p)
     end
+    
     @time (T_i, stats) = cg(Sop, b)
 
     VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
