@@ -75,16 +75,11 @@ function test()
         return partition_geom, partition_Temp
     end
 
-    function make_partition_femm(partition_fens, partition_fes, partition_Temp)
-        return FEMMHeatDiff(IntegDomain(fes, TriRule(1), 100.0), material)
+    function make_partition_femm(partition_fes)
+        return FEMMHeatDiff(IntegDomain(partition_fes, TriRule(1), 100.0), material)
     end
 
     function make_partition_matrix(partition_femm, partition_geom, partition_Temp)
-        @show dofrange(partition_Temp, DOF_KIND_FREE)
-        @show dofrange(partition_Temp, DOF_KIND_INTERFACE)
-        @show dofrange(partition_Temp, DOF_KIND_DATA)
-        @show minimum(partition_Temp.dofnums)
-        @show maximum(partition_Temp.dofnums)
         return conductivity(partition_femm, partition_geom, partition_Temp)
     end
 

@@ -12,6 +12,8 @@ using FinEtools
 using SparseArrays
 using Krylov
 using LinearOperators
+using SparseArrays
+using LinearAlgebra
 import Base: size, eltype
 import LinearAlgebra: mul!
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
@@ -53,6 +55,8 @@ function SLinearOperator(K::SparseMatrixCSC{T, IT}, b::Vector{T}, u::F) where {F
     u_d = gathersysvec(u, DOF_KIND_DATA)
     K_fd = K[fr, dr]
     K_id = K[ir, dr]
+    K_if = K[ir, fr]
+    K_fi = K[fr, ir]
     b_i = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ (b[fr] - K_fd * u_d)))
     SLinearOperator{T, IT}(temp_f, temp_i, b_i, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor)
 end
@@ -102,10 +106,10 @@ end
 function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, global_u::F, 
     make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load   
     ) where {FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField{T,IT} where {T<:Number,IT<:Integer},IT<:Integer}
+    # validate_mesh(fens, fes);
     geom, u = make_partition_fields(fens)
     global_field_to_local_field!(u, global_u, global_node_numbers)
-    femm = make_partition_femm(fens, fes, u)
-    @show nfreedofs(u), nalldofs(u)
+    femm = make_partition_femm(fes)
     K = make_partition_matrix(femm, geom, u)
     I = make_partition_interior_load(femm, geom, u, global_node_numbers)
     B = make_partition_boundary_load(geom, u, global_node_numbers)
@@ -114,6 +118,7 @@ function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, 
 end
 
 function global_field_to_local_field!(u, global_u, global_node_numbers)
+    @show nents(u)
     # Transfer the kinds and values from the global field. Not the degree of freedom numbers.
     for i in 1:nents(u)
         u.kind[i, :] .= global_u.kind[global_node_numbers[i], :]
