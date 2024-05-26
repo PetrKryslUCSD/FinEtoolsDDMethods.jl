@@ -32,7 +32,7 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 #     display(p)
 # end
 
-struct SLinearOperator{T, IT}
+struct MatrixCache{T, IT}
     temp_f::Vector{T}
     temp_i::Vector{T}
     b_i::Vector{T}
@@ -41,9 +41,10 @@ struct SLinearOperator{T, IT}
     K_if::SparseMatrixCSC{T, IT}
     K_ff_factor::SparseArrays.CHOLMOD.Factor{T, IT}
     K_ii_factor::SparseArrays.CHOLMOD.Factor{T, IT}
+    result_i::Vector{T}
 end
 
-function SLinearOperator(K::SparseMatrixCSC{T, IT}, b::Vector{T}, u::F) where {F<:NodalField,T, IT}
+function MatrixCache(K::SparseMatrixCSC{T, IT}, b::Vector{T}, u::F) where {F<:NodalField,T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
     ir = dofrange(u, DOF_KIND_INTERFACE)
     dr = dofrange(u, DOF_KIND_DATA)
@@ -51,26 +52,23 @@ function SLinearOperator(K::SparseMatrixCSC{T, IT}, b::Vector{T}, u::F) where {F
     K_ii = K[ir, ir]
     K_ff_factor = cholesky(K_ff)
     K_ii_factor = cholesky(K_ii)
-    temp_f, temp_i = zeros(T, size(K_ff, 1)), zeros(T, size(K_ii, 1))
+    temp_f, temp_i, result_i = zeros(T, size(K_ff, 1)), zeros(T, size(K_ii, 1)), zeros(T, size(K_ii, 1))
     u_d = gathersysvec(u, DOF_KIND_DATA)
     K_fd = K[fr, dr]
     K_id = K[ir, dr]
     K_if = K[ir, fr]
     K_fi = K[fr, ir]
     b_i = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ (b[fr] - K_fd * u_d)))
-    SLinearOperator{T, IT}(temp_f, temp_i, b_i, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor)
+    MatrixCache{T, IT}(temp_f, temp_i, b_i, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, result_i)
 end
 
-function mul!(y, Sop::SLinearOperator{T}, v) where {T}
-    mul!(Sop.temp_f, Sop.K_fi, v)
-    mul!(Sop.temp_i, Sop.K_if, (Sop.K_ff_factor \ Sop.temp_f))
-    mul!(y, Sop.K_ii, v) 
-    y .-= Sop.tempi
+function mul!(y, mc::MatrixCache{T}, v) where {T}
+    mul!(mc.temp_f, mc.K_fi, v)
+    mul!(mc.temp_i, mc.K_if, (mc.K_ff_factor \ mc.temp_f))
+    mul!(y, mc.K_ii, v) 
+    y .-= mc.tempi
     y
 end
-
-size(Sop::SLinearOperator) = size(Sop.K_ii)
-eltype(Sop::SLinearOperator) = eltype(Sop.K_ii)
 
 # function mul!(y::Vector{Float64}, F::SparseArrays.CHOLMOD.Factor{Float64, Int64}, v::Vector{Float64})
 #     y .= F \ v
@@ -89,7 +87,7 @@ struct PartitionSchurDD{T, IT, FEN<:FENodeSet, FES<:AbstractFESet, F<:NodalField
     u::F
     global_node_numbers::Vector{IT}
     global_u::F
-    Sop::SLinearOperator{T, IT}
+    mc::MatrixCache{T, IT}
 end
 
 function sum_load_vectors(I, B, u)
@@ -100,7 +98,7 @@ function sum_load_vectors(I, B, u)
     if length(B) != length(ar)
         B = zeros(eltype(B), length(ar))
     end     
-     return I + B
+    return I + B
 end
 
 function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, global_u::F, 
@@ -108,24 +106,23 @@ function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, 
     ) where {FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField{T,IT} where {T<:Number,IT<:Integer},IT<:Integer}
     # validate_mesh(fens, fes);
     geom, u = make_partition_fields(fens)
-    global_field_to_local_field!(u, global_u, global_node_numbers)
+    global_field_to_partition_field!(u, global_u, global_node_numbers)
     femm = make_partition_femm(fes)
     K = make_partition_matrix(femm, geom, u)
     I = make_partition_interior_load(femm, geom, u, global_node_numbers)
     B = make_partition_boundary_load(geom, u, global_node_numbers)
-    Sop = SLinearOperator(K, sum_load_vectors(I, B, u), u)
-    return PartitionSchurDD(fens, fes, u, global_node_numbers, global_u, Sop)
+    mc = MatrixCache(K, sum_load_vectors(I, B, u), u)
+    return PartitionSchurDD(fens, fes, u, global_node_numbers, global_u, mc)
 end
 
-function global_field_to_local_field!(u, global_u, global_node_numbers)
-    @show nents(u)
+function global_field_to_partition_field!(partition_u, global_u, global_node_numbers)
     # Transfer the kinds and values from the global field. Not the degree of freedom numbers.
-    for i in 1:nents(u)
-        u.kind[i, :] .= global_u.kind[global_node_numbers[i], :]
-        u.values[i, :] .= global_u.values[global_node_numbers[i], :]
+    for i in 1:nents(partition_u)
+        partition_u.kind[i, :] .= global_u.kind[global_node_numbers[i], :]
+        partition_u.values[i, :] .= global_u.values[global_node_numbers[i], :]
     end
-    numberdofs!(u, 1:nents(u), [DOF_KIND_FREE, DOF_KIND_INTERFACE, DOF_KIND_DATA])
-    return u
+    numberdofs!(partition_u, 1:nents(partition_u), [DOF_KIND_FREE, DOF_KIND_INTERFACE, DOF_KIND_DATA])
+    return partition_u
 end
 
 function mark_interfaces!(u::F, n2p::FENodeToPartitionMap) where {F<:NodalField}
@@ -134,6 +131,77 @@ function mark_interfaces!(u::F, n2p::FENodeToPartitionMap) where {F<:NodalField}
             u.kind[i, :] .= DOF_KIND_INTERFACE
         end
     end
+end
+
+# function partition_v_from_global_field!(v, global_u, global_node_numbers, partition_u)
+#     for i in eachindex(global_node_numbers)
+#         g = global_node_numbers[i]
+#         for j in 1:ndofs(global_u)
+#             if global_u.kind[g, j] == DOF_KIND_INTERFACE
+#                 l = partition_u.dofnums[i, j]
+#                 v[l] = global_u.values[g, j]
+#             end
+#         end
+#     end
+#     return u
+# end
+
+function partition_v_from_global_v!(partition_v, global_u, global_node_numbers, partition_u)
+    for i in eachindex(global_node_numbers)
+        g = global_node_numbers[i]
+        for j in 1:ndofs(global_u)
+            if global_u.kind[g, j] == DOF_KIND_INTERFACE
+                l = partition_u.dofnums[i, j]
+                gl = global_u.dofnums[g, j]
+                partition_v[l] = global_v[gl]
+            end
+        end
+    end
+    return u
+end
+
+# function add_v_to_global_field!(v, global_u, global_node_numbers, partition_u)
+#     for i in eachindex(global_node_numbers)
+#         g = global_node_numbers[i]
+#         for j in 1:ndofs(global_u)
+#             if global_u.kind[g, j] == DOF_KIND_INTERFACE
+#                 l = partition_u.dofnums[i, j]
+#                 global_u.values[g, j] += v[l] 
+#             end
+#         end
+#     end
+#     return u
+# end
+
+function add_partition_v_to_global_v!(global_v, global_u, global_node_numbers, partition_u, partition_v)
+    for i in eachindex(global_node_numbers)
+        g = global_node_numbers[i]
+        for j in 1:ndofs(global_u)
+            if global_u.kind[g, j] == DOF_KIND_INTERFACE
+                l = partition_u.dofnums[i, j]
+                gl = global_u.dofnums[g, j]
+                global_v[gl] += partition_v[l] 
+            end
+        end
+    end
+    return global_v
+end
+
+function mul_S_v!(partition::PartitionSchurDD, v)
+    mc = partition.mc
+    partition_v_from_global_v!(mc.temp_i, partition.global_u, partition.global_node_numbers, partition.u)
+    mul!(mc.result_i, mc, mc.temp_i)
+    return partition
+end
+
+function assemble_sol!(y,  partition::PartitionSchurDD)
+    mc = partition.mc
+    return add_partition_v_to_global_v!(y, partition.global_u, partition.global_node_numbers, partition.u, mc.result_i)
+end
+
+function assemble_rhs!(y,  partition::PartitionSchurDD)
+    mc = partition.mc
+    return add_partition_v_to_global_v!(y, partition.global_u, partition.global_node_numbers, partition.u, mc.b_i)
 end
 
 end # module PartitionSchurDDModule

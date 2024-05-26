@@ -3,11 +3,18 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDParallel
+using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
 using Metis
 using Test
 using LinearAlgebra
 using SparseArrays
 using PlotlyLight
+using Krylov
+using LinearOperators
+using SparseArrays
+using LinearAlgebra
+import Base: size, eltype
+import LinearAlgebra: mul!
 
 function spy_matrix(A::SparseMatrixCSC, name="")
     I, J, V = findnz(A)
@@ -22,6 +29,21 @@ function spy_matrix(A::SparseMatrixCSC, name="")
     p.layout.margin.pad = 10
     display(p)
 end
+
+struct SLinearOperator
+    partitions::Vector{PartitionSchurDD}
+end
+
+function mul!(y, Sop::SLinearOperator, v) 
+    y .= zero(eltype(y))
+    for p in Sop.partitions
+        mul_S_v!(p, v)
+        assemble_sol!(y,  p)
+    end
+    y
+end
+size(Sop::SLinearOperator) = size(Sop.K_ii)
+eltype(Sop::SLinearOperator) = eltype(Sop.K_ii)
 
 function test()
 
@@ -101,6 +123,14 @@ function test()
             )
         )
     end
+
+    Sop = SLinearOperator(partitions)
+    b = gathersysvec(Temp, DOF_KIND_INTERFACE)
+    b .= 0.0
+    for p in Sop.partitions
+        assemble_rhs!(b,  p)
+    end
+    @time (T_i, stats) = cg(Sop, b)
 
     VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
 
