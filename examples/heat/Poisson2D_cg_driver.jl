@@ -3,7 +3,7 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
+using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!, reconstruct_free!
 using Metis
 using Test
 using LinearAlgebra
@@ -63,13 +63,13 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 10 # number of subdivisions along the sides of the square domain
-    ndoms = 3
+    N = 1000 # number of subdivisions along the sides of the square domain
+    ndoms = 30
 
     fens, fes = T3block(A, A, N, N)
 
     geom = NodalField(fens.xyz)
-    Temp = NodalField(zeros(size(fens.xyz, 1), 1))
+    Temp = NodalField(zeros(count(fens), 1))
 
     
     # Partition the finite element mesh.
@@ -129,12 +129,18 @@ function test()
     Sop = SLinearOperator(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
-    @show size(b)
     for p in Sop.partitions
         assemble_rhs!(b,  p)
     end
     
     @time (T_i, stats) = cg(Sop, b)
+    @show stats
+    scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
+    for p in Sop.partitions
+        reconstruct_free!(p)
+    end
+
+    approx_T = Temp.values
 
     VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
 

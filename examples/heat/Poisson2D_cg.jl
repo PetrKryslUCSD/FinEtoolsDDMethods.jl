@@ -41,6 +41,7 @@ function mul!(y, Sop::SLinearOperator{T}, v) where {T}
     mul!(Sop.tempi, Sop.K_if, (Sop.K_ff_factor \ Sop.tempf))
     mul!(y, Sop.K_ii, v) 
     y .-= Sop.tempi
+    @show y
     y
 end
 size(Sop::SLinearOperator) = size(Sop.K_ii)
@@ -64,10 +65,10 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     DOF_KIND_INTERFACE::KIND_INT = 3
-    ndoms = 7
+    ndoms = 3
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 100 # number of subdivisions along the sides of the square domain
+    N = 10 # number of subdivisions along the sides of the square domain
 
     fens, fes = T3block(A, A, N, N)
 
@@ -161,8 +162,9 @@ function test()
     Sop = SLinearOperator(K_ii, K_fi, K_if, K_ff)
     b = (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
     P = cholesky(Sop.K_ii)
-    @time (T_i, stats) = cg(Sop, b; M=P)
-    # @time (T_i, stats) = cg(Sop, b)
+    @show b
+    # @time (T_i, stats) = cg(Sop, b; M=P)
+    @time (T_i, stats) = cg(Sop, b)
     show(stats)
     # T_i = S \ (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
     @time T_f = K_ff \ (F_f - K_fd * T_d - K_fi * T_i)

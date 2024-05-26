@@ -35,7 +35,9 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 struct MatrixCache{T, IT}
     temp_f::Vector{T}
     temp_i::Vector{T}
-    b_i::Vector{T}
+    temp_v::Vector{T}
+    b_i_til::Vector{T}
+    b_f::Vector{T}
     K_ii::SparseMatrixCSC{T, IT}
     K_fi::SparseMatrixCSC{T, IT}
     K_if::SparseMatrixCSC{T, IT}
@@ -52,14 +54,18 @@ function MatrixCache(K::SparseMatrixCSC{T, IT}, b::Vector{T}, u::F) where {F<:No
     K_ii = K[ir, ir]
     K_ff_factor = cholesky(K_ff)
     K_ii_factor = cholesky(K_ii)
-    temp_f, temp_i, result_i = zeros(T, size(K_ff, 1)), zeros(T, size(K_ii, 1)), zeros(T, size(K_ii, 1))
+    temp_f = zeros(T, size(K_ff, 1))
+    temp_i = zeros(T, size(K_ii, 1))
+    temp_v = zeros(T, size(K_ii, 1))
+    result_i = zeros(T, size(K_ii, 1))
     u_d = gathersysvec(u, DOF_KIND_DATA)
     K_fd = K[fr, dr]
     K_id = K[ir, dr]
     K_if = K[ir, fr]
     K_fi = K[fr, ir]
-    b_i = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ (b[fr] - K_fd * u_d)))
-    MatrixCache{T, IT}(temp_f, temp_i, b_i, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, result_i)
+    b_f = b[fr] - K_fd * u_d
+    b_i_til = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ b_f))
+    MatrixCache{T, IT}(temp_f, temp_i, temp_v, b_i_til, b_f, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, result_i)
 end
 
 function mul!(y, mc::MatrixCache{T}, v) where {T}
@@ -106,7 +112,7 @@ function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, 
     ) where {FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField{T,IT} where {T<:Number,IT<:Integer},IT<:Integer}
     # validate_mesh(fens, fes);
     geom, u = make_partition_fields(fens)
-    global_field_to_partition_field!(u, global_u, global_node_numbers)
+    init_partition_field!(u, global_u, global_node_numbers)
     femm = make_partition_femm(fes)
     K = make_partition_matrix(femm, geom, u)
     I = make_partition_interior_load(femm, geom, u, global_node_numbers)
@@ -115,7 +121,7 @@ function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, 
     return PartitionSchurDD(fens, fes, u, global_node_numbers, global_u, mc)
 end
 
-function global_field_to_partition_field!(partition_u, global_u, global_node_numbers)
+function init_partition_field!(partition_u, global_u, global_node_numbers)
     # Transfer the kinds and values from the global field. Not the degree of freedom numbers.
     for i in 1:nents(partition_u)
         partition_u.kind[i, :] .= global_u.kind[global_node_numbers[i], :]
@@ -171,8 +177,8 @@ end
 
 function mul_S_v!(partition::PartitionSchurDD, v)
     mc = partition.mc
-    partition_v_from_global_v!(mc.temp_i, partition.global_u, partition.global_node_numbers, partition.u, v)
-    mul!(mc.result_i, mc, mc.temp_i)
+    partition_v_from_global_v!(mc.temp_v, partition.global_u, partition.global_node_numbers, partition.u, v)
+    mul!(mc.result_i, mc, mc.temp_v)
     return partition
 end
 
@@ -183,7 +189,35 @@ end
 
 function assemble_rhs!(y,  partition::PartitionSchurDD)
     mc = partition.mc
-    return add_partition_v_to_global_v!(y, partition.global_u, partition.global_node_numbers, partition.u, mc.b_i)
+    return add_partition_v_to_global_v!(y, partition.global_u, partition.global_node_numbers, partition.u, mc.b_i_til)
+end
+
+function partition_field_to_global_field!(global_u, global_node_numbers, partition_u,  )
+    for i in 1:nents(partition_u)
+        g = global_node_numbers[i]
+        global_u.kind[g, :] .= partition_u.kind[i, :]
+        global_u.values[g, :] .= partition_u.values[i, :]
+    end
+    return global_u
+end
+
+function global_field_to_partition_field!(partition_u, global_node_numbers, global_u,)
+    for i in 1:nents(partition_u)
+        g = global_node_numbers[i]
+        partition_u.kind[i, :] .= global_u.kind[g, :]
+        partition_u.values[i, :] .= global_u.values[g, :]
+    end
+    return partition_u
+end
+
+function reconstruct_free!(partition::PartitionSchurDD) 
+    mc = partition.mc
+    global_field_to_partition_field!(partition.u, partition.global_node_numbers, partition.global_u, )
+    T_i = gathersysvec(partition.u, DOF_KIND_INTERFACE)
+    T_f = mc.K_ff_factor \ (mc.b_f - mc.K_fi * T_i)
+    scattersysvec!(partition.u, T_f, DOF_KIND_FREE)
+    partition_field_to_global_field!(partition.global_u, partition.global_node_numbers, partition.u, )
+    return partition.global_u
 end
 
 end # module PartitionSchurDDModule
