@@ -80,6 +80,11 @@ function test()
     end
 
     function make_partition_matrix(partition_femm, partition_geom, partition_Temp)
+        @show dofrange(partition_Temp, DOF_KIND_FREE)
+        @show dofrange(partition_Temp, DOF_KIND_INTERFACE)
+        @show dofrange(partition_Temp, DOF_KIND_DATA)
+        @show minimum(partition_Temp.dofnums)
+        @show maximum(partition_Temp.dofnums)
         return conductivity(partition_femm, partition_geom, partition_Temp)
     end
 
@@ -92,23 +97,14 @@ function test()
         return Float64[]
     end
 
+    # Create partitions
     partitions = []
     for p  in 1:ndoms
-        partition_fens, partition_fes, global_node_numbers = make_partition_mesh(fens, fes, element_partitioning, p)
-
-        partition_geom, partition_Temp = make_partition_fields(partition_fens)
-        partition_femm = make_partition_femm(partition_fens, partition_fes, partition_Temp)
-        K = make_matrix(partition_femm, partition_geom, partition_Temp)
-        F1 = make_interior_load(partition_femm, partition_geom, partition_Temp, global_node_numbers)
-        F2 = make_boundary_load(partition_geom, partition_Temp, global_node_numbers)
-        fr = dofrange(partition_Temp, DOF_KIND_FREE)
-        dr = dofrange(partition_Temp, DOF_KIND_DATA)
-        K_ff = K[fr, fr]
-        K_fd = K[fr, dr]
-        F_f = F1[fr]
-        T_d = gathersysvec(partition_Temp, DOF_KIND_DATA)
-        T_f = K_ff \ (F_f - K_fd * T_d)
-        scattersysvec!(partition_Temp, T_f)
+        push!(partitions,
+            PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, p)..., Temp,
+                make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
+            )
+        )
     end
 
     VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])

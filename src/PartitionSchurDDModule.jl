@@ -41,7 +41,7 @@ struct SLinearOperator{T, IT}
     K_ii_factor::SparseArrays.CHOLMOD.Factor{T, IT}
 end
 
-function SLinearOperator(K::SparseMatrixCSC{T, IT}, u::F) where {F<:NodalField,T, IT}
+function SLinearOperator(K::SparseMatrixCSC{T, IT}, b::Vector{T}, u::F) where {F<:NodalField,T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
     ir = dofrange(u, DOF_KIND_INTERFACE)
     dr = dofrange(u, DOF_KIND_DATA)
@@ -53,7 +53,7 @@ function SLinearOperator(K::SparseMatrixCSC{T, IT}, u::F) where {F<:NodalField,T
     u_d = gathersysvec(u, DOF_KIND_DATA)
     K_fd = K[fr, dr]
     K_id = K[ir, dr]
-    b_i = (F_i - K_id * u_d - K_if * (K_ff_factor \ (F_f - K_fd * u_d)))
+    b_i = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ (b[fr] - K_fd * u_d)))
     SLinearOperator{T, IT}(temp_f, temp_i, b_i, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor)
 end
 
@@ -77,13 +77,10 @@ const DOF_KIND_INTERFACE::KIND_INT = 3
 """
     PartitionSchurDD
 
-Map from finite element nodes to the partitions to which they belong.
-
-- `map` = map as a vector of vectors. If a node belongs to a single partition,
-  the inner vector will have a single element.
+Partition for the Schur complement solver for a partitioned finite element model.
 """
-struct PartitionSchurDD{T, IT, FES<:FESet, F<:NodalField}
-    fens::FENodeSet
+struct PartitionSchurDD{T, IT, FEN<:FENodeSet, FES<:AbstractFESet, F<:NodalField}
+    fens::FEN
     fes::FES 
     u::F
     global_node_numbers::Vector{IT}
@@ -91,22 +88,38 @@ struct PartitionSchurDD{T, IT, FES<:FESet, F<:NodalField}
     Sop::SLinearOperator{T, IT}
 end
 
-function PartitionSchurDD{T, IT}(fens::FENodeSet, fes::FES, global_node_numbers::Vector{IT}, global_u::F) where {T<:Number,IT<:Integer,F<:NodalField}
+function sum_load_vectors(I, B, u)
+    ar = dofrange(u, DOF_KIND_ALL)
+    if length(I) != length(ar)
+        I = zeros(eltype(I), length(ar))
+    end        
+    if length(B) != length(ar)
+        B = zeros(eltype(B), length(ar))
+    end     
+     return I + B
+end
+
+function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, global_u::F, 
+    make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load   
+    ) where {FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField{T,IT} where {T<:Number,IT<:Integer},IT<:Integer}
     geom, u = make_partition_fields(fens)
-    transfer_dofs!(u, global_u, global_node_numbers)
+    global_field_to_local_field!(u, global_u, global_node_numbers)
     femm = make_partition_femm(fens, fes, u)
+    @show nfreedofs(u), nalldofs(u)
     K = make_partition_matrix(femm, geom, u)
     I = make_partition_interior_load(femm, geom, u, global_node_numbers)
-    B = make_partition_interior_load(geom, u, global_node_numbers)
-    Sop = SLinearOperator(K, u)
-end 
+    B = make_partition_boundary_load(geom, u, global_node_numbers)
+    Sop = SLinearOperator(K, sum_load_vectors(I, B, u), u)
+    return PartitionSchurDD(fens, fes, u, global_node_numbers, global_u, Sop)
+end
 
-function transfer_dofs!(u, global_u, global_node_numbers)
+function global_field_to_local_field!(u, global_u, global_node_numbers)
+    # Transfer the kinds and values from the global field. Not the degree of freedom numbers.
     for i in 1:nents(u)
         u.kind[i, :] .= global_u.kind[global_node_numbers[i], :]
-        u.dofnums[i, :] .= global_u.dofnums[global_node_numbers[i], :]
         u.values[i, :] .= global_u.values[global_node_numbers[i], :]
     end
+    numberdofs!(u, 1:nents(u), [DOF_KIND_FREE, DOF_KIND_INTERFACE, DOF_KIND_DATA])
     return u
 end
 

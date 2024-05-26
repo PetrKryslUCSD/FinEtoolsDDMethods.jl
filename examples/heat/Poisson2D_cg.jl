@@ -67,7 +67,7 @@ function test()
     ndoms = 7
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 1100 # number of subdivisions along the sides of the square domain
+    N = 100 # number of subdivisions along the sides of the square domain
 
     fens, fes = T3block(A, A, N, N)
 
