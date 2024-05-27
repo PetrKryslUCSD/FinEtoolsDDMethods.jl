@@ -32,8 +32,9 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 #     display(p)
 # end
 
-struct MatrixCache{T,IT}
+struct MatrixCache{T,IT,FACTOR}
     temp_f::Vector{T}
+    temp_s::Vector{T}
     temp_i::Vector{T}
     temp_v::Vector{T}
     b_i_til::Vector{T}
@@ -41,8 +42,8 @@ struct MatrixCache{T,IT}
     K_ii::SparseMatrixCSC{T,IT}
     K_fi::SparseMatrixCSC{T,IT}
     K_if::SparseMatrixCSC{T,IT}
-    K_ff_factor::SparseArrays.CHOLMOD.Factor{T,IT}
-    K_ii_factor::SparseArrays.CHOLMOD.Factor{T,IT}
+    K_ff_factor::FACTOR
+    K_ii_factor::FACTOR
     interface_dofnums::Vector{IT}
     result_i::Vector{T}
 end
@@ -54,9 +55,10 @@ function MatrixCache(K::SparseMatrixCSC{T,IT}, b::Vector{T},
     dr = dofrange(u, DOF_KIND_DATA)
     K_ff = K[fr, fr]
     K_ii = K[ir, ir]
-    K_ff_factor = cholesky(K_ff)
-    K_ii_factor = cholesky(K_ii)
+    K_ff_factor = lu(K_ff)
+    K_ii_factor = lu(K_ii)
     temp_f = zeros(T, size(K_ff, 1))
+    temp_s = zeros(T, size(K_ff, 1))
     temp_i = zeros(T, size(K_ii, 1))
     temp_v = zeros(T, size(K_ii, 1))
     result_i = zeros(T, size(K_ii, 1))
@@ -68,12 +70,14 @@ function MatrixCache(K::SparseMatrixCSC{T,IT}, b::Vector{T},
     b_f = b[fr] - K_fd * u_d
     b_i_til = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ b_f))
     interface_dofnums = interface_degrees_of_freedom(global_u, global_node_numbers, u)
-    MatrixCache{T,IT}(temp_f, temp_i, temp_v, b_i_til, b_f, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, interface_dofnums, result_i)
+    MatrixCache{T,IT}(temp_f, temp_s, temp_i, temp_v, b_i_til, b_f, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, interface_dofnums, result_i)
 end
 
 function mul!(y, mc::MatrixCache{T}, v) where {T}
     mul!(mc.temp_f, mc.K_fi, v)
-    mul!(mc.temp_i, mc.K_if, (mc.K_ff_factor \ mc.temp_f))
+    ldiv!(mc.temp_s, mc.K_ff_factor, mc.temp_f)
+    # mc.temp_s .= mc.K_ff_factor \ mc.temp_f
+    mul!(mc.temp_i, mc.K_if, mc.temp_s)
     mul!(y, mc.K_ii, v)
     y .-= mc.temp_i
     y
@@ -161,45 +165,9 @@ function interface_degrees_of_freedom(global_u, global_node_numbers, partition_u
     return id
 end
 
-function partition_v_from_global_v!(partition_v, global_u, global_node_numbers, partition_u, global_v)
-    global_from = first(dofrange(global_u, DOF_KIND_INTERFACE))
-    partition_from = first(dofrange(partition_u, DOF_KIND_INTERFACE))
-    for i in eachindex(global_node_numbers)
-        g = global_node_numbers[i]
-        for j in 1:ndofs(global_u)
-            if global_u.kind[g, j] == DOF_KIND_INTERFACE
-                l = partition_u.dofnums[i, j]
-                gl = global_u.dofnums[g, j]
-                gd = gl - global_from + 1
-                pd = l - partition_from + 1
-                partition_v[pd] = global_v[gd]
-            end
-        end
-    end
-    return partition_v
-end
-
 function gather_partition_v_from_global_v!(partition_v, interface_dofnums, global_v)
     partition_v .= @view global_v[interface_dofnums]
     return partition_v
-end
-
-function add_partition_v_to_global_v!(global_v, global_u, global_node_numbers, partition_u, partition_v)
-    global_from = first(dofrange(global_u, DOF_KIND_INTERFACE))
-    partition_from = first(dofrange(partition_u, DOF_KIND_INTERFACE))
-    for i in eachindex(global_node_numbers)
-        g = global_node_numbers[i]
-        for j in 1:ndofs(global_u)
-            if global_u.kind[g, j] == DOF_KIND_INTERFACE
-                l = partition_u.dofnums[i, j]
-                gl = global_u.dofnums[g, j]
-                gd = gl - global_from + 1
-                pd = l - partition_from + 1
-                global_v[gd] += partition_v[pd]
-            end
-        end
-    end
-    return global_v
 end
 
 function scatter_partition_v_to_global_v!(global_v, interface_dofnums, partition_v)
@@ -209,7 +177,6 @@ end
 
 function mul_S_v!(partition::PartitionSchurDD, v)
     mc = partition.mc
-    # partition_v_from_global_v!(mc.temp_v, partition.global_u, partition.global_node_numbers, partition.u, v)
     gather_partition_v_from_global_v!(mc.temp_v, mc.interface_dofnums, v)
     mul!(mc.result_i, mc, mc.temp_v)
     return partition
@@ -218,13 +185,11 @@ end
 function assemble_sol!(y, partition::PartitionSchurDD)
     mc = partition.mc
     return scatter_partition_v_to_global_v!(y, mc.interface_dofnums, mc.result_i)
-    # return add_partition_v_to_global_v!(y, partition.global_u, partition.global_node_numbers, partition.u, mc.result_i)
 end
 
 function assemble_rhs!(y, partition::PartitionSchurDD)
     mc = partition.mc
     return scatter_partition_v_to_global_v!(y, mc.interface_dofnums, mc.b_i_til)
-    # return add_partition_v_to_global_v!(y, partition.global_u, partition.global_node_numbers, partition.u, mc.b_i_til)
 end
 
 function partition_field_to_global_field!(global_u, global_node_numbers, partition_u,)
