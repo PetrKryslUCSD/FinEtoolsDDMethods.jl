@@ -70,7 +70,7 @@ function MatrixCache(K::SparseMatrixCSC{T,IT}, b::Vector{T},
     b_f = b[fr] - K_fd * u_d
     b_i_til = (b[ir] - K_id * u_d - K_if * (K_ff_factor \ b_f))
     interface_dofnums = interface_degrees_of_freedom(global_u, global_node_numbers, u)
-    MatrixCache{T,IT}(temp_f, temp_s, temp_i, temp_v, b_i_til, b_f, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, interface_dofnums, result_i)
+    MatrixCache{T,IT,typeof(K_ff_factor)}(temp_f, temp_s, temp_i, temp_v, b_i_til, b_f, K_ii, K_fi, K_if, K_ff_factor, K_ii_factor, interface_dofnums, result_i)
 end
 
 function mul!(y, mc::MatrixCache{T}, v) where {T}
@@ -193,18 +193,16 @@ function assemble_rhs!(y, partition::PartitionSchurDD)
 end
 
 function partition_field_to_global_field!(global_u, global_node_numbers, partition_u,)
-    for i in 1:nents(partition_u)
+    @inbounds for i in 1:nents(partition_u)
         g = global_node_numbers[i]
-        global_u.kind[g, :] .= partition_u.kind[i, :]
         global_u.values[g, :] .= partition_u.values[i, :]
     end
     return global_u
 end
 
 function global_field_to_partition_field!(partition_u, global_node_numbers, global_u,)
-    for i in 1:nents(partition_u)
+    @inbounds for i in 1:nents(partition_u)
         g = global_node_numbers[i]
-        partition_u.kind[i, :] .= global_u.kind[g, :]
         partition_u.values[i, :] .= global_u.values[g, :]
     end
     return partition_u
