@@ -3,7 +3,7 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!, reconstruct_free!
+using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!, reconstruct_free!, partition_complement_diagonal!
 using Metis
 using Test
 using LinearAlgebra
@@ -47,6 +47,18 @@ end
 size(Sop::SLinearOperator) = (Sop.s, Sop.s)
 eltype(Sop::SLinearOperator) = typeof(Sop.z)
 
+struct DiagonalPreconditioner{T}
+    invd::Vector{T}
+    function DiagonalPreconditioner(d::Vector{T}) where T
+        new{T}(1 ./ d)
+    end
+end
+
+function mul!(y, M::DiagonalPreconditioner, v) 
+    @. y = M.invd * v
+    y
+end
+
 function test()
 
     # println("""
@@ -64,7 +76,7 @@ function test()
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
     N = 1000 # number of subdivisions along the sides of the square domain
-    ndoms = 30
+    ndoms = 3
 
     fens, fes = T3block(A, A, N, N)
 
@@ -136,7 +148,12 @@ function test()
     end
     
     @info "Solving the Linear System using CG"
-    @time (T_i, stats) = cg(Sop, b)
+    S_diag = zeros(size(b))
+    for p in Sop.partitions
+        partition_complement_diagonal!(S_diag, p)
+    end
+    # @time (T_i, stats) = cg(Sop, b)
+    @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
     @show stats
     @info "Reconstructing value of free degrees of freedom"
     scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)

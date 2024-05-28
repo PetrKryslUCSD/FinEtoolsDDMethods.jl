@@ -218,4 +218,15 @@ function reconstruct_free!(partition::PartitionSchurDD)
     return partition.global_u
 end
 
+function partition_complement_diagonal!(y, partition::PartitionSchurDD)
+    # S_ii = K_ii - K_if * (K_ff \ K_fi)
+    mc = partition.mc
+    mc.temp_i .= diag(mc.K_ii)
+    for j  in 1:size(mc.K_ii, 1)
+        ldiv!(mc.temp_s, mc.K_ff_factor, @view(mc.K_fi[:, j]))
+        mc.temp_i[j] -= dot(@view(mc.K_if[j, :]), mc.temp_s)
+    end
+    return scatter_partition_v_to_global_v!(y, mc.interface_dofnums, mc.temp_i)
+end
+
 end # module PartitionSchurDDModule
