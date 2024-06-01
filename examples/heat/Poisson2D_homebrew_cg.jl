@@ -102,7 +102,7 @@ function mul!(y, Pre::PTYPE, v) where {PTYPE<:SPreConditioner}
     y
 end
 
-function _cg_op(Aop!, b, x0, maxiter)
+function _cg_op(Aop!, b, x0; itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
     x = deepcopy(x0)
     p = similar(x)
     r = similar(x)
@@ -110,7 +110,10 @@ function _cg_op(Aop!, b, x0, maxiter)
     Aop!(q, x) # p = b - A * x
     @. p = b - q
     @. r = p
-    for iter in 1:maxiter
+    resnorm = Inf
+    stats = (niter=itmax, resnorm=resnorm)
+    iter = 1
+    while iter < itmax
         Aop!(q, p) # mul!(q, A, p)
         rho = dot(r, r)
         alpha = rho / dot(p, q)
@@ -118,8 +121,46 @@ function _cg_op(Aop!, b, x0, maxiter)
         @. r -= alpha * q
         beta = dot(r, r) / rho
         @. p = r + beta * p
+        resnorm = sqrt(rho)
+        if resnorm < rtol
+            break
+        end
+        iter += 1
     end
-    return x
+    stats = (niter=iter, resnorm=resnorm)
+    return (x, stats)
+end
+
+function _pcg_op(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
+    x = deepcopy(x0)
+    p = similar(x)
+    r = similar(x)
+    z = similar(x)
+    Ap = similar(x)
+    Aop!(Ap, x) 
+    @. r = b - Ap
+    M!(z, r)
+    @. p = z
+    resnorm = Inf
+    stats = (niter=itmax, resnorm=resnorm)
+    iter = 1
+    while iter < itmax
+        Aop!(Ap, p)
+        rho = dot(z, r)
+        alpha = rho / dot(p, Ap)
+        @. x += alpha * p
+        @. r -= alpha * Ap
+        M!(z, r)
+        beta = dot(z, r) / rho
+        @. p = z + beta * p
+        resnorm = sqrt(rho)
+        if resnorm < rtol
+            break
+        end
+        iter += 1
+    end
+    stats = (niter=iter, resnorm=resnorm)
+    return (x, stats)
 end
 
 # function _cg(A, b, x0, maxiter)
@@ -158,7 +199,7 @@ function test()
     ndoms = 3
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 450 # number of subdivisions along the sides of the square domain
+    N = 500 # number of subdivisions along the sides of the square domain
 
     fens, fes = T3block(A, A, N, N)
 
@@ -257,19 +298,24 @@ function test()
     Sop = SLinearOperator(K_ii, K_fi, K_if, K_ff)
     b = (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
     x0 = zeros(size(b)) .+ 1.0
-    @info "Preconditioned CG: Krylov"
-    P = cholesky(Sop.K_ii)
+    # @info "Preconditioned CG: Krylov"
+    # P = cholesky(Sop.K_ii)
     # @time (T_i, stats) = cg(Sop, b, x0; M=P)
     # @time (T_i, stats) = cg(Sop, b)
     # show(stats)
     # @show norm(T_i - T_i_ref)
-    @info "CG without preconditioner: Krylov"
+    # @show norm(T_i - T_i_ref)
     @info "Make S"
     S = K_ii - K_if * (K_ff \ Matrix(K_fi))
+    @info "Preconditioned CG: Krylov"
+    P = cholesky(Sop.K_ii)
+    @time (T_i, stats) = cg(S, b, x0; M=P)
+    show(stats)
+    @show norm(T_i - T_i_ref)
+    @info "CG without preconditioner: Krylov"
     @time (T_i, stats) = cg(S, b)
     show(stats)
     @show norm(T_i - T_i_ref)
-    # @info "CG with no preconditioner: _cg"
     # x = _cg(S, b, zeros(size(b)), 100);
     # @time x = _cg(S, b, zeros(size(b)), stats.niter)
     # @show norm(x - T_i)
@@ -278,13 +324,21 @@ function test()
     @time x = _cg_smith(S, b, x0, stats.niter)
     @show norm(x - T_i_ref)
     @info "CG with no preconditioner: _cg_op"
-    @time x = _cg_op((q, p) -> mul!(q, S, p), b, x0, stats.niter)
+    @time (x, stats) = _cg_op((q, p) -> mul!(q, S, p), b, x0; itmax=stats.niter)
     @show norm(x - T_i_ref)
+    @show stats
     @info "CG with preconditioner: _cg_op"
-    Pre = SPreConditioner(S, x0, lu(K_ii))
-    @time x = _cg_op((q, p) -> mul!(q, Pre, p), Pre.factor \ b, x0, stats.niter)
-    # @time x = _cg_op((q, p) -> mul!(q, S, p), b, zeros(size(b)), stats.niter)
+    Pre = SPreConditioner(S, zeros(size(x0)), lu(K_ii))
+    @time (x, stats) = _cg_op((q, p) -> mul!(q, Pre, p), Pre.factor \ b, x0; itmax=stats.niter)
+    # @time x = _cg_op((q, p) -> mul!(q, S, p), b, x0, stats.niter)
     @show norm(x - T_i_ref)
+    @show stats
+    @info "CG with preconditioner: _pcg_op"
+    Pre = lu(K_ii)
+    @time (x, stats) = _pcg_op((q, p) -> mul!(q, S, p), b, x0;  M! = (q, p) -> ldiv!(q, Pre, p), itmax=stats.niter)
+    # @time x = _cg_op((q, p) -> mul!(q, S, p), b, x0, stats.niter)
+    @show norm(x - T_i_ref)
+    @show stats
 
     @info "Recovery of the solution in the interior"
     # T_i = S \ (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
