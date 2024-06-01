@@ -3,7 +3,9 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!, reconstruct_free!, partition_complement_diagonal!
+using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
+using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free!, partition_complement_diagonal!
+using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!
 using Metis
 using Test
 using LinearAlgebra
@@ -76,7 +78,7 @@ function test()
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
     N = 1000 # number of subdivisions along the sides of the square domain
-    ndoms = 3
+    ndoms = 30
 
     fens, fes = T3block(A, A, N, N)
 
@@ -147,13 +149,20 @@ function test()
         assemble_rhs!(b,  p)
     end
     
-    @info "Solving the Linear System using CG"
-    S_diag = zeros(size(b))
+    @info "Creating preconditioning matrix"
+    # S_diag = zeros(size(b))
+    # for p in Sop.partitions
+    #     partition_complement_diagonal!(S_diag, p)
+    # end
+    K_ii = spzeros(size(b, 1), size(b, 1))
     for p in Sop.partitions
-        partition_complement_diagonal!(S_diag, p)
+        assemble_interface_matrix!(K_ii, p)
     end
+    K_ii_factor = cholesky(K_ii)
+    @info "Solving the Linear System using CG"
     # @time (T_i, stats) = cg(Sop, b)
-    @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
+    # @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
+    @time (T_i, stats) = cg(Sop, b; M=K_ii_factor)
     @show stats
     @info "Reconstructing value of free degrees of freedom"
     scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
