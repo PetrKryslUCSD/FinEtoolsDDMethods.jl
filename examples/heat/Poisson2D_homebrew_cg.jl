@@ -97,7 +97,8 @@ struct SPreConditioner{MATRIX, T, FACTOR}
 end
 function mul!(y, Pre::PTYPE, v) where {PTYPE<:SPreConditioner}
     mul!(Pre.temp, Pre.S, v)
-    mul!(y, Pre.factor, Pre.temp)
+    # y .= Pre.factor \ Pre.temp
+    ldiv!(y, Pre.factor, Pre.temp) # lu factor supports this
     y
 end
 
@@ -157,7 +158,7 @@ function test()
     ndoms = 3
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 600 # number of subdivisions along the sides of the square domain
+    N = 450 # number of subdivisions along the sides of the square domain
 
     fens, fes = T3block(A, A, N, N)
 
@@ -208,6 +209,8 @@ function test()
     end
     println("Error =$Error")
 
+    
+
     # Now the parallel way
     # ============================================================
     Temp.values .= 0.0
@@ -241,6 +244,9 @@ function test()
     T_i = gathersysvec(Temp, DOF_KIND_INTERFACE)
     T_d = gathersysvec(Temp, DOF_KIND_DATA)
 
+    T_if = [K_ff K_fi; K_if K_ii] \ [F_f - K_fd * T_d; F_i - K_id * T_d]
+    T_i_ref = T_if[ir]
+
     # spy_matrix(K_ff, "K_ff")
     # spy_matrix(K_ii, "K_ii")
 
@@ -250,29 +256,37 @@ function test()
     
     Sop = SLinearOperator(K_ii, K_fi, K_if, K_ff)
     b = (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
-    @info "Preconditioned CG"
+    x0 = zeros(size(b)) .+ 1.0
+    @info "Preconditioned CG: Krylov"
     P = cholesky(Sop.K_ii)
-    @time (T_i, stats) = cg(Sop, b; M=P)
+    # @time (T_i, stats) = cg(Sop, b, x0; M=P)
     # @time (T_i, stats) = cg(Sop, b)
-    show(stats)
-    @info "CG with no preconditioner: Krylov"
+    # show(stats)
+    # @show norm(T_i - T_i_ref)
+    @info "CG without preconditioner: Krylov"
+    @info "Make S"
     S = K_ii - K_if * (K_ff \ Matrix(K_fi))
     @time (T_i, stats) = cg(S, b)
     show(stats)
-    @info "CG with no preconditioner: _cg"
-    x = _cg(S, b, zeros(size(b)), 100);
-    @time x = _cg(S, b, zeros(size(b)), stats.niter)
-    @show norm(x - T_i)
+    @show norm(T_i - T_i_ref)
+    # @info "CG with no preconditioner: _cg"
+    # x = _cg(S, b, zeros(size(b)), 100);
+    # @time x = _cg(S, b, zeros(size(b)), stats.niter)
+    # @show norm(x - T_i)
+    
     @info "CG with no preconditioner: _cg_smith"
-    @time x = _cg_smith(S, b, zeros(size(b)), stats.niter)
-    @show norm(x - T_i)
+    @time x = _cg_smith(S, b, x0, stats.niter)
+    @show norm(x - T_i_ref)
     @info "CG with no preconditioner: _cg_op"
-    @time x = _cg_op((q, p) -> mul!(q, S, p), b, zeros(size(b)), stats.niter)
-    @show norm(x - T_i)
+    @time x = _cg_op((q, p) -> mul!(q, S, p), b, x0, stats.niter)
+    @show norm(x - T_i_ref)
     @info "CG with preconditioner: _cg_op"
-    Pre = SPreConditioner(S, zeros(size(b)), P)
-    @time x = _cg_op((q, p) -> mul!(q, Pre, p), P \ b, zeros(size(b)), stats.niter)
-    @show norm(x - T_i)
+    Pre = SPreConditioner(S, x0, lu(K_ii))
+    @time x = _cg_op((q, p) -> mul!(q, Pre, p), Pre.factor \ b, x0, stats.niter)
+    # @time x = _cg_op((q, p) -> mul!(q, S, p), b, zeros(size(b)), stats.niter)
+    @show norm(x - T_i_ref)
+
+    @info "Recovery of the solution in the interior"
     # T_i = S \ (F_i - K_id * T_d - K_if * (K_ff \ (F_f - K_fd * T_d)))
     @time T_f = K_ff \ (F_f - K_fd * T_d - K_fi * T_i)
     scattersysvec!(Temp, T_f, DOF_KIND_FREE)
