@@ -1,5 +1,5 @@
 """
-s> mpiexec -n 3 julia --project=. .\heat\Poisson2D_cg_mpi_driver.jl
+mpiexec -n 3 julia --project=. ./heat/Poisson2D_cg_mpi_driver.jl
 """
 module Poisson2D_cg_mpi_driver
 using FinEtools
@@ -40,21 +40,10 @@ size(Sop::SLinearOperator) = (Sop.s, Sop.s)
 eltype(Sop::SLinearOperator) = typeof(Sop.z)
 
 function test()
-
-    # println("""
-    #
-    # Heat conduction example described by Amuthan A. Ramabathiran
-    # http://www.codeproject.com/Articles/579983/Finite-Element-programming-in-Julia:
-    # Unit square, with known temperature distribution along the boundary,
-    # and uniform heat generation rate inside.  Mesh of regular linear TRIANGLES,
-    # in a grid of 1000 x 1000 edges (2M triangles, 1M degrees of freedom).
-    # Version: 05/29/2017
-    # """
-    # )
     A = 1.0 # dimension of the domain (length of the side of the square)
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
-    tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
+    tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2) #the exact distribution of temperature
     N = 10 # number of subdivisions along the sides of the square domain
     
 
@@ -64,23 +53,22 @@ function test()
     rank = MPI.Comm_rank(comm)
     nprocs = MPI.Comm_size(comm)
 
-    ndoms = nprocs
+    npartitions = nprocs - 1
 
     if rank == 0
-        println("Number of processes: $nprocs")
+        @info "Number of processes: $nprocs"
+        @info "Number of partitions: $npartitions"
     end
 
     fens, fes = T3block(A, A, N, N)
-
     geom = NodalField(fens.xyz)
     Temp = NodalField(zeros(count(fens), 1))
-
     
-    # Partition the finite element mesh.
+    
     femm = FEMMBase(IntegDomain(fes, TriRule(1)))
     C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
     g = Metis.graph(C; check_hermitian=true)
-    element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
+    element_partitioning = Metis.partition(g, npartitions; alg=:KWAY)
     n2p = FENodeToPartitionMap(fens, fes, element_partitioning)
     # Mark all degrees of freedom at the interfaces
     mark_interfaces!(Temp, n2p)
@@ -120,57 +108,72 @@ function test()
         return Float64[]
     end
 
-    # Create partitions
-    @info "Creating partitions"
-    partitions = PartitionSchurDD[]
-    for p  in 1:ndoms
-        push!(partitions,
-            PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, p)..., Temp,
-                make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
-            )
-        )
+    
+    partition = nothing
+    if rank > 0
+        partnum = rank 
+        @info "Creating partition $(partnum)"
+        partition = PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, partnum)..., Temp,
+                    make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
+                )
     end
 
-    @info "Assembling the righthand side"
-    Sop = SLinearOperator(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
-    for p in Sop.partitions
-        assemble_rhs!(b,  p)
-    end
     
-    @info "Creating preconditioning matrix"
-    # S_diag = zeros(size(b))
+    if rank > 0
+        assemble_rhs!(b, partition)
+        @show norm(b)
+    end
+    MPI.Reduce!(b, MPI.SUM, comm; root=0)
+    
+    MPI.Barrier(comm)
+    if rank == 0
+        @show norm(b)
+    end
+
+    MPI.Finalize()
+
+    # @info "Assembling the righthand side"
+    # Sop = SLinearOperator(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
+    # b = gathersysvec(Temp, DOF_KIND_INTERFACE)
+    # b .= 0.0
     # for p in Sop.partitions
-    #     partition_complement_diagonal!(S_diag, p)
+    #     assemble_rhs!(b,  p)
     # end
-    K_ii = spzeros(size(b, 1), size(b, 1))
-    for p in Sop.partitions
-        assemble_interface_matrix!(K_ii, p)
-    end
-    K_ii_factor = cholesky(K_ii)
-    @info "Solving the Linear System using CG"
-    # @time (T_i, stats) = cg(Sop, b)
-    # @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
-    @time (T_i, stats) = cg(Sop, b; M=K_ii_factor)
-    @show stats
-    @info "Reconstructing value of free degrees of freedom"
-    scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
-    for p in Sop.partitions
-        reconstruct_free!(p)
-    end
+    
+    # @info "Creating preconditioning matrix"
+    # # S_diag = zeros(size(b))
+    # # for p in Sop.partitions
+    # #     partition_complement_diagonal!(S_diag, p)
+    # # end
+    # K_ii = spzeros(size(b, 1), size(b, 1))
+    # for p in Sop.partitions
+    #     assemble_interface_matrix!(K_ii, p)
+    # end
+    # K_ii_factor = cholesky(K_ii)
+    # @info "Solving the Linear System using CG"
+    # # @time (T_i, stats) = cg(Sop, b)
+    # # @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
+    # @time (T_i, stats) = cg(Sop, b; M=K_ii_factor)
+    # @show stats
+    # @info "Reconstructing value of free degrees of freedom"
+    # scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
+    # for p in Sop.partitions
+    #     reconstruct_free!(p)
+    # end
 
-    @info "Exporting visualization"
-    approx_T = Temp.values
-    VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
+    # @info "Exporting visualization"
+    # approx_T = Temp.values
+    # VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
 
-    @info "Computing error"
-    Error = 0.0
-    for k = 1:size(fens.xyz, 1)
-        Error = Error .+ abs.(approx_T[k] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
-        # Error = Error .+ abs.(Temp.values[k, 1] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
-    end
-    println("Error =$Error")
+    # @info "Computing error"
+    # Error = 0.0
+    # for k = 1:size(fens.xyz, 1)
+    #     Error = Error .+ abs.(approx_T[k] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
+    #     # Error = Error .+ abs.(Temp.values[k, 1] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
+    # end
+    # println("Error =$Error")
 
 
     # File =  "a.vtk"
