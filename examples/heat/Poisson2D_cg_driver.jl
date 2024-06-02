@@ -1,4 +1,4 @@
-module Poisson2D_cg
+module Poisson2D_cg_driver
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
@@ -6,39 +6,24 @@ using FinEtoolsDDParallel
 using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
 using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free!, partition_complement_diagonal!
 using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!
+using FinEtoolsDDParallel.CGModule: pcg_seq
 using Metis
 using Test
-using LinearAlgebra
-using SparseArrays
-using PlotlyLight
-using Krylov
-using LinearOperators
-using SparseArrays
-using LinearAlgebra
 import Base: size, eltype
 import LinearAlgebra: mul!
+using LinearAlgebra
+using LinearOperators
+using SparseArrays
+using Krylov
 
-function spy_matrix(A::SparseMatrixCSC, name="")
-    I, J, V = findnz(A)
-    p = PlotlyLight.Plot()
-    p(x=J, y=I, mode="markers")
-    p.layout.title = name
-    p.layout.yaxis.title = "Row"
-    p.layout.yaxis.range = [size(A, 1) + 1, 0]
-    p.layout.xaxis.title = "Column"
-    p.layout.xaxis.range = [0, size(A, 2) + 1]
-    p.layout.xaxis.side = "top"
-    p.layout.margin.pad = 10
-    display(p)
-end
 
-struct SLinearOperator{T, IT}
+struct PartitionedSOp{T, IT} 
     s::IT
     z::T
     partitions::Vector{PartitionSchurDD}
 end
 
-function mul!(y, Sop::SLinearOperator, v) 
+function mul!(y::Vector{T}, Sop::SOP, v::Vector{T})  where {T, SOP<:PartitionedSOp}
     y .= zero(eltype(y))
     for p in Sop.partitions
         mul_S_v!(p, v)
@@ -46,20 +31,8 @@ function mul!(y, Sop::SLinearOperator, v)
     end
     y
 end
-size(Sop::SLinearOperator) = (Sop.s, Sop.s)
-eltype(Sop::SLinearOperator) = typeof(Sop.z)
-
-struct DiagonalPreconditioner{T}
-    invd::Vector{T}
-    function DiagonalPreconditioner(d::Vector{T}) where T
-        new{T}(1 ./ d)
-    end
-end
-
-function mul!(y, M::DiagonalPreconditioner, v) 
-    @. y = M.invd * v
-    y
-end
+size(Sop::PartitionedSOp) = (Sop.s, Sop.s)
+eltype(Sop::PartitionedSOp) = typeof(Sop.z)
 
 function test()
 
@@ -77,8 +50,8 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
-    N = 1000 # number of subdivisions along the sides of the square domain
-    ndoms = 30
+    N = 100 # number of subdivisions along the sides of the square domain
+    ndoms = 3
 
     fens, fes = T3block(A, A, N, N)
 
@@ -142,13 +115,13 @@ function test()
     end
 
     @info "Assembling the righthand side"
-    Sop = SLinearOperator(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
+    Sop = PartitionedSOp(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
     for p in Sop.partitions
         assemble_rhs!(b,  p)
     end
-    
+
     @info "Creating preconditioning matrix"
     # S_diag = zeros(size(b))
     # for p in Sop.partitions
@@ -158,11 +131,11 @@ function test()
     for p in Sop.partitions
         assemble_interface_matrix!(K_ii, p)
     end
-    K_ii_factor = cholesky(K_ii)
+    K_ii_factor = lu(K_ii)
     @info "Solving the Linear System using CG"
     # @time (T_i, stats) = cg(Sop, b)
     # @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
-    @time (T_i, stats) = cg(Sop, b; M=K_ii_factor)
+    @time (T_i, stats) = cg(Sop, b; ldiv=true, M=K_ii_factor)
     @show stats
     @info "Reconstructing value of free degrees of freedom"
     scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
