@@ -141,6 +141,8 @@ function _pcg_op(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b))
     @. r = b - Ap
     M!(z, r)
     @. p = z
+    rho = dot(z, r)
+    tol = atol + rtol * sqrt(rho)
     resnorm = Inf
     stats = (niter=itmax, resnorm=resnorm)
     iter = 1
@@ -154,7 +156,7 @@ function _pcg_op(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b))
         beta = dot(z, r) / rho
         @. p = z + beta * p
         resnorm = sqrt(rho)
-        if resnorm < rtol
+        if resnorm < tol
             break
         end
         iter += 1
