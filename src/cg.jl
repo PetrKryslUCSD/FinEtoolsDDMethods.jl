@@ -1,3 +1,8 @@
+module CGModule
+
+using LinearAlgebra
+using SparseArrays
+
 """
     pcg_seq(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
 
@@ -58,3 +63,5 @@ function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b))
     stats = (niter=iter, resnorm=resnorm)
     return (x, stats)
 end
+
+end # module
