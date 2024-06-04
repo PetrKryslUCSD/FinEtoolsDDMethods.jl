@@ -104,14 +104,12 @@ function pcg_mpi(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltyp
             resnorm = sqrt(rho)
         end
         resnorm = MPI.Bcast(resnorm, 0, comm)
-        if rank == 0 
-            @info "Iteration $(iter): resnorm = $(resnorm), tol = $(tol)"
-        end
         if resnorm < tol
             break
         end
         iter += 1
     end
+    MPI.Bcast!(x, comm; root=0)
     stats = (niter=iter, resnorm=resnorm)
     return (x, stats)
 end
