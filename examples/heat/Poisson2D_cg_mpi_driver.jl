@@ -36,7 +36,7 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2) #the exact distribution of temperature
-    N = 100 # number of subdivisions along the sides of the square domain
+    N = 10 # number of subdivisions along the sides of the square domain
     
     MPI.Init()
     comm = MPI.COMM_WORLD
@@ -112,14 +112,13 @@ function test()
     rank > 0 && assemble_rhs!(b, partition)
     MPI.Reduce!(b, MPI.SUM, comm; root=0)
     
-    # if rank == 0
-    #     @info "Building the preconditioning matrix"
-    # end
-    # K_ii = spzeros(size(b, 1), size(b, 1))
-    # if rank > 0
-    #     assemble_interface_matrix!(K_ii, partition)
-    # end
-    # MPI.Reduce!(K_ii, MPI.SUM, comm; root=0)
+    rank == 0 && (@info "Building the preconditioner")
+    K_ii = spzeros(size(b, 1), size(b, 1))
+    if rank > 0
+        K_ii = assemble_interface_matrix!(K_ii, partition)
+    end
+    ks  = MPI.gather(K_ii, comm; root=0)
+    @show ks
 
     
     rank == 0 && (@info "Solving the Linear System using CG")
