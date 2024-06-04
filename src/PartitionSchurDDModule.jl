@@ -206,7 +206,7 @@ function global_field_to_partition_field!(partition_u, global_node_numbers, glob
     return partition_u
 end
 
-function reconstruct_free!(partition::PartitionSchurDD)
+function reconstruct_free_dofs!(partition::PartitionSchurDD)
     mc = partition.mc
     global_field_to_partition_field!(partition.u, partition.global_node_numbers, partition.global_u,)
     T_i = gathersysvec(partition.u, DOF_KIND_INTERFACE)
@@ -231,6 +231,24 @@ function assemble_interface_matrix!(K_ii, partition::PartitionSchurDD)
     mc = partition.mc
     K_ii[mc.dofnums_i, mc.dofnums_i] += mc.K_ii
     return K_ii
+end
+
+function mul_y_S_v!(y, partition, v) 
+    mc = partition.mc
+    gather_partition_v_from_global_v!(mc.temp_v, mc.dofnums_i, v)
+    mul!(mc.result_i, mc, mc.temp_v)
+    return scatter_partition_v_to_global_v!(y, mc.dofnums_i, mc.result_i)
+end
+
+function reconstruct_free_dofs!(partition::PartitionSchurDD, interface_solution::Vector{T}) where {T}
+    mc = partition.mc
+    gather_partition_v_from_global_v!(mc.temp_v, mc.dofnums_i, interface_solution)
+    scattersysvec!(partition.u, mc.temp_v, DOF_KIND_INTERFACE)
+    T_i = mc.temp_v
+    T_f = mc.K_ff_factor \ (mc.b_f - mc.K_fi * T_i)
+    scattersysvec!(partition.u, T_f, DOF_KIND_FREE)
+    partition_field_to_global_field!(partition.global_u, partition.global_node_numbers, partition.u,)
+    return partition.global_u
 end
 
 end # module PartitionSchurDDModule
