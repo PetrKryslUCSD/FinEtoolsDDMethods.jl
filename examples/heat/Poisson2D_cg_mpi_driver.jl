@@ -9,6 +9,7 @@ using FinEtoolsDDParallel
 using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
 using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free!, partition_complement_diagonal!
 using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!
+using FinEtoolsDDParallel.CGModule: pcg_seq, pcg_mpi
 using Metis
 using Test
 using LinearAlgebra
@@ -22,32 +23,22 @@ import Base: size, eltype
 import LinearAlgebra: mul!
 using MPI
 
-struct SLinearOperator{T, IT}
-    s::IT
-    z::T
-    partitions::Vector{PartitionSchurDD}
-end
-
-function mul!(y, Sop::SLinearOperator, v) 
+function mul_y_S_v!(y, partition, v) 
     y .= zero(eltype(y))
-    for p in Sop.partitions
-        mul_S_v!(p, v)
-        assemble_sol!(y,  p)
+    if partition !== nothing
+        mul_S_v!(partition, v)
+        assemble_sol!(y, partition)
     end
     y
 end
-size(Sop::SLinearOperator) = (Sop.s, Sop.s)
-eltype(Sop::SLinearOperator) = typeof(Sop.z)
 
 function test()
     A = 1.0 # dimension of the domain (length of the side of the square)
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2) #the exact distribution of temperature
-    N = 10 # number of subdivisions along the sides of the square domain
+    N = 100 # number of subdivisions along the sides of the square domain
     
-
-
     MPI.Init()
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
@@ -107,7 +98,6 @@ function test()
     function make_partition_boundary_load(partition_geom, partition_Temp, global_node_numbers)
         return Float64[]
     end
-
     
     partition = nothing
     if rank > 0
@@ -118,40 +108,35 @@ function test()
                 )
     end
 
+    if rank == 0
+        @info "Building the right hand side"
+    end
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
     
     if rank > 0
         assemble_rhs!(b, partition)
-        @show norm(b)
     end
     MPI.Reduce!(b, MPI.SUM, comm; root=0)
     
-    MPI.Barrier(comm)
+    # if rank == 0
+    #     @info "Building the preconditioning matrix"
+    # end
+    # K_ii = spzeros(size(b, 1), size(b, 1))
+    # if rank > 0
+    #     assemble_interface_matrix!(K_ii, partition)
+    # end
+    # MPI.Reduce!(K_ii, MPI.SUM, comm; root=0)
+
     if rank == 0
-        @show norm(b)
-    end
+        @info "Solving the Linear System using CG"
+    end  
+    (T_i, stats) = pcg_mpi((q, p) -> mul_y_S_v!(q, partition, p), b, zeros(size(b)))
+    @show stats
+    
 
     MPI.Finalize()
 
-    # @info "Assembling the righthand side"
-    # Sop = SLinearOperator(length(dofrange(Temp, DOF_KIND_INTERFACE)), zero(eltype(Temp.values)), partitions)
-    # b = gathersysvec(Temp, DOF_KIND_INTERFACE)
-    # b .= 0.0
-    # for p in Sop.partitions
-    #     assemble_rhs!(b,  p)
-    # end
-    
-    # @info "Creating preconditioning matrix"
-    # # S_diag = zeros(size(b))
-    # # for p in Sop.partitions
-    # #     partition_complement_diagonal!(S_diag, p)
-    # # end
-    # K_ii = spzeros(size(b, 1), size(b, 1))
-    # for p in Sop.partitions
-    #     assemble_interface_matrix!(K_ii, p)
-    # end
-    # K_ii_factor = cholesky(K_ii)
     # @info "Solving the Linear System using CG"
     # # @time (T_i, stats) = cg(Sop, b)
     # # @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))

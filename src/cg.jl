@@ -2,6 +2,7 @@ module CGModule
 
 using LinearAlgebra
 using SparseArrays
+using MPI
 
 """
     pcg_seq(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
@@ -29,7 +30,7 @@ This is a sequential version of the `pcg` function.
 - (`x`, `stats`): Tuple of solution vector and solution statistics.
 
 """
-function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
+function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
     itmax = (itmax > 0 ? itmax : length(b))
     x = deepcopy(x0)
     p = similar(x)
@@ -55,6 +56,57 @@ function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q), itmax=0, atol=√eps(eltype(b))
         beta = dot(z, r) / rho
         @. p = z + beta * p
         resnorm = sqrt(rho)
+        if resnorm < tol
+            break
+        end
+        iter += 1
+    end
+    stats = (niter=iter, resnorm=resnorm)
+    return (x, stats)
+end
+
+function pcg_mpi(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
+    itmax = (itmax > 0 ? itmax : length(b))
+    tol = atol
+    comm = MPI.COMM_WORLD
+    rank = MPI.Comm_rank(comm)
+    x = deepcopy(x0)
+    p = similar(x)
+    r = similar(x)
+    z = similar(x)
+    Ap = similar(x); Ap .= 0.0
+    MPI.Bcast!(x, comm; root=0)
+    Aop!(Ap, x)
+    MPI.Reduce!(Ap, MPI.SUM, comm; root=0)
+    if rank == 0
+        @. r = b - Ap
+        M!(z, r)
+        @. p = z
+        rho = dot(z, r)
+        tol += rtol * sqrt(rho)
+    end
+    tol = MPI.Bcast(tol, 0, comm)
+    resnorm = Inf
+    stats = (niter=itmax, resnorm=resnorm)
+    iter = 1
+    while iter < itmax
+        MPI.Bcast!(p, comm; root=0)
+        Aop!(Ap, p)
+        MPI.Reduce!(Ap, MPI.SUM, comm; root=0)
+        if rank == 0
+            rho = dot(z, r)
+            alpha = rho / dot(p, Ap)
+            @. x += alpha * p
+            @. r -= alpha * Ap
+            M!(z, r)
+            beta = dot(z, r) / rho
+            @. p = z + beta * p
+            resnorm = sqrt(rho)
+        end
+        resnorm = MPI.Bcast(resnorm, 0, comm)
+        if rank == 0 
+            @info "Iteration $(iter): resnorm = $(resnorm), tol = $(tol)"
+        end
         if resnorm < tol
             break
         end
