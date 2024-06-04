@@ -6,10 +6,10 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
-using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free!, partition_complement_diagonal!
+using FinEtoolsDDParallel.PartitionSchurDDModule: mul_y_S_v!, assemble_rhs!
+using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free_dofs!, partition_complement_diagonal!
 using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!
-using FinEtoolsDDParallel.CGModule: pcg_seq, pcg_mpi
+using FinEtoolsDDParallel.CGModule: pcg_mpi
 using Metis
 using Test
 using LinearAlgebra
@@ -23,11 +23,10 @@ import Base: size, eltype
 import LinearAlgebra: mul!
 using MPI
 
-function mul_y_S_v!(y, partition, v) 
+function _mul_y_S_v!(y, partition, v) 
     y .= zero(eltype(y))
     if partition !== nothing
-        mul_S_v!(partition, v)
-        assemble_sol!(y, partition)
+        mul_y_S_v!(y, partition, v)
     end
     y
 end
@@ -100,23 +99,17 @@ function test()
     end
     
     partition = nothing
-    if rank > 0
-        partnum = rank 
-        @info "Creating partition $(partnum)"
-        partition = PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, partnum)..., Temp,
+    rank > 0 && (
+        partition = PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, rank)..., Temp,
                     make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
                 )
-    end
+    )
 
-    if rank == 0
-        @info "Building the right hand side"
-    end
+    rank == 0 && (@info "Building the right hand side")
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
     
-    if rank > 0
-        assemble_rhs!(b, partition)
-    end
+    rank > 0 && assemble_rhs!(b, partition)
     MPI.Reduce!(b, MPI.SUM, comm; root=0)
     
     # if rank == 0
@@ -128,29 +121,19 @@ function test()
     # end
     # MPI.Reduce!(K_ii, MPI.SUM, comm; root=0)
 
-    if rank == 0
-        @info "Solving the Linear System using CG"
-    end  
-    (T_i, stats) = pcg_mpi((q, p) -> mul_y_S_v!(q, partition, p), b, zeros(size(b)))
-    @show stats
     
+    rank == 0 && (@info "Solving the Linear System using CG")
+    
+    (T_i, stats) = pcg_mpi((q, p) -> _mul_y_S_v!(q, partition, p), b, zeros(size(b)))
+    rank == 0 && (@show stats)
+    
+    rank > 0 && reconstruct_free_dofs!(partition, T_i)
 
     MPI.Finalize()
 
-    # @info "Solving the Linear System using CG"
-    # # @time (T_i, stats) = cg(Sop, b)
-    # # @time (T_i, stats) = cg(Sop, b; M=DiagonalPreconditioner(S_diag))
-    # @time (T_i, stats) = cg(Sop, b; M=K_ii_factor)
-    # @show stats
-    # @info "Reconstructing value of free degrees of freedom"
-    # scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
-    # for p in Sop.partitions
-    #     reconstruct_free!(p)
-    # end
-
-    # @info "Exporting visualization"
-    # approx_T = Temp.values
-    # VTK.vtkexportmesh("approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
+    @info "Exporting visualization"
+    approx_T = Temp.values
+    VTK.vtkexportmesh("approx-$rank.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
 
     # @info "Computing error"
     # Error = 0.0
