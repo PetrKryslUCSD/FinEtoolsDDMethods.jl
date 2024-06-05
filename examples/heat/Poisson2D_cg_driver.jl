@@ -140,7 +140,7 @@ function test()
     @info "Reconstructing value of free degrees of freedom"
     scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
     for p in Sop.partitions
-        reconstruct_free!(p)
+        reconstruct_free_dofs!(p)
     end
 
     @info "Exporting visualization"
