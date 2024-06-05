@@ -36,7 +36,7 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2) #the exact distribution of temperature
-    N = 10 # number of subdivisions along the sides of the square domain
+    N = 1000 # number of subdivisions along the sides of the square domain
     
     MPI.Init()
     comm = MPI.COMM_WORLD
@@ -118,12 +118,19 @@ function test()
         K_ii = assemble_interface_matrix!(K_ii, partition)
     end
     ks  = MPI.gather(K_ii, comm; root=0)
-    @show ks
-
+    if rank == 0
+        for k = 1:npartitions
+            K_ii += ks[k]
+        end
+    end
     
     rank == 0 && (@info "Solving the Linear System using CG")
-    
-    (T_i, stats) = pcg_mpi((q, p) -> _mul_y_S_v!(q, partition, p), b, zeros(size(b)))
+    K_ii_factor = lu(K_ii)
+    (T_i, stats) = pcg_mpi((q, p) -> _mul_y_S_v!(q, partition, p), 
+        b, zeros(size(b)); 
+        # M! = (q, p) -> (q .= p),
+        M! = (q, p) -> ldiv!(q, K_ii_factor, p)
+        )
     rank == 0 && (@show stats)
     
     rank > 0 && reconstruct_free_dofs!(partition, T_i)
