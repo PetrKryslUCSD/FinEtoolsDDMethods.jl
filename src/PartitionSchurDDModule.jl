@@ -148,19 +148,19 @@ function interface_degrees_of_freedom(global_u, global_node_numbers, partition_u
     global_from = first(dofrange(global_u, DOF_KIND_INTERFACE))
     partition_from = first(dofrange(partition_u, DOF_KIND_INTERFACE))
     partition_to = last(dofrange(partition_u, DOF_KIND_INTERFACE))
-    id = Vector{Int}(undef, partition_to - partition_from + 1)
+    idofvec = Vector{Int}(undef, partition_to - partition_from + 1)
     p = 1
     for i in eachindex(global_node_numbers)
         g = global_node_numbers[i]
         for j in 1:ndofs(global_u)
             if global_u.kind[g, j] == DOF_KIND_INTERFACE
                 gl = global_u.dofnums[g, j]
-                id[p] = gl - global_from + 1
+                idofvec[p] = gl - global_from + 1
                 p += 1
             end
         end
     end
-    return id
+    return idofvec
 end
 
 function gather_partition_v_from_global_v!(partition_v, dofnums_i, global_v)
