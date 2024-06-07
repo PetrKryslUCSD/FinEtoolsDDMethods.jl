@@ -50,11 +50,13 @@ function test()
         @info "Number of partitions: $npartitions"
     end
 
+    t1 = time()
     fens, fes = T3block(A, A, N, N)
     geom = NodalField(fens.xyz)
     Temp = NodalField(zeros(count(fens), 1))
+    rank == 0 && (@info "Mesh generation time: $(time() - t1)")
     
-    
+    t1 = time()
     femm = FEMMBase(IntegDomain(fes, TriRule(1)))
     C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
     g = Metis.graph(C; check_hermitian=true)
@@ -72,6 +74,7 @@ function test()
     setebc!(Temp, List, true, 1, tempf(geom.values[List, :])[:])
     applyebc!(Temp)
     numberdofs!(Temp, 1:count(fens), [DOF_KIND_FREE, DOF_KIND_INTERFACE, DOF_KIND_DATA])
+    rank == 0 && (@info "Partitioning, boundary condition time: $(time() - t1)")
 
     material = MatHeatDiff(thermal_conductivity)
 
@@ -98,42 +101,53 @@ function test()
         return Float64[]
     end
     
+    t1 = time()
     partition = nothing
     rank > 0 && (
         partition = PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, rank)..., Temp,
                     make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
                 )
     )
+    MPI.Barrier(comm)
+    rank == 0 && (@info "Create partitions time: $(time() - t1)")
 
+    t1 = time()
     rank == 0 && (@info "Building the right hand side")
     b = gathersysvec(Temp, DOF_KIND_INTERFACE)
     b .= 0.0
-    
     rank > 0 && assemble_rhs!(b, partition)
     MPI.Reduce!(b, MPI.SUM, comm; root=0)
+    MPI.Barrier(comm)
+    rank == 0 && (@info "Build rhs time: $(time() - t1)")
     
-    rank == 0 && (@info "Building the preconditioner")
-    K_ii = spzeros(size(b, 1), size(b, 1))
-    if rank > 0
-        K_ii = assemble_interface_matrix!(K_ii, partition)
-    end
-    ks  = MPI.gather(K_ii, comm; root=0)
-    if rank == 0
-        for k = 1:npartitions
-            K_ii += ks[k]
-        end
-    end
+    # rank == 0 && (@info "Building the preconditioner")
+    # K_ii = spzeros(size(b, 1), size(b, 1))
+    # if rank > 0
+    #     K_ii = assemble_interface_matrix!(K_ii, partition)
+    # end
+    # ks  = MPI.gather(K_ii, comm; root=0)
+    # if rank == 0
+    #     for k = 1:npartitions
+    #         K_ii += ks[k]
+    #     end
+    # end
     
+    t1 = time()
     rank == 0 && (@info "Solving the Linear System using CG")
-    K_ii_factor = lu(K_ii)
+    # K_ii_factor = lu(K_ii)
     (T_i, stats) = pcg_mpi((q, p) -> _mul_y_S_v!(q, partition, p), 
         b, zeros(size(b)); 
-        # M! = (q, p) -> (q .= p),
-        M! = (q, p) -> ldiv!(q, K_ii_factor, p)
+        M! = (q, p) -> (q .= p),
+        # M! = (q, p) -> ldiv!(q, K_ii_factor, p)
         )
     rank == 0 && (@show stats)
+    rank == 0 && (@info "CG time: $(time() - t1)")
     
+    t1 = time()
+    rank == 0 && (@info "Reconstructing free dofs")
     rank > 0 && reconstruct_free_dofs!(partition, T_i)
+    MPI.Barrier(comm)
+    rank == 0 && (@info "Reconstruct free dofs time: $(time() - t1)")
 
     MPI.Finalize()
 
