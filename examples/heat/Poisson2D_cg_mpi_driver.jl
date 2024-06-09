@@ -103,12 +103,12 @@ function test()
     
     t1 = time()
     partition = nothing
-    rank > 0 && (
+    if rank > 0
         partition = PartitionSchurDD(make_partition_mesh(fens, fes, element_partitioning, rank)..., Temp,
                     make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
                 )
-    )
-    MPI.Barrier(comm)
+    end
+    
     rank == 0 && (@info "Create partitions time: $(time() - t1)")
 
     t1 = time()
@@ -117,7 +117,7 @@ function test()
     b .= 0.0
     rank > 0 && assemble_rhs!(b, partition)
     MPI.Reduce!(b, MPI.SUM, comm; root=0)
-    MPI.Barrier(comm)
+    
     rank == 0 && (@info "Build rhs time: $(time() - t1)")
     
     # rank == 0 && (@info "Building the preconditioner")
@@ -146,23 +146,33 @@ function test()
     t1 = time()
     rank == 0 && (@info "Reconstructing free dofs")
     rank > 0 && reconstruct_free_dofs!(partition, T_i)
-    MPI.Barrier(comm)
+    
     rank == 0 && (@info "Reconstruct free dofs time: $(time() - t1)")
 
+    T_d = gathersysvec(Temp, DOF_KIND_DATA)
+    MPI.Reduce!(Temp.values, MPI.SUM, comm; root=0)
+    # It is necessary to restore the interface and data values 
+    scattersysvec!(Temp, T_i, DOF_KIND_INTERFACE)
+    scattersysvec!(Temp, T_d, DOF_KIND_DATA)
+
+    if rank == 0
+        @info "Exporting visualization"
+        approx_T = Temp.values
+        VTK.vtkexportmesh("Poisson2D-approx.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
+    end
+
+    if rank == 0
+        @info "Computing error"
+        approx_T = Temp.values
+        Error = 0.0
+        for k = 1:size(fens.xyz, 1)
+            Error = Error .+ abs.(approx_T[k] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
+            # Error = Error .+ abs.(Temp.values[k, 1] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
+        end
+        println("Error =$Error")
+    end
+            
     MPI.Finalize()
-
-    @info "Exporting visualization"
-    approx_T = Temp.values
-    VTK.vtkexportmesh("approx-$rank.vtk", fes.conn, [geom.values approx_T], VTK.T3; scalars=[("Temperature", approx_T,)])
-
-    # @info "Computing error"
-    # Error = 0.0
-    # for k = 1:size(fens.xyz, 1)
-    #     Error = Error .+ abs.(approx_T[k] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
-    #     # Error = Error .+ abs.(Temp.values[k, 1] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
-    # end
-    # println("Error =$Error")
-
 
     # File =  "a.vtk"
     # MeshExportModule.vtkexportmesh (File, fes.conn, [geom.values Temp.values], MeshExportModule.T3; scalars=Temp.values, scalars_name ="Temperature")
