@@ -202,7 +202,7 @@ version = "1.11.0"
 
 [[deps.FinEtools]]
 deps = ["DataDrop", "DelimitedFiles", "HDF5", "LinearAlgebra", "LoopVectorization", "Printf", "Random", "SparseArrays", "Statistics", "SymRCM", "Test", "Unicode", "WriteVTK"]
-path = "../../FinEtools.jl"
+git-tree-sha1 = "ad7cf8c970bfa790f9975c7b0fada636a23a93e1"
 uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
 version = "8.0.23"
 
