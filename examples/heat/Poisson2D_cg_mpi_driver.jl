@@ -169,7 +169,7 @@ function test()
             Error = Error .+ abs.(approx_T[k] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
             # Error = Error .+ abs.(Temp.values[k, 1] .- tempf(reshape(fens.xyz[k, :], (1, 2))))
         end
-        println("Error =$Error")
+        @info "Error =$Error"
     end
             
     MPI.Finalize()
