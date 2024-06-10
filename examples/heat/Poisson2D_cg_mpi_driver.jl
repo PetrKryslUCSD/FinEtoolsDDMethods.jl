@@ -16,6 +16,7 @@ using LinearAlgebra
 using SparseArrays
 using PlotlyLight
 using Krylov
+using ILUZero
 using LinearOperators
 using SparseArrays
 using LinearAlgebra
@@ -120,27 +121,27 @@ function test()
     
     rank == 0 && (@info "Build rhs time: $(time() - t1)")
     
-    # rank == 0 && (@info "Building the preconditioner")
-    # K_ii = spzeros(size(b, 1), size(b, 1))
-    # if rank > 0
-    #     K_ii = assemble_interface_matrix!(K_ii, partition)
-    # end
-    # ks  = MPI.gather(K_ii, comm; root=0)
-    # if rank == 0
-    #     for k = 1:npartitions
-    #         K_ii += ks[k]
-    #     end
-    # end
+    rank == 0 && (@info "Building the preconditioner")
+    K_ii = spzeros(size(b, 1), size(b, 1))
+    if rank > 0
+        K_ii = assemble_interface_matrix!(K_ii, partition)
+    end
+    ks  = MPI.gather(K_ii, comm; root=0)
+    if rank == 0
+        for k = 1:npartitions
+            K_ii += ks[k]
+        end
+    end
     
     t1 = time()
     rank == 0 && (@info "Solving the Linear System using CG")
-    # K_ii_factor = lu(K_ii)
+    K_ii_factor = ilu0(K_ii)
     (T_i, stats) = pcg_mpi((q, p) -> _mul_y_S_v!(q, partition, p), 
         b, zeros(size(b)); 
-        M! = (q, p) -> (q .= p),
-        # M! = (q, p) -> ldiv!(q, K_ii_factor, p)
+        # M! = (q, p) -> (q .= p),
+        M! = (q, p) -> ldiv!(q, K_ii_factor, p)
         )
-    rank == 0 && (@show stats)
+    rank == 0 && (@info "$(stats)")
     rank == 0 && (@info "CG time: $(time() - t1)")
     
     t1 = time()

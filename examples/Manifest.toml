@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.3"
+julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "a5f4a55329bd5096634cbb1920773837286baf6d"
+project_hash = "517a9213ea85455d2f252be0b4d8811396d5ce77"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -245,6 +245,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "ca0f6bf568b4bfc807e7537f081c81e35ceca114"
 uuid = "e33a78d0-f292-5ffc-b300-72abe9b543c8"
 version = "2.10.0+0"
+
+[[deps.ILUZero]]
+deps = ["LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "b007cfc7f9bee9a958992d2301e9c5b63f332a90"
+uuid = "88f59080-6952-5380-9ea5-54057fb9a43f"
+version = "0.2.0"
 
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
