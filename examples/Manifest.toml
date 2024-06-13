@@ -2,19 +2,17 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "517a9213ea85455d2f252be0b4d8811396d5ce77"
+project_hash = "7e625088af24d424c8ffc3b1abf5d715e2417e75"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
 git-tree-sha1 = "6a55b747d1812e699320963ffde36f1ebdda4099"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 version = "4.0.4"
+weakdeps = ["StaticArrays"]
 
     [deps.Adapt.extensions]
     AdaptStaticArraysExt = "StaticArrays"
-
-    [deps.Adapt.weakdeps]
-    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -94,6 +92,12 @@ deps = ["Static", "StaticArrayInterface"]
 git-tree-sha1 = "70232f82ffaab9dc52585e0dd043b5e0c6b714f1"
 uuid = "fb6a15b2-703c-40df-9091-08a04967cfa9"
 version = "0.1.12"
+
+[[deps.CoNCMOR]]
+deps = ["FinEtools", "LinearAlgebra", "SparseArrays", "StaticArrays", "Statistics", "Test"]
+git-tree-sha1 = "5a23ee7efdb07e86d95c29815b0efa0446235aea"
+uuid = "3a989f29-cff0-4f1c-87be-5dcdd41bd240"
+version = "0.5.0"
 
 [[deps.Cobweb]]
 deps = ["DefaultApplication", "OrderedCollections", "Scratch"]
@@ -207,7 +211,7 @@ uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
 version = "8.0.23"
 
 [[deps.FinEtoolsDDParallel]]
-deps = ["FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Test"]
+deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Test"]
 path = "../../FinEtoolsDDParallel.jl"
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
 version = "0.1.0"
@@ -600,14 +604,30 @@ deps = ["ArrayInterface", "Compat", "IfElse", "LinearAlgebra", "PrecompileTools"
 git-tree-sha1 = "5d66818a39bb04bf328e92bc933ec5b4ee88e436"
 uuid = "0d7ed370-da01-4f52-bd93-41d350b8b718"
 version = "1.5.0"
+weakdeps = ["OffsetArrays", "StaticArrays"]
 
     [deps.StaticArrayInterface.extensions]
     StaticArrayInterfaceOffsetArraysExt = "OffsetArrays"
     StaticArrayInterfaceStaticArraysExt = "StaticArrays"
 
-    [deps.StaticArrayInterface.weakdeps]
-    OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+[[deps.StaticArrays]]
+deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]
+git-tree-sha1 = "6e00379a24597be4ae1ee6b2d882e15392040132"
+uuid = "90137ffa-7385-5640-81b9-e52037218182"
+version = "1.9.5"
+
+    [deps.StaticArrays.extensions]
+    StaticArraysChainRulesCoreExt = "ChainRulesCore"
+    StaticArraysStatisticsExt = "Statistics"
+
+    [deps.StaticArrays.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[[deps.StaticArraysCore]]
+git-tree-sha1 = "192954ef1208c7019899fbf8049e717f92959682"
+uuid = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
+version = "1.4.3"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]

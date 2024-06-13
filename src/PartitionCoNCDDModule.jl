@@ -1,14 +1,15 @@
 """
-    PartitionSchurDDModule  
+    PartitionCoNCDDModule  
 
 Module for operations on partitions of finite element models for solves based
-on the Schur complement.
+on the Coherent Nodal Clusters.
 """
-module PartitionSchurDDModule
+module PartitionCoNCDDModule
 
 __precompile__(true)
 
 using FinEtools
+using CoNCMOR
 using SparseArrays
 using Krylov
 using LinearOperators
@@ -71,18 +72,20 @@ end
 #     y .= F \ v
 # end
 
-const DOF_KIND_INTERFACE::KIND_INT = 3
+const INTERNAL = 1
+const EXTERNAL = 2
 
 """
-    PartitionSchurDD
+    PartitionCoNCDD
 
-Partition for the Schur complement solver for a partitioned finite element model.
+Partition for the Coherent Nodal Cluster solver for a partitioned finite element model.
 """
-struct PartitionSchurDD{T,IT,FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField}
+struct PartitionCoNCDD{T,IT,FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField}
     fens::FEN
     fes::FES
     u::F
     global_node_numbers::Vector{IT}
+    patch_classification::Vector{Int8}
     global_u::F
     mc::MatrixCache{T,IT}
 end
@@ -98,30 +101,10 @@ function sum_load_vectors(I, B, u)
     return I + B
 end
 
-"""
-    make_partition_mesh(fens, fes, element_partitioning, partition)
-
-Create a partition mesh.
-
-The partition mesh consists of elements of belonging to the partition (i.e.
-`element_partitioning[i] == partition`). It selects from the given finite element nodes
-(`fens`) those that are connected by the elements of the partition.
-
-# Arguments
-- `fens`: An array of finite element nodes.
-- `fes`: An array of finite element structures.
-- `element_partitioning`: The element partitioning information.
-- `partition`: The partition number.
-
-# Returns
-A partition mesh.
-
-- `fens`: An array of finite element nodes.
-- `fes`: An array of finite element structures.
-- `global_node_numbers`: The global node numbers of the nodes within the mesh.
-
-"""
-function make_partition_mesh(fens, fes, element_partitioning, partition)
+function make_cluster_mesh(fens, fes, node_partitioning, partition)
+    pns = findall(y -> y == partition, node_partitioning)
+    cel = connectedelems(fes, pns, count(fens))
+    extpns = connectednodes(subset(fes, cel))
     pfes = subset(fes, findall(y -> y == partition, element_partitioning))
     connected = findunconnnodes(fens, pfes)
     fens, new_numbering = compactnodes(fens, connected)
@@ -130,7 +113,7 @@ function make_partition_mesh(fens, fes, element_partitioning, partition)
     return fens, pfes, global_node_numbers
 end
 
-function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, global_u::F,
+function PartitionCoNCDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, global_u::F,
     make_partition_fields, make_partition_femm, make_partition_matrix, make_partition_interior_load, make_partition_boundary_load
 ) where {FEN<:FENodeSet,FES<:AbstractFESet,F<:NodalField{T,IT} where {T<:Number,IT<:Integer},IT<:Integer}
     # validate_mesh(fens, fes);
@@ -141,7 +124,7 @@ function PartitionSchurDD(fens::FEN, fes::FES, global_node_numbers::Vector{IT}, 
     I = make_partition_interior_load(femm, geom, u, global_node_numbers)
     B = make_partition_boundary_load(geom, u, global_node_numbers)
     mc = MatrixCache(K, sum_load_vectors(I, B, u), u, global_u, global_node_numbers)
-    return PartitionSchurDD(fens, fes, u, global_node_numbers, global_u, mc)
+    return PartitionCoNCDD(fens, fes, u, global_node_numbers, global_u, mc)
 end
 
 function init_partition_field!(partition_u, global_u, global_node_numbers)
@@ -191,19 +174,19 @@ function scatter_partition_v_to_global_v!(global_v, dofnums_i, partition_v)
     return global_v
 end
 
-function mul_S_v!(partition::PartitionSchurDD, v)
+function mul_S_v!(partition::PartitionCoNCDD, v)
     mc = partition.mc
     gather_partition_v_from_global_v!(mc.temp_v, mc.dofnums_i, v)
     mul!(mc.result_i, mc, mc.temp_v)
     return partition
 end
 
-function assemble_sol!(y, partition::PartitionSchurDD)
+function assemble_sol!(y, partition::PartitionCoNCDD)
     mc = partition.mc
     return scatter_partition_v_to_global_v!(y, mc.dofnums_i, mc.result_i)
 end
 
-function assemble_rhs!(y, partition::PartitionSchurDD)
+function assemble_rhs!(y, partition::PartitionCoNCDD)
     mc = partition.mc
     return scatter_partition_v_to_global_v!(y, mc.dofnums_i, mc.b_i_til)
 end
@@ -224,7 +207,7 @@ function global_field_to_partition_field!(partition_u, global_node_numbers, glob
     return partition_u
 end
 
-function reconstruct_free_dofs!(partition::PartitionSchurDD)
+function reconstruct_free_dofs!(partition::PartitionCoNCDD)
     mc = partition.mc
     global_field_to_partition_field!(partition.u, partition.global_node_numbers, partition.global_u,)
     T_i = gathersysvec(partition.u, DOF_KIND_INTERFACE)
@@ -234,7 +217,7 @@ function reconstruct_free_dofs!(partition::PartitionSchurDD)
     return partition.global_u
 end
 
-function partition_complement_diagonal!(y, partition::PartitionSchurDD)
+function partition_complement_diagonal!(y, partition::PartitionCoNCDD)
     # S_ii = K_ii - K_if * (K_ff \ K_fi)
     mc = partition.mc
     mc.temp_i .= diag(mc.K_ii)
@@ -245,7 +228,7 @@ function partition_complement_diagonal!(y, partition::PartitionSchurDD)
     return scatter_partition_v_to_global_v!(y, mc.dofnums_i, mc.temp_i)
 end
 
-function assemble_interface_matrix!(K_ii, partition::PartitionSchurDD)
+function assemble_interface_matrix!(K_ii, partition::PartitionCoNCDD)
     mc = partition.mc
     K_ii[mc.dofnums_i, mc.dofnums_i] += mc.K_ii
     return K_ii
@@ -258,7 +241,7 @@ function mul_y_S_v!(y, partition, v)
     return scatter_partition_v_to_global_v!(y, mc.dofnums_i, mc.result_i)
 end
 
-function reconstruct_free_dofs!(partition::PartitionSchurDD, interface_solution::Vector{T}) where {T}
+function reconstruct_free_dofs!(partition::PartitionCoNCDD, interface_solution::Vector{T}) where {T}
     mc = partition.mc
     gather_partition_v_from_global_v!(mc.temp_v, mc.dofnums_i, interface_solution)
     scattersysvec!(partition.u, mc.temp_v, DOF_KIND_INTERFACE)
@@ -269,4 +252,4 @@ function reconstruct_free_dofs!(partition::PartitionSchurDD, interface_solution:
     return partition.global_u
 end
 
-end # module PartitionSchurDDModule
+end # module PartitionCoNCDDModule

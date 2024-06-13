@@ -132,10 +132,11 @@ function test()
             K_ii += ks[k]
         end
     end
+    K_ii_factor = ilu0(K_ii)
+    rank == 0 && (@info "Preconditioner time: $(time() - t1)")
     
     t1 = time()
     rank == 0 && (@info "Solving the Linear System using CG")
-    K_ii_factor = ilu0(K_ii)
     (T_i, stats) = pcg_mpi((q, p) -> _mul_y_S_v!(q, partition, p), 
         b, zeros(size(b)); 
         # M! = (q, p) -> (q .= p),
