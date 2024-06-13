@@ -8,7 +8,7 @@ using FinEtoolsHeatDiff
 using FinEtoolsDDParallel
 using FinEtoolsDDParallel.PartitionSchurDDModule: mul_y_S_v!, assemble_rhs!
 using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free_dofs!, partition_complement_diagonal!
-using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!
+using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!, make_partition_mesh
 using FinEtoolsDDParallel.CGModule: pcg_mpi
 using Metis
 using Test

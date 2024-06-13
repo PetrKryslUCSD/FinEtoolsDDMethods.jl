@@ -18,7 +18,7 @@ MPI.install_mpiexecjl()
 Note the folder where the executable is installed.
 - Run the example. `mpiexecjl` likely needs to be specified using the path of the folder in which it was installed.
 ```
- mpiexecjl -n 4 --project=. julia heat/Poisson2D_cg_mpi_driver.jl
+ mpiexecjl -n 4 --project=. julia schur/heat/Poisson2D_cg_mpi_driver.jl
 ```
 
 
