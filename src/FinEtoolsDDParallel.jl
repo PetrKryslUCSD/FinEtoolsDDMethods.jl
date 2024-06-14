@@ -15,6 +15,8 @@ include("PartitionSchurDDModule.jl")
 using .PartitionSchurDDModule: DOF_KIND_INTERFACE, PartitionSchurDD, mark_interfaces!
 export DOF_KIND_INTERFACE, PartitionSchurDD, mark_interfaces!
 
+include("PartitionCoNCDDModule.jl")
+
 include("cg.jl")
 
 end # module FinEtoolsDDParallel

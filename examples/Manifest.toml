@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "9279b564062207f356f6e5ef7d39c623699d1428"
+project_hash = "969fa0c867b87c4adb2aac261b98d0efef5689af"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -223,7 +223,7 @@ uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
 version = "8.0.23"
 
 [[deps.FinEtoolsDDParallel]]
-deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Test"]
+deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Statistics", "Test"]
 path = "../../FinEtoolsDDParallel.jl"
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
 version = "0.1.0"

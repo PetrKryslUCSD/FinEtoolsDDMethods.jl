@@ -35,7 +35,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtools.MeshExportModule.VTKWrite: vtkwrite
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionCoNCDDModule: element_overlap
+using FinEtoolsDDParallel.PartitionCoNCDDModule: patch_coordinates, element_overlap
 using FinEtoolsDDParallel.CGModule: pcg_seq
 using CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Metis
@@ -128,7 +128,7 @@ function test_no_dd(n = 18, thickness = Length/2/100, visualize = false, distort
     return strainenergy
 end
 
-function test(n = 60, thickness = Length/2/100, visualize = false, distortion = 0.0)
+function test(n = 10, thickness = Length/2/100, visualize = false, distortion = 0.0)
     npartitions = 3
     nbf1max = 3
     tolerance = Length/n/100
@@ -211,7 +211,7 @@ function test(n = 60, thickness = Length/2/100, visualize = false, distortion = 
 
     element_overlaps = element_overlap(fes, partitioning)
     
-    mor = CoNCData(fens, partitioning)
+    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), partitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :] # trim the transformation to free degrees of freedom only
     PhiT = Phi'
@@ -274,6 +274,15 @@ function test(n = 60, thickness = Length/2/100, visualize = false, distortion = 
 
     VTK.vtkexportmesh("cos_2t_press_hyperboloid_free-dd.vtk", fens, fes; 
     vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+
+    for j in 1:length(partitionnumbers)
+        l = findall(v -> v == partitionnumbers[j], partitioning)
+        sfes = FESetP1(reshape(l, length(l), 1))
+        vtkexportmesh("cos_2t_press_hyperboloid_free-np$(partitionnumbers[j]).vtk", fens, sfes)
+        pnl = findall(x -> x == partitionnumbers[j], partitioning)
+        cel = connectedelems(fes, pnl, count(fens))
+        vtkexportmesh("cos_2t_press_hyperboloid_free-patch$(partitionnumbers[j]).vtk", fens, subset(fes, cel))
+    end
 
 
     return strainenergy
