@@ -41,7 +41,7 @@ function test()
     Q = -6.0 # internal heat generation rate
     
     N = 100 # number of subdivisions along the sides of the square domain
-    npartitions = 16
+    npartitions = 311
     nbf1max = 3
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
@@ -79,7 +79,10 @@ function test()
     T_d = gathersysvec(Temp, DOF_KIND_DATA)
     F2 = - K_fd * T_d
     
-    partitioning = nodepartitioning(fens, npartitions)
+    C = connectionmatrix(femm, count(fens))
+    g = Metis.graph(C; check_hermitian=true)
+    partitioning = Metis.partition(g, npartitions; alg=:KWAY)
+    # partitioning = nodepartitioning(fens, npartitions)
     partitionnumbers = unique(partitioning)
     npartitions = length(partitionnumbers)
 
