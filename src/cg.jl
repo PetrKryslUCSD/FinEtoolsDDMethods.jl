@@ -44,7 +44,8 @@ function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltyp
     rho = dot(z, r)
     tol = atol + rtol * sqrt(rho)
     resnorm = Inf
-    stats = (niter=itmax, resnorm=resnorm)
+    residuals = typeof(tol)[]
+    stats = (niter=itmax, resnorm=resnorm, residuals=residuals)
     iter = 1
     while iter < itmax
         Aop!(Ap, p)
@@ -56,12 +57,13 @@ function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltyp
         beta = dot(z, r) / rho
         @. p = z + beta * p
         resnorm = sqrt(rho)
+        push!(residuals, resnorm)
         if resnorm < tol
             break
         end
         iter += 1
     end
-    stats = (niter=iter, resnorm=resnorm)
+    stats = (niter=iter, resnorm=resnorm, residuals=residuals)
     return (x, stats)
 end
 
