@@ -31,7 +31,7 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     
-    npartitions = 44
+    npartitions = 8
     nbf1max = 3
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
@@ -70,7 +70,10 @@ function test()
     T_d = gathersysvec(Temp, DOF_KIND_DATA)
     F2 = - K_fd * T_d
     
-    partitioning = nodepartitioning(fens, npartitions)
+    C = connectionmatrix(femm, count(fens))
+    g = Metis.graph(C; check_hermitian=true)
+    partitioning = Metis.partition(g, npartitions; alg=:KWAY)
+    # partitioning = nodepartitioning(fens, npartitions)
     partitionnumbers = unique(partitioning)
     mor = CoNCData(fens, partitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, Temp)
@@ -106,9 +109,11 @@ function test()
         q
     end
 
-    (T_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F1 + F2, zeros(size(F1));
+    b = F1 + F2
+    x = Phi * (Krfactor \ (PhiT * b))
+    (T_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), b, x;
         (M!)=(q, p) -> M!(q, p),
-        itmax=1000, atol=1e-10, rtol=1e-10)
+        itmax=1000, atol=1e-9 * norm(b), rtol=0)
     @show stats
     scattersysvec!(Temp, T_f)
     

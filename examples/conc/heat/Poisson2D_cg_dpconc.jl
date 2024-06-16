@@ -31,9 +31,9 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     
-    npart1 = 400
-    npart2 = 40
-    nbf1max = 2
+    npart1 = 8
+    npart2 = 8
+    nbf1max = 3
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
     N = 1000 # number of subdivisions along the sides of the square domain
