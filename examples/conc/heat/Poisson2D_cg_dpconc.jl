@@ -31,9 +31,9 @@ function test()
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     
-    npart1 = 7
+    npart1 = 400
     npart2 = 40
-    nbf1max = 12
+    nbf1max = 2
 
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 .+ 2 * x[:, 2] .^ 2)#the exact distribution of temperature
     N = 1000 # number of subdivisions along the sides of the square domain
@@ -108,17 +108,17 @@ function test()
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
-        # rp = p - Phi * (PhiT * p)
-        # q .= 0.0
         for part in partitions
             q[part.doflist] .+= (part.factor \ p[part.doflist])
         end
         q
     end
 
-    (T_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F1 + F2, zeros(size(F1));
+    b = F1 + F2
+    x = Phi * (Krfactor \ (PhiT * b))
+    (T_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), b, x;
         (M!)=(q, p) -> M!(q, p),
-        itmax=1000, atol=1e-10, rtol=1e-10)
+        itmax=1000, atol=1e-9 * norm(b), rtol=0)
     @show stats
     scattersysvec!(Temp, T_f)
     
