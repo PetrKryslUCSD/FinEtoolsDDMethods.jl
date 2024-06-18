@@ -1,6 +1,7 @@
 module fibrous_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
+using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDParallel
 using FinEtoolsDDParallel.CGModule: pcg_seq
@@ -24,7 +25,7 @@ function fibers_mesh()
     h = R / 2
     d = a + R + (nr - 1) * (a + 2 * R) + a + R
     Lz = 2.0 * d
-    nlayers = Int(ceil(Lz / (3 * h)))
+    nlayers = Int(ceil(Lz / (9 * h)))
     input = """
     curve 1 line 0 0 $(d) 0
     curve 2 line $(d) 0 $(d) $(d)
@@ -84,6 +85,15 @@ function fibers_mesh()
         (X, layer) -> [X[1], X[2], layer * Lz / nlayers],
     )
 
+    X = zeros(4, 3)
+    for i in eachindex(fes)
+        X[1, :] = fens.xyz[fes.conn[i][1], :]
+        X[2, :] = fens.xyz[fes.conn[i][2], :]
+        X[3, :] = fens.xyz[fes.conn[i][3], :]
+        X[4, :] = fens.xyz[fes.conn[i][4], :]
+        @test  tetv(X) > 0.0
+    end
+
     fens, fes = T4toT10(fens, fes)
 
     # File =  "fibers_mesh.vtk"
@@ -106,15 +116,15 @@ function test()
         copyto!(forceout, [0.0; magn; 0.0])
     end
     
-    npartitions = 4
-    nbf1max = 3
+    npartitions = 8
+    nbf1max = 2
 
     fens, fes = fibers_mesh()
     println("Number of elements: $(count(fes))")
 
     File =  "fibers_mesh.vtk"
     vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
-    @async run(`"paraview.exe" $File`)
+    # @async run(`"paraview.exe" $File`)
 
     bfes = meshboundary(fes)
     # end cross-section surface  for the shear loading
@@ -149,17 +159,20 @@ function test()
     numberdofs!(u, perm)
     fr = dofrange(u, DOF_KIND_FREE)
     dr = dofrange(u, DOF_KIND_DATA)
-    # numberdofs!(u)
+    
+    println("nalldofs(u) = $(nalldofs(u))")
     println("nfreedofs(u) = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
     el2femm = FEMMBase(IntegDomain(subset(bfes, sectionL), GaussRule(2, 2)))
     F = distribloads(el2femm, geom, u, fi, 2)
     F_f = F[fr]
-    femmm = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(1)), matm)
+    # femmm = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(1)), matm)
+    femmm = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(4)), matm)
     associategeometry!(femmm, geom)
     K = stiffness(femmm, geom, u)
-    femmf = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 2)), TetRule(1)), matf)
+    # femmf = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 2)), TetRule(1)), matf)
+    femmf = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 2)), TetRule(4)), matf)
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
@@ -219,7 +232,7 @@ function test()
     @show stats
     scattersysvec!(u, u_f)
     
-    VTK.vtkexportmesh("stubby_corbel-approx.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+    VTK.vtkexportmesh("fibers-cg-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
 
 
     true
