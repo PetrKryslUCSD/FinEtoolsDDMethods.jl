@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "7ea43060b8f0c832f234cd7b1001823f054e37af"
+project_hash = "e280259dde05bada6b1ce8e93f286d2f55f5dc6d"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -224,9 +224,9 @@ version = "1.11.0"
 
 [[deps.FinEtools]]
 deps = ["DataDrop", "DelimitedFiles", "HDF5", "LinearAlgebra", "LoopVectorization", "Printf", "Random", "SparseArrays", "Statistics", "SymRCM", "Test", "Unicode", "WriteVTK"]
-git-tree-sha1 = "999be857cf5f1897bdfa2fbf39da188b944ebbac"
+path = "../../FinEtools.jl"
 uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
-version = "8.0.24"
+version = "8.0.25"
 
 [[deps.FinEtoolsDDParallel]]
 deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Statistics", "Test"]
