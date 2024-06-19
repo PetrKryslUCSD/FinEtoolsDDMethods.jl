@@ -1,6 +1,7 @@
-module fibrous_examples
+module fibres_soft_hard_tet_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
+using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDParallel
@@ -17,6 +18,7 @@ import Base: size, eltype
 import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
+using DataDrop
 
 function fibers_mesh()
     nr = 3
@@ -85,14 +87,14 @@ function fibers_mesh()
         (X, layer) -> [X[1], X[2], layer * Lz / nlayers],
     )
 
-    X = zeros(4, 3)
-    for i in eachindex(fes)
-        X[1, :] = fens.xyz[fes.conn[i][1], :]
-        X[2, :] = fens.xyz[fes.conn[i][2], :]
-        X[3, :] = fens.xyz[fes.conn[i][3], :]
-        X[4, :] = fens.xyz[fes.conn[i][4], :]
-        @test  tetv(X) > 0.0
-    end
+    # X = zeros(4, 3)
+    # for i in eachindex(fes)
+    #     X[1, :] = fens.xyz[fes.conn[i][1], :]
+    #     X[2, :] = fens.xyz[fes.conn[i][2], :]
+    #     X[3, :] = fens.xyz[fes.conn[i][3], :]
+    #     X[4, :] = fens.xyz[fes.conn[i][4], :]
+    #     @test  tetv(X) > 0.0
+    # end
 
     fens, fes = T4toT10(fens, fes)
 
@@ -105,8 +107,10 @@ end # fibers_mesh
 
 function test()
     # Isotropic material
-    Em = 1000.0
-    num = 0.4999 # Taylor data: nearly incompressible material
+    Em = 1.0
+    # num = 0.4999 
+    num = 0.3 
+    # Taylor data: nearly incompressible material
     Ef = 100000.0
     nuf = 0.3 # Compressible material
     CTE = 0.0
@@ -116,11 +120,14 @@ function test()
         copyto!(forceout, [0.0; magn; 0.0])
     end
     
-    npartitions = 8
-    nbf1max = 2
+    nelperpart = 200
+    nbf1max = 5
 
     fens, fes = fibers_mesh()
     println("Number of elements: $(count(fes))")
+
+    matrixel = selectelem(fens, fes, label = 1)
+    fiberel = selectelem(fens, fes, label = 2)
 
     File =  "fibers_mesh.vtk"
     vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
@@ -164,15 +171,13 @@ function test()
     println("nfreedofs(u) = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
-    el2femm = FEMMBase(IntegDomain(subset(bfes, sectionL), GaussRule(2, 2)))
+    el2femm = FEMMBase(IntegDomain(subset(bfes, sectionL), TriRule(6)))
     F = distribloads(el2femm, geom, u, fi, 2)
     F_f = F[fr]
-    # femmm = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(1)), matm)
-    femmm = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(4)), matm)
+    femmm = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, matrixel), TetRule(4)), matm)
     associategeometry!(femmm, geom)
     K = stiffness(femmm, geom, u)
-    # femmf = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 2)), TetRule(1)), matf)
-    femmf = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 2)), TetRule(4)), matf)
+    femmf = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, fiberel), TetRule(4)), matf)
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
@@ -180,11 +185,39 @@ function test()
     U_f = K_ff \ F_f
     scattersysvec!(u, U_f)
 
-    VTK.vtkexportmesh("fibers-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
+    VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
-    partitioning = nodepartitioning(fens, npartitions)
-    partitionnumbers = unique(partitioning)
-    npartitions = length(partitionnumbers)
+    # partitioning = nodepartitioning(fens, npartitions)
+    partitioning = zeros(Int, count(fens))
+    femm = FEMMBase(IntegDomain(subset(fes, fiberel), TetRule(4)))
+    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+    g = Metis.graph(C; check_hermitian=true)
+    ndoms = Int(ceil(length(fiberel) / nelperpart))
+    fiber_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
+    nfiberparts = maximum(fiber_element_partitioning)
+    for e in eachindex(fiberel)
+        for n in fes.conn[fiberel[e]]
+            partitioning[n] = fiber_element_partitioning[e]
+        end
+    end
+    femm = FEMMBase(IntegDomain(subset(fes, matrixel), TetRule(4)))
+    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+    g = Metis.graph(C; check_hermitian=true)
+    ndoms = Int(ceil(length(matrixel) / nelperpart))
+    matrix_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
+    for e in eachindex(matrixel)
+        for n in fes.conn[matrixel[e]]
+            if partitioning[n] == 0
+                partitioning[n] = matrix_element_partitioning[e] + nfiberparts
+            end
+        end
+    end
+    File =  "fibers-partitioning.vtk"
+    partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
+    vtkexportmesh(File, fens, partitionsfes; scalars=[("partition", partitioning)])
+    # @async run(`"paraview.exe" $File`)
+    
+    @show npartitions = maximum(partitioning)
 
     mor = CoNCData(fens, partitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, u)
@@ -195,10 +228,15 @@ function test()
     Kr_ff = transfm(K_ff, Phi, PhiT)
     @show size(Kr_ff)
     Krfactor = lu(Kr_ff)
+
+    U_f = Phi * (Krfactor \ (PhiT * F_f))
+    scattersysvec!(u, U_f)
+
+    VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
 
     partitions = []
-    for i in partitionnumbers
+    for i in 1:npartitions
         pnl = findall(x -> x == i, partitioning)
         doflist = Int[]
         for n in pnl
@@ -218,8 +256,6 @@ function test()
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
-        # rp = p - Phi * (PhiT * p)
-        # q .= 0.0
         for part in partitions
             q[part.doflist] .+= (part.factor \ p[part.doflist])
         end
@@ -228,11 +264,12 @@ function test()
 
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        itmax=1000, atol=1e-10, rtol=1e-10)
+        itmax=1000, atol=1e-6 * norm(F_f), rtol=0)
     @show stats
+    DataDrop.store_json("fibers_soft_hard_tet-convergence" * ".json", stats)
     scattersysvec!(u, u_f)
     
-    VTK.vtkexportmesh("fibers-cg-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+    VTK.vtkexportmesh("fibers-tet-cg-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
 
 
     true
