@@ -86,8 +86,7 @@ function fiber_unit(R, nr, tolerance)
     return fens, fes
 end
 
-function fibers_mesh()
-    refmultiplier = 2
+function fibers_mesh(refmultiplier = 2)
     nr = 3
     a = 1.0
     R = 1.0 
@@ -143,7 +142,7 @@ function fibers_mesh()
     return fens, fes
 end # fibers_mesh
 
-function test()
+function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
     # Isotropic material
     Em = 1.0
     num = 0.4999 
@@ -157,18 +156,17 @@ function test()
     function getfrcL!(forceout, XYZ, tangents, feid, qpid)
         copyto!(forceout, [0.0; magn; 0.0; ])
     end
-    
-    nelperpart = 200
-    nbf1max = 5
+          
+    println("Refinement multiplier: $(refmultiplier)")
 
-    fens, fes = fibers_mesh()
+    fens, fes = fibers_mesh(refmultiplier)
     println("Number of elements: $(count(fes))")
 
     matrixel = selectelem(fens, fes, label = 1)
     fiberel = selectelem(fens, fes, label = 2)
 
-    File =  "fibers_mesh.vtk"
-    vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
+    # File =  "fibers_mesh.vtk"
+    # vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
     # @async run(`"paraview.exe" $File`)
 
     bfes = meshboundary(subset(fes, fiberel))
@@ -215,20 +213,18 @@ function test()
     el2femm = FEMMBase(IntegDomain(loadfes, GaussRule(2, 2)))
     F = distribloads(el2femm, geom, u, fi, 2)
     F_f = F[fr]
-    # femmm = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(1)), matm)
     femmm = FEMMDeforLinearMSH8(MR, IntegDomain(subset(fes, matrixel), GaussRule(3, 2)), matm)
     associategeometry!(femmm, geom)
     K = stiffness(femmm, geom, u)
-    # femmf = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 2)), TetRule(1)), matf)
     femmf = FEMMDeforLinearMSH8(MR, IntegDomain(subset(fes, fiberel), GaussRule(3, 2)), matf)
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
 
-    U_f = K_ff \ F_f
-    scattersysvec!(u, U_f)
+    # U_f = K_ff \ F_f
+    # scattersysvec!(u, U_f)
 
-    VTK.vtkexportmesh("fibers-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
+    # VTK.vtkexportmesh("fibers-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
     # partitioning = nodepartitioning(fens, npartitions)
     partitioning = zeros(Int, count(fens))
@@ -272,10 +268,10 @@ function test()
     @show size(Kr_ff)
     Krfactor = lu(Kr_ff)
 
-    U_f = Phi * (Krfactor \ (PhiT * F_f))
-    scattersysvec!(u, U_f)
+    # U_f = Phi * (Krfactor \ (PhiT * F_f))
+    # scattersysvec!(u, U_f)
 
-    VTK.vtkexportmesh("fibers-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
+    # VTK.vtkexportmesh("fibers-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
 
     partitions = []
@@ -297,8 +293,6 @@ function test()
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
-        # rp = p - Phi * (PhiT * p)
-        # q .= 0.0
         for part in partitions
             q[part.doflist] .+= (part.factor \ p[part.doflist])
         end
@@ -309,7 +303,12 @@ function test()
         (M!)=(q, p) -> M!(q, p),
         itmax=1000, atol=1e-6 * norm(F_f), rtol=0)
     @show stats.niter
-    DataDrop.store_json("fibers_soft_hard_hex-convergence" * ".json", stats)
+    f = "fibers_soft_hard_hex" *
+        "-rm=$(refmultiplier)" *
+        "-ne=$(nelperpart)" *
+        "-n1=$(nbf1max)" *
+        "-convergence"
+    DataDrop.store_json(f * ".json", stats)
     scattersysvec!(u, u_f)
     
     VTK.vtkexportmesh("fibers-hex-cg-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
@@ -317,6 +316,6 @@ function test()
 
     true
 end
-test()
+test(refmultiplier = 1)
 nothing
 end
