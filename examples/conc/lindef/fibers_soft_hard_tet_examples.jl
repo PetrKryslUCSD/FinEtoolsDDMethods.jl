@@ -215,9 +215,13 @@ function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
             end
         end
     end
-    File =  "fibers-partitioning.vtk"
+    
+    f = "fibers_soft_hard_tet" *
+        "-rm=$(refmultiplier)" *
+        "-ne=$(nelperpart)" *
+        "-n1=$(nbf1max)" * "-partitioning"
     partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-    vtkexportmesh(File, fens, partitionsfes; scalars=[("partition", partitioning)])
+    vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", partitioning)])
     # @async run(`"paraview.exe" $File`)
     
     @show npartitions = maximum(partitioning)
@@ -283,7 +287,11 @@ function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
     
-    VTK.vtkexportmesh("fibers-tet-cg-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+    f = "fibers_soft_hard_tet" *
+        "-rm=$(refmultiplier)" *
+        "-ne=$(nelperpart)" *
+        "-n1=$(nbf1max)" * "-cg-sol"
+    VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
 
 
     true
