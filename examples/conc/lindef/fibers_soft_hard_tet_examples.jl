@@ -21,24 +21,25 @@ using Targe2
 using DataDrop
 
 function fibers_mesh()
+    refmultiplier = 1
     nr = 3
     a = 1.0
     R = 1.0 
-    h = R / 2
-    d = a + R + (nr - 1) * (a + 2 * R) + a + R
+    h = R / 2 / refmultiplier
+    d = a + R + (nr - 1) * 2 * (a + R) + a + R
     Lz = 2.0 * d
-    nlayers = Int(ceil(Lz / (9 * h)))
+    nlayers = refmultiplier * Int(ceil(Lz / (5 * h)))
     input = """
     curve 1 line 0 0 $(d) 0
     curve 2 line $(d) 0 $(d) $(d)
-    curve 3 line $(d) $(d) 0 $(d)
+    curve 3 line $(d) $(d) 0 $(d)  
     curve 4 line 0 $(d) 0 0 
     """ 
     p = 1
     for r in 1:nr
         for c in 1:nr 
-            cx = a + R + (r - 1) * (a + 2 * R)
-            cy = a + R + (c - 1) * (a + 2 * R)
+            cx = a + R + (r - 1) * 2 * (a + R)
+            cy = a + R + (c - 1) * 2 * (a + R)
             input *= "\n" * "curve $(4+p) circle center $(cx) $(cy) radius $R"
             p += 1
         end
@@ -133,10 +134,13 @@ function test()
     vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
     # @async run(`"paraview.exe" $File`)
 
-    bfes = meshboundary(fes)
-    # end cross-section surface  for the shear loading
+    bfes = meshboundary(subset(fes, fiberel))
     sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
+    loadfes = subset(bfes, sectionL)
+    # end cross-section surface  for the shear loading
+    # sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
     # 0 cross-section surface  for the reactions
+    bfes = meshboundary(fes)
     section0 = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 -1.0])
 
     MR = DeforModelRed3D
@@ -171,7 +175,7 @@ function test()
     println("nfreedofs(u) = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
-    el2femm = FEMMBase(IntegDomain(subset(bfes, sectionL), TriRule(6)))
+    el2femm = FEMMBase(IntegDomain(loadfes, TriRule(6)))
     F = distribloads(el2femm, geom, u, fi, 2)
     F_f = F[fr]
     femmm = FEMMDeforLinearMST10(MR, IntegDomain(subset(fes, matrixel), TetRule(4)), matm)
@@ -252,8 +256,6 @@ function test()
         push!(partitions, part)
     end
 
-    @show length(partitions)
-
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
         for part in partitions
@@ -265,7 +267,7 @@ function test()
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
         itmax=1000, atol=1e-6 * norm(F_f), rtol=0)
-    @show stats
+    @show stats.niter
     DataDrop.store_json("fibers_soft_hard_tet-convergence" * ".json", stats)
     scattersysvec!(u, u_f)
     

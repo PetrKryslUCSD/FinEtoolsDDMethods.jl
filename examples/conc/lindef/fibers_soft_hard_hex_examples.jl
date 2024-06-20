@@ -87,16 +87,17 @@ function fiber_unit(R, nr, tolerance)
 end
 
 function fibers_mesh()
+    refmultiplier = 2
     nr = 3
     a = 1.0
     R = 1.0 
-    d = a + R + (nr - 1) * (a + 2 * R) + a + R
-    nR = 2 * 2
+    d = a + R + (nr - 1) * 2 * (a + R) + a + R
+    nR = refmultiplier * 2 * 4
     nL = Int(nR / 2)
     nH = Int(nR / 2)
     nW = 2*Int(round(nr/2))
     Lz = 2.0 * d
-    nlayers = Int(ceil(Lz / 2))
+    nlayers = refmultiplier * Int(ceil(Lz / 2))
     tolerance = R / nr / 100
 
     meshes = Array{Tuple{FENodeSet,AbstractFESet},1}()
@@ -109,6 +110,7 @@ function fibers_mesh()
     for i in 2:length(fesa)
         fes = cat(fes, fesa[i])
     end
+    fens = translate(fens, [(a + R), (a + R)])
     
     fens1, fes1 = deepcopy(fens), deepcopy(fes)
     
@@ -153,7 +155,7 @@ function test()
     magn = 1.0
     
     function getfrcL!(forceout, XYZ, tangents, feid, qpid)
-        copyto!(forceout, [0.0; 0.0; -magn; ])
+        copyto!(forceout, [0.0; magn; 0.0; ])
     end
     
     nelperpart = 200
@@ -169,10 +171,13 @@ function test()
     vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
     # @async run(`"paraview.exe" $File`)
 
-    bfes = meshboundary(fes)
-    # end cross-section surface  for the shear loading
+    bfes = meshboundary(subset(fes, fiberel))
     sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
+    loadfes = subset(bfes, sectionL)
+    # end cross-section surface  for the shear loading
+    # sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
     # 0 cross-section surface  for the reactions
+    bfes = meshboundary(fes)
     section0 = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 -1.0])
 
     MR = DeforModelRed3D
@@ -207,7 +212,7 @@ function test()
     println("nfreedofs(u) = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
-    el2femm = FEMMBase(IntegDomain(subset(bfes, sectionL), GaussRule(2, 2)))
+    el2femm = FEMMBase(IntegDomain(loadfes, GaussRule(2, 2)))
     F = distribloads(el2femm, geom, u, fi, 2)
     F_f = F[fr]
     # femmm = FEMMDeforLinear(MR, IntegDomain(subset(fes, selectelem(fens, fes, label = 1)), TetRule(1)), matm)
@@ -289,8 +294,6 @@ function test()
         part = (nodelist = pnl, factor = pKfactor, doflist = doflist)
         push!(partitions, part)
     end
-
-    @show length(partitions)
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
