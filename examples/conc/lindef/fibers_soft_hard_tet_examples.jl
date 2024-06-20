@@ -120,6 +120,8 @@ function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
         copyto!(forceout, [0.0; magn; 0.0])
     end
 
+    println("Number of elements per partition: $(nelperpart)")
+    println("Number 1D basis functions: $(nbf1max)")
     println("Refinement multiplier: $(refmultiplier)")
     
     fens, fes = fibers_mesh(refmultiplier)
@@ -169,7 +171,6 @@ function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
     fr = dofrange(u, DOF_KIND_FREE)
     dr = dofrange(u, DOF_KIND_DATA)
     
-    println("nalldofs(u) = $(nalldofs(u))")
     println("nfreedofs(u) = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
@@ -262,16 +263,24 @@ function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
         q
     end
 
+    t0 = time()
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
         itmax=1000, atol=1e-6 * norm(F_f), rtol=0)
+    t1 = time()
     @show stats.niter
+    data = Dict(
+        "nfreedofs_u" => nfreedofs(u),
+        "npartitions" => npartitions,
+        "size_Kr_ff" => size(Kr_ff),
+        "stats" => stats,
+        "time" => t1 - t0,
+    )
     f = "fibers_soft_hard_tet" *
         "-rm=$(refmultiplier)" *
         "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)" *
-        "-convergence"
-    DataDrop.store_json(f * ".json", stats)
+        "-n1=$(nbf1max)" 
+    DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
     
     VTK.vtkexportmesh("fibers-tet-cg-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
@@ -279,6 +288,6 @@ function test(; nelperpart = 200, nbf1max = 5, refmultiplier = 2)
 
     true
 end
-test(refmultiplier = 1)
+# test(refmultiplier = 1)
 nothing
 end
