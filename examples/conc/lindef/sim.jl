@@ -1,3 +1,6 @@
+
+# for ne in 200 400 800; do for n1 in 2 3 4 5; do julia conc/lindef/sim.jl $ne $n1; done; done
+
 println("Current folder: $(pwd())")
 
 using Pkg
