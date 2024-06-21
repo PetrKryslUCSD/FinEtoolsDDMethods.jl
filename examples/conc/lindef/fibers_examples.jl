@@ -273,7 +273,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     end
 
     println("Kind: $(string(kind))")
-    println("Refinement multiplier: $(ref)")
+    println("Refinement factor: $(ref)")
     println("Number of elements per partition: $(nelperpart)")
     println("Number 1D basis functions: $(nbf1max)")
     println("Number fine grid partitions: $(nfpartitions)")
@@ -347,7 +347,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart, fiberel, matrixel)
         
     # f = "fibers_soft_hard_$(string(kind))" *
-    #     "-rm=$(ref)" *
+    #     "-rf=$(ref)" *
     #     "-ne=$(nelperpart)" *
     #     "-n1=$(nbf1max)" * "-partitioning"
     # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
@@ -413,7 +413,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         "time" => t1 - t0,
     )
     f = "fibers-$(label)-$(string(kind))" *
-        "-rm=$(ref)" *
+        "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)"  * 
         "-nf=$(nfpartitions)" 
@@ -421,7 +421,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     scattersysvec!(u, u_f)
     
     f = "fibers-$(label)-$(string(kind))" *
-        "-rm=$(ref)" *
+        "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)" * 
         "-nf=$(nfpartitions)"  * 
