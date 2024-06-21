@@ -25,8 +25,8 @@ if length(ARGS) > 3
     kind = ARGS[4]
 end
 
-include(raw"fibers_soft_hard_examples.jl")
-using .fibres_soft_hard_examples; 
+include(raw"fibers_examples.jl")
+using .fibers_examples; 
 
-fibres_soft_hard_examples.test(; kind = kind, nelperpart = nelperpart, nbf1max = nbf1max, ref = ref)
+fibers_examples.test(; kind = kind, Em = 1.0, num = 0.3, Ef = 1.20e5, nuf = 0.3, nelperpart = nelperpart, nbf1max = nbf1max, ref = ref)
 
