@@ -20,13 +20,21 @@ ref = 1
 if length(ARGS) > 2
     ref = parse(Int, ARGS[3])
 end
-kind = "hex"
+nfpartitions = 2
 if length(ARGS) > 3
-    kind = ARGS[4]
+    nfpartitions = parse(Int, ARGS[4])
+end
+kind = "hex"
+if length(ARGS) > 4
+    kind = ARGS[5]
 end
 
 include(raw"fibers_examples.jl")
 using .fibers_examples; 
 
-fibers_examples.test(; kind = kind, Em = 1.0, num = 0.3, Ef = 1.20e5, nuf = 0.3, nelperpart = nelperpart, nbf1max = nbf1max, ref = ref)
+fibers_examples.test("soft_hard";
+    kind=kind,
+    Em=1.0, num=0.3, Ef=1.20e5, nuf=0.3,
+    nelperpart=nelperpart, nbf1max=nbf1max, 
+    nfpartitions=nfpartitions, ref=ref)
 

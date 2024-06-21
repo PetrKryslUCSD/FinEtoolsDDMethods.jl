@@ -1,4 +1,4 @@
-module fibers_soft_hard_2lp_examples
+module fibers_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtools.MeshExportModule: CSV
@@ -264,7 +264,7 @@ function fine_grid_partitioning(fens, npartitions)
     partitioning, npartitions
 end
 
-function _execute(kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm)
+function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm)
     CTE = 0.0
     magn = 1.0
     
@@ -345,12 +345,12 @@ function _execute(kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref
 
     cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart, fiberel, matrixel)
         
-    f = "fibers_soft_hard_$(string(kind))" *
-        "-rm=$(ref)" *
-        "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)" * "-partitioning"
-    partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-    vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
+    # f = "fibers_soft_hard_$(string(kind))" *
+    #     "-rm=$(ref)" *
+    #     "-ne=$(nelperpart)" *
+    #     "-n1=$(nbf1max)" * "-partitioning"
+    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
+    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
     # @async run(`"paraview.exe" $File`)
     
     mor = CoNCData(fens, cpartitioning)
@@ -411,14 +411,14 @@ function _execute(kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "fibers_soft_hard_$(string(kind))" *
+    f = "fibers-$(label)-$(string(kind))" *
         "-rm=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)" 
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
     
-    f = "fibers_soft_hard_$(string(kind))" *
+    f = "fibers-$(label)-$(string(kind))" *
         "-rm=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)" * "-cg-sol"
@@ -428,7 +428,7 @@ function _execute(kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref
 end
 # test(ref = 1)
 
-function test(; kind = "tet", Em = 1.0, num = 0.3, Ef = 1.20e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, npartitions = 2, ref = 1)
+function test(label = "soft_hard"; kind = "tet", Em = 1.0, num = 0.3, Ef = 1.20e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, ref = 1)
     mesh = fibers_mesh_tet
     boundary_rule = TriRule(6)
     interior_rule = TetRule(4)
@@ -439,10 +439,9 @@ function test(; kind = "tet", Em = 1.0, num = 0.3, Ef = 1.20e5, nuf = 0.3, nelpe
         interior_rule = GaussRule(3, 2)
         make_femm = FEMMDeforLinearMSH8
     end
-    _execute(kind, Em, num, Ef, nuf, nelperpart, nbf1max, npartitions, ref, mesh, boundary_rule, interior_rule, make_femm)
+    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm)
 end
 
-test()
 nothing
 end # module
 
