@@ -16,13 +16,17 @@ nbf1max = 3
 if length(ARGS) > 1
     nbf1max = parse(Int, ARGS[2])
 end
-refmultiplier = 1
+ref = 1
 if length(ARGS) > 2
-    refmultiplier = parse(Int, ARGS[3])
+    ref = parse(Int, ARGS[3])
+end
+kind = "hex"
+if length(ARGS) > 3
+    kind = ARGS[4]
 end
 
-include(raw"fibers_soft_hard_tet_examples.jl")
-using .fibres_soft_hard_tet_examples; 
+include(raw"fibers_soft_hard_examples.jl")
+using .fibres_soft_hard_examples; 
 
-fibres_soft_hard_tet_examples.test(; nelperpart = nelperpart, nbf1max = nbf1max, refmultiplier = refmultiplier)
+fibres_soft_hard_examples.test(; kind = kind, nelperpart = nelperpart, nbf1max = nbf1max, ref = ref)
 
