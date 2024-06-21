@@ -56,11 +56,11 @@ function matrix_unit(a, R, nL, nH, nW, tolerance)
     for i in 2:length(fesa)
         fes = cat(fes, fesa[i])
     end
-    setlabel!(fes, 1)
+    setlabel!(fes, 0)
     return fens, fes
 end
 
-function fiber_unit(R, nr, tolerance)
+function fiber_unit(R, nr, tolerance, label)
     fens1, fes1 = Q4circlen(R, nr)
     fens1.xyz = fens1.xyz[:, 1:2]
     meshes = Array{Tuple{FENodeSet,AbstractFESet},1}()
@@ -83,7 +83,7 @@ function fiber_unit(R, nr, tolerance)
     for i in 2:length(fesa)
         fes = cat(fes, fesa[i])
     end
-    setlabel!(fes, 2)
+    setlabel!(fes, label)
     return fens, fes
 end
 
@@ -104,7 +104,7 @@ function fibers_mesh_hex(ref = 1)
     meshes = Array{Tuple{FENodeSet,AbstractFESet},1}()
     fens, fes = matrix_unit(a, R, nL, nH, nW, tolerance)
     push!(meshes, (fens, fes))
-    fens, fes = fiber_unit(R, nR, tolerance)
+    fens, fes = fiber_unit(R, nR, tolerance, -1)
     push!(meshes, (fens, fes))
     fens, fesa = mergenmeshes(meshes, tolerance)
     fes = fesa[1]
@@ -114,12 +114,16 @@ function fibers_mesh_hex(ref = 1)
     fens = translate(fens, [(a + R), (a + R)])
     
     fens1, fes1 = deepcopy(fens), deepcopy(fes)
+    fel = selectelem(fens1, fes1, label = -1)
+    labels = fes.label
     
     meshes = Array{Tuple{FENodeSet,AbstractFESet},1}()
     for r in 1:nr
         for c in 1:nr
             fens, fes = deepcopy(fens1), deepcopy(fes1)
             fens = translate(fens, [(c - 1) * (a + R) * 2, (r - 1) * (a + R) * 2])
+            labels[fel] .= (r - 1) * nr + c
+            setlabel!(fes, deepcopy(labels))
             push!(meshes, (fens, fes))
         end
     end
@@ -137,8 +141,8 @@ function fibers_mesh_hex(ref = 1)
         (X, layer) -> [X[1], X[2], layer * Lz / nlayers],
     )
 
-    File =  "fibers_soft_hard_hex-mesh.vtk"
-    vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
+    # File =  "fibers_soft_hard_hex-mesh.vtk"
+    # vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
     # @async run(`"paraview.exe" $File`)
 
     return fens, fes
@@ -177,13 +181,11 @@ function fibers_mesh_tet(ref = 1)
             p += 1
         end
     end
-    input *= "\n" * 
-    """
-    subregion 2  property 2 boundary """
+    input *= "\n" 
     p = 1
     for r in 1:nr
         for c in 1:nr
-            input *= " $(+(4+p))"
+            input *= "subregion $(p+1) property 2 boundary  $(+(4+p))\n"
             p += 1
         end
     end
@@ -196,13 +198,13 @@ function fibers_mesh_tet(ref = 1)
     
     fens = FENodeSet(mesh.xy)
     fes = FESetT3(mesh.triconn)
-    label = fill(0, count(fes))
+    labels = fill(0, count(fes)) # the matrix should have a label of 0
     for i in eachindex(mesh.trigroups)
         for j in mesh.trigroups[i]
-            label[j] = i
+            labels[j] = i - 1 # the fibers should have labels 1, 2, 3, ...
         end
     end
-    setlabel!(fes, label)
+    setlabel!(fes, labels)
 
     fens, fes = T4extrudeT3(
         fens,
@@ -229,19 +231,24 @@ function fibers_mesh_tet(ref = 1)
     return fens, fes
 end # fibers_mesh
 
-function coarse_grid_partitioning(fens, fes, nelperpart, fiberel, matrixel)
+function coarse_grid_partitioning(fens, fes, nelperpart)
     partitioning = zeros(Int, count(fens))
-    femm = FEMMBase(IntegDomain(subset(fes, fiberel), PointRule()))
-    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
-    g = Metis.graph(C; check_hermitian=true)
-    ndoms = Int(ceil(length(fiberel) / nelperpart))
-    fiber_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
-    nfiberparts = maximum(fiber_element_partitioning)
-    for e in eachindex(fiberel)
-        for n in fes.conn[fiberel[e]]
-            partitioning[n] = fiber_element_partitioning[e]
+    nfiberparts = 0
+    for p in 1:maximum(fes.label)
+        fiberel = selectelem(fens, fes, label = p)
+        femm = FEMMBase(IntegDomain(subset(fes, fiberel), PointRule()))
+        C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+        g = Metis.graph(C; check_hermitian=true)
+        ndoms = Int(ceil(length(fiberel) / nelperpart))
+        fiber_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
+        for e in eachindex(fiberel)
+            for n in fes.conn[fiberel[e]]
+                partitioning[n] = fiber_element_partitioning[e] + nfiberparts
+            end
         end
+        nfiberparts += maximum(fiber_element_partitioning)
     end
+    matrixel = selectelem(fens, fes, label = 0)
     femm = FEMMBase(IntegDomain(subset(fes, matrixel), PointRule()))
     C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
     g = Metis.graph(C; check_hermitian=true)
@@ -281,22 +288,6 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     fens, fes = mesh(ref)
     println("Number of elements: $(count(fes))")
 
-    matrixel = selectelem(fens, fes, label = 1)
-    fiberel = selectelem(fens, fes, label = 2)
-
-    # File =  "fibers_mesh.vtk"
-    # vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
-    # @async run(`"paraview.exe" $File`)
-
-    bfes = meshboundary(subset(fes, fiberel))
-    sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
-    loadfes = subset(bfes, sectionL)
-    # end cross-section surface  for the shear loading
-    # sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
-    # 0 cross-section surface  for the reactions
-    bfes = meshboundary(fes)
-    section0 = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 -1.0])
-
     MR = DeforModelRed3D
     matf = MatDeforElastIso(MR, 0.0, Ef, nuf, CTE)
     matm = MatDeforElastIso(MR, 0.0, Em, num, CTE)
@@ -316,6 +307,17 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     C = connectionmatrix(femm, count(fens))
     perm = symrcm(C)
     
+    matrixel = selectelem(fens, fes, label = 0)
+    fiberel = setdiff(1:count(fes), matrixel)
+    bfes = meshboundary(subset(fes, fiberel))
+    sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
+    loadfes = subset(bfes, sectionL)
+    # end cross-section surface  for the shear loading
+    # sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
+    # 0 cross-section surface  for the reactions
+    bfes = meshboundary(fes)
+    section0 = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 -1.0])
+
     lx0 = connectednodes(subset(bfes, section0))
     setebc!(u, lx0, true, 1, 0.0)
     setebc!(u, lx0, true, 2, 0.0)
@@ -344,7 +346,8 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
 
     # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
-    cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart, fiberel, matrixel)
+    cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
+    println("Number coarse grid partitions: $(ncpartitions)")
         
     # f = "fibers_soft_hard_$(string(kind))" *
     #     "-rf=$(ref)" *
