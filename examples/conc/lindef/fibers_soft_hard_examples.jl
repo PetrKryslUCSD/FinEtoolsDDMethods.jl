@@ -92,12 +92,13 @@ function fibers_mesh_hex(ref = 1)
     a = 1.0
     R = 1.0 
     d = a + R + (nr - 1) * 2 * (a + R) + a + R
-    nR = 7 + ref
+    h = 2 * R / (2 + ref)
+    nR = 2 * Int(round(R / h))
     nL = Int(round(nR / 2))
     nH = nL
     nW = 2 * Int(round(nR/2))
     Lz = 2.0 * d
-    nlayers = ref + Int(ceil(Lz / 10))
+    nlayers = ref + Int(ceil(Lz / (3 * h)))
     tolerance = R / nR / 100
 
     meshes = Array{Tuple{FENodeSet,AbstractFESet},1}()
