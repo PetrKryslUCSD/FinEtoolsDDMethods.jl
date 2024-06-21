@@ -273,9 +273,10 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     end
 
     println("Kind: $(string(kind))")
+    println("Refinement multiplier: $(ref)")
     println("Number of elements per partition: $(nelperpart)")
     println("Number 1D basis functions: $(nbf1max)")
-    println("Refinement multiplier: $(ref)")
+    println("Number fine grid partitions: $(nfpartitions)")
     
     fens, fes = mesh(ref)
     println("Number of elements: $(count(fes))")
@@ -414,14 +415,17 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     f = "fibers-$(label)-$(string(kind))" *
         "-rm=$(ref)" *
         "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)" 
+        "-n1=$(nbf1max)"  * 
+        "-nf=$(nfpartitions)" 
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
     
     f = "fibers-$(label)-$(string(kind))" *
         "-rm=$(ref)" *
         "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)" * "-cg-sol"
+        "-n1=$(nbf1max)" * 
+        "-nf=$(nfpartitions)"  * 
+        "-cg-sol"
     VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
     
     true
