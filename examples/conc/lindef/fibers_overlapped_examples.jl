@@ -1,4 +1,4 @@
-module fibers_examples
+module fibers_overlapped_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtools.MeshExportModule: CSV
@@ -205,7 +205,7 @@ function fibers_mesh_tet(ref = 1)
         end
     end
     setlabel!(fes, labels)
-    
+    @show fes.label
 
     fens, fes = T4extrudeT3(
         fens,
@@ -224,7 +224,7 @@ function fibers_mesh_tet(ref = 1)
     # end
 
     fens, fes = T4toT10(fens, fes)
-
+    
     # File =  "fibers_mesh.vtk"
     # vtkexportmesh(File, fens, fes; scalars=[("label", fes.label)])
     # @async run(`"paraview.exe" $File`)
@@ -266,29 +266,53 @@ function coarse_grid_partitioning(fens, fes, nelperpart)
     partitioning, npartitions
 end
 
-function fine_grid_partitioning(fens, npartitions)
-    partitioning = nodepartitioning(fens, npartitions)
-    npartitions = maximum(partitioning)
-    partitioning, npartitions
+function make_overlapping_partition(fens, fes, n2e, overlap, element_1st_partitioning, i)
+    enl = findall(x -> x == i, element_1st_partitioning)
+    touched = fill(false, count(fes)) 
+    touched[enl] .= true 
+    for ov in 1:overlap
+        sfes = subset(fes, enl)
+        bsfes = meshboundary(sfes)
+        addenl = Int[]
+        for e in eachindex(bsfes)
+            for n in bsfes.conn[e]
+                for ne in n2e.map[n]
+                    if !touched[ne] 
+                        touched[ne] = true
+                        push!(addenl, ne)
+                    end
+                end
+            end
+        end
+        enl = cat(enl, addenl; dims=1)
+    end
+    # vtkexportmesh("i=$i" * "-enl" * "-final" * ".vtk", fens, subset(fes, enl))
+    return connectednodes(subset(fes, enl))
 end
 
-function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
+function fine_grid_node_lists(fens, fes, npartitions, overlap)
+    femm = FEMMBase(IntegDomain(fes, PointRule()))
+    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+    g = Metis.graph(C; check_hermitian=true)
+    element_1st_partitioning = Metis.partition(g, npartitions; alg=:KWAY)
+    n2e = FENodeToFEMap(fes, count(fens))
+    npartitions = maximum(element_1st_partitioning)
+    nodelists = []
+    for i in 1:npartitions
+        push!(nodelists, make_overlapping_partition(fens, fes, n2e, overlap, element_1st_partitioning, i))
+    end
+    nodelists
+end
+
+function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
     CTE = 0.0
     magn = 1.0
     
     function getfrcL!(forceout, XYZ, tangents, feid, qpid)
         copyto!(forceout, [0.0; magn; 0.0])
     end
-
-    println("Kind: $(string(kind))")
-    println("Refinement factor: $(ref)")
-    println("Number of elements per partition: $(nelperpart)")
-    println("Number 1D basis functions: $(nbf1max)")
-    println("Number fine grid partitions: $(nfpartitions)")
-    
     fens, fes = mesh(ref)
-    println("Number of elements: $(count(fes))")
-
+    
     MR = DeforModelRed3D
     matf = MatDeforElastIso(MR, 0.0, Ef, nuf, CTE)
     matm = MatDeforElastIso(MR, 0.0, Em, num, CTE)
@@ -328,7 +352,15 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     fr = dofrange(u, DOF_KIND_FREE)
     dr = dofrange(u, DOF_KIND_DATA)
     
-    println("nfreedofs(u) = $(nfreedofs(u))")
+    println("Kind: $(string(kind))")
+    println("Materials: $(Ef), $(nuf), $(Em), $(num)")
+    println("Refinement factor: $(ref)")
+    println("Number of elements per partition: $(nelperpart)")
+    println("Number of 1D basis functions: $(nbf1max)")
+    println("Number of fine grid partitions: $(nfpartitions)")
+    println("Overlap: $(overlap)")
+    println("Number of elements: $(count(fes))")
+    println("Number of free dofs = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
     el2femm = FEMMBase(IntegDomain(loadfes, boundary_rule))
@@ -365,7 +397,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     transfv(v, t, tT) = (tT * v)
     PhiT = Phi'
     Kr_ff = transfm(K_ff, Phi, PhiT)
-    @show size(Kr_ff)
+    println("Size of the reduced problem: $(size(Kr_ff))")
     Krfactor = lu(Kr_ff)
 
     # U_f = Phi * (Krfactor \ (PhiT * F_f))
@@ -373,13 +405,14 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
 
     # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
-    fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
+    # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
+    nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
+    @assert length(nodelists) == nfpartitions
     
     partitions = []
-    for i in 1:nfpartitions
-        pnl = findall(x -> x == i, fpartitioning)
+    for nodelist in nodelists
         doflist = Int[]
-        for n in pnl
+        for n in nodelist
             for d in axes(u.dofnums, 2)
                 if u.dofnums[n, d] in fr
                     push!(doflist, u.dofnums[n, d])
@@ -388,7 +421,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         end
         pK = K[doflist, doflist]
         pKfactor = lu(pK)
-        part = (nodelist = pnl, factor = pKfactor, doflist = doflist)
+        part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
         push!(partitions, part)
     end
 
@@ -406,7 +439,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         (M!)=(q, p) -> M!(q, p),
         itmax=itmax, atol=1e-6 * norm_F_f, rtol=0)
     t1 = time()
-    @show stats.niter
+    println("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     data = Dict(
         "nfreedofs_u" => nfreedofs(u),
@@ -436,7 +469,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
 end
 # test(ref = 1)
 
-function test(label = "soft_hard"; kind = "tet", Em = 1.0, num = 0.3, Ef = 1.20e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, ref = 1)
+function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1)
     mesh = fibers_mesh_tet
     boundary_rule = TriRule(6)
     interior_rule = TetRule(4)
@@ -448,7 +481,7 @@ function test(label = "soft_hard"; kind = "tet", Em = 1.0, num = 0.3, Ef = 1.20e
         make_femm = FEMMDeforLinearMSH8
     end
     itmax = 2000
-    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
+    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
 end
 
 nothing

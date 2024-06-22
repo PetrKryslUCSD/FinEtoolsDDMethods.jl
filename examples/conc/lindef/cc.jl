@@ -23,6 +23,10 @@ function parse_commandline()
         help = "Number fine grid partitions"
         arg_type = Int
         default = 2
+        "--overlap"
+        help = "Overlap"
+        arg_type = Int
+        default = 1
         "--ref"
         help = "Refinement factor"
         arg_type = Int
@@ -54,12 +58,12 @@ end
 
 p = parse_commandline()
 
-include(raw"fibers_examples.jl")
-using .fibers_examples; 
+include(raw"fibers_overlapped_examples.jl")
+using .fibers_overlapped_examples; 
 
-fibers_examples.test("cc";
+fibers_overlapped_examples.test("cc";
     kind=p["kind"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
-    nfpartitions=p["nfpartitions"], ref=p["ref"])
+    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"])
 
