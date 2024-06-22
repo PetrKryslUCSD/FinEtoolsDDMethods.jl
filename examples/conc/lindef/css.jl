@@ -42,11 +42,11 @@ function parse_commandline()
         "--Em"
         help = "Young's modulus of the matrix"
         arg_type = Float64
-        default = 1.00e3
+        default = 1.00e0
         "--num"
         help = "Poisson ratio of the matrix"
         arg_type = Float64
-        default = 0.4
+        default = 0.3
 
     end
     return parse_args(s)
@@ -57,7 +57,7 @@ p = parse_commandline()
 include(raw"fibers_examples.jl")
 using .fibers_examples; 
 
-fibers_examples.test("compressible";
+fibers_examples.test("css";
     kind=p["kind"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
