@@ -57,7 +57,7 @@ p = parse_commandline()
 include(raw"fibers_examples.jl")
 using .fibers_examples; 
 
-fibers_examples.test("soft_hard";
+fibers_examples.test("compressible";
     kind=p["kind"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
