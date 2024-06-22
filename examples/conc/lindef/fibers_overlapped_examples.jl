@@ -445,6 +445,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         "nfreedofs_u" => nfreedofs(u),
         "ncpartitions" => ncpartitions,
         "nfpartitions" => nfpartitions,
+        "overlap" => overlap,
         "size_Kr_ff" => size(Kr_ff),
         "stats" => stats,
         "time" => t1 - t0,
@@ -453,17 +454,18 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)"  * 
-        "-nf=$(nfpartitions)" 
+        "-nf=$(nfpartitions)"  * 
+        "-ov=$(overlap)"  
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
     
-    f = "fibers-$(label)-$(string(kind))" *
-        "-rf=$(ref)" *
-        "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)" * 
-        "-nf=$(nfpartitions)"  * 
-        "-cg-sol"
-    VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+    # f = "fibers-$(label)-$(string(kind))" *
+    #     "-rf=$(ref)" *
+    #     "-ne=$(nelperpart)" *
+    #     "-n1=$(nbf1max)" * 
+    #     "-nf=$(nfpartitions)"  * 
+    #     "-cg-sol"
+    # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
     
     true
 end
