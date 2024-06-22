@@ -99,7 +99,7 @@ function fibers_mesh_hex(ref = 1)
     nW = 2 * Int(round(nR/2))
     Lz = 2.0 * d
     nlayers = ref + Int(ceil(Lz / (3 * h)))
-    tolerance = R / nR / 100
+    tolerance = R / nR / 5
 
     meshes = Array{Tuple{FENodeSet,AbstractFESet},1}()
     fens, fes = matrix_unit(a, R, nL, nH, nW, tolerance)
