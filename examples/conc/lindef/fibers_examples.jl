@@ -271,7 +271,7 @@ function fine_grid_partitioning(fens, npartitions)
     partitioning, npartitions
 end
 
-function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm)
+function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
     CTE = 0.0
     magn = 1.0
     
@@ -403,7 +403,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        itmax=1000, atol=1e-6 * norm_F_f, rtol=0)
+        itmax=itmax, atol=1e-6 * norm_F_f, rtol=0)
     t1 = time()
     @show stats.niter
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
@@ -446,7 +446,8 @@ function test(label = "soft_hard"; kind = "tet", Em = 1.0, num = 0.3, Ef = 1.20e
         interior_rule = GaussRule(3, 2)
         make_femm = FEMMDeforLinearMSH8
     end
-    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm)
+    itmax = 2000
+    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
 end
 
 nothing
