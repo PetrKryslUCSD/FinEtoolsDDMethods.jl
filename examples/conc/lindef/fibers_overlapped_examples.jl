@@ -19,6 +19,7 @@ import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
+using Statistics
 
 function rotate(fens)
     Q = [cos(pi/2) -sin(pi/2); sin(pi/2) cos(pi/2)]
@@ -424,6 +425,9 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
         push!(partitions, part)
     end
+
+    meansize = mean([length(part.doflist) for part in partitions])
+    println("Mean fine partition size: $(meansize)")
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
