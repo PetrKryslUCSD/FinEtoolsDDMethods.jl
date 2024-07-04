@@ -8,6 +8,7 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDParallel
 using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDParallel.PartitionCoNCDDModule: patch_coordinates, element_overlap
 using SymRCM
 using Metis
 using Test
@@ -204,7 +205,7 @@ function _execute(ncoarse, thickness, nelperpart, nbf1max, nfpartitions, overlap
     # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
     # @async run(`"paraview.exe" $File`)
     
-    mor = CoNCData(fens, cpartitioning)
+    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
     transfm(m, t, tT) = (tT * m * t)
@@ -299,8 +300,8 @@ function _execute(ncoarse, thickness, nelperpart, nbf1max, nfpartitions, overlap
 end
 # test(ref = 1)
 
-function test(nelperpart = 100, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1)
-    thickness = Length/2/100
+function test(;aspect = 100, nelperpart = 100, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1)
+    thickness = Length/2/aspect
     itmax = 2000
     _execute(16, thickness, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax)
 end
