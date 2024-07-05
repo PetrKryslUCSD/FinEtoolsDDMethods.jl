@@ -115,11 +115,12 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, thickness, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax)
+function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
     CTE = 0.0
     distortion = 0.0
     n = ncoarse  * ref    # number of elements along the edge of the block
     tolerance = Length / n/ 100
+    thickness = Length/2/aspect
     
     fens, fes = distortblock(T3block, 90/360*2*pi, Length/2, n, n, distortion, distortion);
     fens.xyz = xyz3(fens)
@@ -271,6 +272,7 @@ function _execute(ncoarse, thickness, nelperpart, nbf1max, nfpartitions, overlap
         "time" => t1 - t0,
     )
     f = "cos_2t_press_hyperboloid_free_overlapped" *
+        "-as=$(aspect)" *
         "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)"  * 
@@ -279,33 +281,33 @@ function _execute(ncoarse, thickness, nelperpart, nbf1max, nfpartitions, overlap
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(dchi, u_f)
     
-    # f = "cos_2t_press_hyperboloid_free_overlapped" *
-    #     "-rf=$(ref)" *
-    #     "-ne=$(nelperpart)" *
-    #     "-n1=$(nbf1max)" * 
-    #     "-nf=$(nfpartitions)"  * 
-    #     "-cg-sol"
-    # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-    VTK.vtkexportmesh("cos_2t_press_hyperboloid_free-sol.vtk", fens, fes; 
-    vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
-    
-    p = 1
-    for nodelist in nodelists
-        cel = connectedelems(fes, nodelist, count(fens))
-        vtkexportmesh("cos_2t_press_hyperboloid_free-patch$(p).vtk", fens, subset(fes, cel))
-        sfes = FESetP1(reshape(nodelist, length(nodelist), 1))
-        vtkexportmesh("cos_2t_press_hyperboloid_free-nodes$(p).vtk", fens, sfes)
-        p += 1
+    if visualize
+        # f = "cos_2t_press_hyperboloid_free_overlapped" *
+        #     "-rf=$(ref)" *
+        #     "-ne=$(nelperpart)" *
+        #     "-n1=$(nbf1max)" * 
+        #     "-nf=$(nfpartitions)"  * 
+        #     "-cg-sol"
+        # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+        VTK.vtkexportmesh("cos_2t_press_hyperboloid_free-sol.vtk", fens, fes;
+            vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+
+        p = 1
+        for nodelist in nodelists
+            cel = connectedelems(fes, nodelist, count(fens))
+            vtkexportmesh("cos_2t_press_hyperboloid_free-patch$(p).vtk", fens, subset(fes, cel))
+            sfes = FESetP1(reshape(nodelist, length(nodelist), 1))
+            vtkexportmesh("cos_2t_press_hyperboloid_free-nodes$(p).vtk", fens, sfes)
+            p += 1
+        end
     end
 
     true
 end
-# test(ref = 1)
 
-function test(;aspect = 100, nelperpart = 100, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1)
-    thickness = Length/2/aspect
+function test(;aspect = 100, nelperpart = 100, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, visualize = false) 
     itmax = 2000
-    _execute(32, thickness, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax)
+    _execute(32, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
 end
 
 nothing
