@@ -23,7 +23,7 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-
+using MatrixSpy
 
 function coarse_grid_partitioning(fens, fes, nelperpart)
     partitioning = zeros(Int, count(fens))
@@ -215,6 +215,8 @@ function _execute(ncoarse, thickness, nelperpart, nbf1max, nfpartitions, overlap
     println("Size of the reduced problem: $(size(Kr_ff))")
     Krfactor = lu(Kr_ff)
 
+    # display(MatrixSpy.spy_matrix(sparse(Phi'), "Phi"))
+
     # U_f = Phi * (Krfactor \ (PhiT * F_f))
     # scattersysvec!(u, U_f)
 
@@ -303,7 +305,7 @@ end
 function test(;aspect = 100, nelperpart = 100, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1)
     thickness = Length/2/aspect
     itmax = 2000
-    _execute(16, thickness, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax)
+    _execute(32, thickness, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax)
 end
 
 nothing
