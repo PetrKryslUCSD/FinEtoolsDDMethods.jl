@@ -206,8 +206,7 @@ function fibers_mesh_tet(ref = 1)
         end
     end
     setlabel!(fes, labels)
-    @show fes.label
-
+    
     fens, fes = T4extrudeT3(
         fens,
         fes,
@@ -305,7 +304,7 @@ function fine_grid_node_lists(fens, fes, npartitions, overlap)
     nodelists
 end
 
-function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
+function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, visualize)
     CTE = 0.0
     magn = 1.0
     
@@ -313,6 +312,13 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         copyto!(forceout, [0.0; magn; 0.0])
     end
     fens, fes = mesh(ref)
+
+    if visualize
+        f = "fibers-$(label)-$(string(kind))" *
+                "-rf=$(ref)" *
+                "-mesh"
+        vtkexportmesh(f * ".vtk", fens, fes; scalars=[("label", fes.label)])
+    end
     
     MR = DeforModelRed3D
     matf = MatDeforElastIso(MR, 0.0, Ef, nuf, CTE)
@@ -462,20 +468,33 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         "-ov=$(overlap)"  
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
-    
-    # f = "fibers-$(label)-$(string(kind))" *
-    #     "-rf=$(ref)" *
-    #     "-ne=$(nelperpart)" *
-    #     "-n1=$(nbf1max)" * 
-    #     "-nf=$(nfpartitions)"  * 
-    #     "-cg-sol"
-    # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+
+    if visualize
+        f = "fibers-$(label)-$(string(kind))" *
+            "-rf=$(ref)" *
+            "-ne=$(nelperpart)" *
+            "-n1=$(nbf1max)" *
+            "-nf=$(nfpartitions)" *
+            "-cg-sol"
+        VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+        
+        p = 1
+        for nodelist in nodelists
+            cel = connectedelems(fes, nodelist, count(fens))
+            f = "fibers-$(label)-$(string(kind))" *
+            "-rf=$(ref)" *
+            "-nf=$(nfpartitions)" *
+            "-p=$p"
+            vtkexportmesh(f * ".vtk", fens, subset(fes, cel))
+            p += 1
+        end
+    end
     
     true
 end
 # test(ref = 1)
 
-function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1)
+function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, visualize = false)
     mesh = fibers_mesh_tet
     boundary_rule = TriRule(6)
     interior_rule = TetRule(4)
@@ -487,7 +506,7 @@ function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 
         make_femm = FEMMDeforLinearMSH8
     end
     itmax = 2000
-    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax)
+    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, visualize)
 end
 
 nothing
