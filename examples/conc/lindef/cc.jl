@@ -51,7 +51,10 @@ function parse_commandline()
         help = "Poisson ratio of the matrix"
         arg_type = Float64
         default = 0.4
-
+        "--visualize"
+        help = "Write out visualization files?"
+        arg_type = Bool
+        default = false
     end
     return parse_args(s)
 end
@@ -65,5 +68,5 @@ fibers_overlapped_examples.test("cc";
     kind=p["kind"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
-    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"])
+    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"], visualize = p["visualize"])
 
