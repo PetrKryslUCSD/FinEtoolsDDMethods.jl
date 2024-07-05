@@ -23,7 +23,7 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-using MatrixSpy
+# using MatrixSpy
 
 function coarse_grid_partitioning(fens, fes, nelperpart)
     partitioning = zeros(Int, count(fens))
