@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "99d14d34be0e558e97ce8890eb6b28f02c101589"
+project_hash = "9aac9e294a19d2938a0e8107b2502dc531ca30a4"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -481,6 +481,12 @@ version = "0.1.8"
 [[deps.Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[[deps.MatrixSpy]]
+deps = ["LinearAlgebra", "PlotlyLight", "SparseArrays", "Test"]
+path = "../../MatrixSpy.jl"
+uuid = "bd9e9897-830d-41f7-8803-c9a04f21eb3f"
+version = "0.1.0"
 
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
