@@ -114,12 +114,9 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
+function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
     CTE = 0.0
-    distortion = 0.0
-    n = ncoarse  * ref    # number of elements along the edge of the block
-    tolerance = thickness/n
-    
+        
     if !isfile(joinpath(dirname(@__FILE__()), input))
         success(run(`unzip -qq -d $(dirname(@__FILE__())) $(joinpath(dirname(@__FILE__()), "barrel_w_stiffeners-s3-mesh.zip"))`; wait = false))
     end
@@ -290,7 +287,6 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
         "time" => t1 - t0,
     )
     f = "barrel_overlapped" *
-        "-as=$(aspect)" *
         "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
         "-n1=$(nbf1max)"  * 
@@ -323,9 +319,9 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     true
 end
 
-function test(;aspect = 100, nelperpart = 20000, nbf1max = 5, nfpartitions = 32, overlap = 3, ref = 1, visualize = false) 
+function test(;nelperpart = 100, nbf1max = 5, nfpartitions = 32, overlap = 3, ref = 1, visualize = false) 
     itmax = 2000
-    _execute(32, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
+    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
 end
 
 nothing
