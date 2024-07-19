@@ -239,9 +239,9 @@ git-tree-sha1 = "653cbe950b8b2f06164a8623a6b4ffeaf2e50a4d"
 uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
 version = "8.0.25"
 
-[[deps.FinEtoolsDDParallel]]
+[[deps.FinEtoolsDDMethods]]
 deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Statistics", "Test"]
-path = "../../FinEtoolsDDParallel.jl"
+path = "../../FinEtoolsDDMethods.jl"
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
 version = "0.1.0"
 

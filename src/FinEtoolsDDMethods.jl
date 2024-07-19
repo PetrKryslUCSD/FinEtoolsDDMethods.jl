@@ -1,4 +1,4 @@
-module FinEtoolsDDParallel
+module FinEtoolsDDMethods
 
 # Enable LSP look up in test modules
 if false
@@ -19,4 +19,4 @@ include("PartitionCoNCDDModule.jl")
 
 include("cg.jl")
 
-end # module FinEtoolsDDParallel
+end # module FinEtoolsDDMethods

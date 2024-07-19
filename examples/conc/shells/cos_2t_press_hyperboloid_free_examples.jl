@@ -34,9 +34,9 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtools.MeshExportModule.VTKWrite: vtkwrite
 using FinEtools.MeshExportModule: VTK
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionCoNCDDModule: patch_coordinates, element_overlap
-using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.PartitionCoNCDDModule: patch_coordinates, element_overlap
+using FinEtoolsDDMethods.CGModule: pcg_seq
 using CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Metis
 

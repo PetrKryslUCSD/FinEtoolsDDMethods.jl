@@ -15,9 +15,9 @@ using FinEtoolsFlexStructures.FESetShellT3Module: FESetShellT3
 using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.CGModule: pcg_seq
-using FinEtoolsDDParallel.PartitionCoNCDDModule: patch_coordinates, element_overlap
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.CGModule: pcg_seq
+using FinEtoolsDDMethods.PartitionCoNCDDModule: patch_coordinates, element_overlap
 using SymRCM
 using Metis
 using Test

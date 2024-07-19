@@ -2,8 +2,8 @@ module Poisson2D_cg_dpconc
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.CGModule: pcg_seq
 using Metis
 using Test
 using LinearAlgebra

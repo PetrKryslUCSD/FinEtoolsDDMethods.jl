@@ -5,11 +5,11 @@ module Poisson2D_cg_mpi_driver
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionSchurDDModule: mul_y_S_v!, assemble_rhs!
-using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free_dofs!, partition_complement_diagonal!
-using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!, make_partition_mesh
-using FinEtoolsDDParallel.CGModule: pcg_mpi
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.PartitionSchurDDModule: mul_y_S_v!, assemble_rhs!
+using FinEtoolsDDMethods.PartitionSchurDDModule: reconstruct_free_dofs!, partition_complement_diagonal!
+using FinEtoolsDDMethods.PartitionSchurDDModule: assemble_interface_matrix!, make_partition_mesh
+using FinEtoolsDDMethods.CGModule: pcg_mpi
 using Metis
 using Test
 using LinearAlgebra

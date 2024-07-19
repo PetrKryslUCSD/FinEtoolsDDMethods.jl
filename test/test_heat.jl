@@ -2,7 +2,7 @@ module mmmmPoiss_06122017
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using FinEtoolsDDParallel
+using FinEtoolsDDMethods
 using Metis
 using Test
 using LinearAlgebra

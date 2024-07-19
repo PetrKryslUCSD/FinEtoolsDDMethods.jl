@@ -2,11 +2,11 @@ module Poisson2D_cg_driver
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
-using FinEtoolsDDParallel.PartitionSchurDDModule: reconstruct_free!, partition_complement_diagonal!
-using FinEtoolsDDParallel.PartitionSchurDDModule: assemble_interface_matrix!
-using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.PartitionSchurDDModule: mul_S_v!, assemble_rhs!, assemble_sol!
+using FinEtoolsDDMethods.PartitionSchurDDModule: reconstruct_free!, partition_complement_diagonal!
+using FinEtoolsDDMethods.PartitionSchurDDModule: assemble_interface_matrix!
+using FinEtoolsDDMethods.CGModule: pcg_seq
 using Metis
 using Test
 import Base: size, eltype

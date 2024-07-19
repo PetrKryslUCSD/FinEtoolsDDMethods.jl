@@ -2,7 +2,7 @@ module Poisson2D
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using FinEtoolsDDParallel
+using FinEtoolsDDMethods
 using Metis
 using Test
 using LinearAlgebra

@@ -1,4 +1,4 @@
-name = "FinEtoolsDDParallel"
+name = "FinEtoolsDDMethods"
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
 authors = ["Petr Krysl <pkrysl@ucsd.edu>"]
 version = "0.1.0"

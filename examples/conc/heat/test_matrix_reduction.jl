@@ -2,8 +2,8 @@ module test_matrix_assembly
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.CGModule: pcg_seq
 using Metis
 using Test
 using LinearAlgebra

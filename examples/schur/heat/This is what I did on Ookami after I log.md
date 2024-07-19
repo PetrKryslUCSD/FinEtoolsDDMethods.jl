@@ -10,7 +10,7 @@ module load slurm
 module load openmpi/gcc8/4.1.2
 ```
 
-1. I cloned the repository FinEtoolsDDParallel.jl from GitHub.
+1. I cloned the repository FinEtoolsDDMethods.jl from GitHub.
 2. I activated the environment and instantiated the packages.
  `julia -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'`
 3. I ran julia interactively to install mpiexecjl.
@@ -18,7 +18,7 @@ module load openmpi/gcc8/4.1.2
 4. I ran srun to get an interactive session.
  `srun -p short -n 10 --ntasks-per-node=1 --pty bash`
 5. I ran the example.
- cd FinEtoolsDDParallel.jl/examples/
+ cd FinEtoolsDDMethods.jl/examples/
  `~/a64fx/depot/bin/mpiexecjl -n 4 julia --project=. heat/Poisson2D_cg_mpi_driver.jl`
  
 After several minutes, the job was terminated. The error message is below.
@@ -30,7 +30,7 @@ Primary job  terminated normally, but 1 process returned
 a non-zero exit code. Per user-direction, the job has been aborted.
 --------------------------------------------------------------------------
 [1972752] signal (15): Terminated
-in expression starting at /lustre/home/pkrysl/a64fx/FinEtoolsDDParallel.jl/examples/heat/Poisson2D_cg_mpi_driver.jl:160
+in expression starting at /lustre/home/pkrysl/a64fx/FinEtoolsDDMethods.jl/examples/heat/Poisson2D_cg_mpi_driver.jl:160
 _ZN12_GLOBAL__N_117InterleavedAccess13runOnFunctionERN4llvm8FunctionE at /lustre/software/julia/julia-1.10.3/lib/julia/libLLVM-15jl.so (unknown line)
 _ZN12_GLOBAL__N_117InterleavedAccess13runOnFunctionERN4llvm8FunctionE at /lustre/software/julia/julia-1.10.3/lib/julia/libLLVM-15jl.so (unknown line)
 unknown function (ip: (nil))

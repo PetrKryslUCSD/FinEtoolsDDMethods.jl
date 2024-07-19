@@ -2,8 +2,8 @@ module stubby_corbel
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.CGModule: pcg_seq
 using SymRCM
 using Metis
 using Test

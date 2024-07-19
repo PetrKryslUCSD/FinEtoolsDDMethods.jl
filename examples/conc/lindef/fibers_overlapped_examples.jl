@@ -4,8 +4,8 @@ using FinEtools.MeshExportModule: VTK
 using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
-using FinEtoolsDDParallel
-using FinEtoolsDDParallel.CGModule: pcg_seq
+using FinEtoolsDDMethods
+using FinEtoolsDDMethods.CGModule: pcg_seq
 using SymRCM
 using Metis
 using Test

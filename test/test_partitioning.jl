@@ -2,7 +2,7 @@ module mbas001
 using Test
 using FinEtools
 using FinEtools.MeshExportModule: VTK
-using FinEtoolsDDParallel
+using FinEtoolsDDMethods
 using Metis
 function test()
     ndoms = 3
@@ -31,7 +31,7 @@ module mbas002
 using Test
 using FinEtools
 using FinEtools.MeshExportModule: VTK
-using FinEtoolsDDParallel: FENodeToPartitionMap, make_partition_mesh
+using FinEtoolsDDMethods: FENodeToPartitionMap, make_partition_mesh
 using Metis
 # function make_partition_mesh(fens, fes, n2p, element_partitioning, partition)
 #     pfes = subset(fes, findall(y -> y == partition, element_partitioning))
