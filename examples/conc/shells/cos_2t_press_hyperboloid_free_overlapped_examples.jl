@@ -198,13 +198,10 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
     println("Number coarse grid partitions: $(ncpartitions)")
         
-    # f = "fibers_soft_hard_$(string(kind))" *
-    #     "-rf=$(ref)" *
-    #     "-ne=$(nelperpart)" *
-    #     "-n1=$(nbf1max)" * "-partitioning"
-    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
-    # @async run(`"paraview.exe" $File`)
+    if visualize
+        partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
+        vtkexportmesh("cos_2t_press_hyperboloid_free-clusters.vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
+    end
     
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
@@ -282,22 +279,15 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     scattersysvec!(dchi, u_f)
     
     if visualize
-        # f = "cos_2t_press_hyperboloid_free_overlapped" *
-        #     "-rf=$(ref)" *
-        #     "-ne=$(nelperpart)" *
-        #     "-n1=$(nbf1max)" * 
-        #     "-nf=$(nfpartitions)"  * 
-        #     "-cg-sol"
-        # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
         VTK.vtkexportmesh("cos_2t_press_hyperboloid_free-sol.vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
 
         p = 1
         for nodelist in nodelists
             cel = connectedelems(fes, nodelist, count(fens))
-            vtkexportmesh("cos_2t_press_hyperboloid_free-patch$(p).vtk", fens, subset(fes, cel))
+            vtkexportmesh("cos_2t_press_hyperboloid_free-subdomain-patch$(p).vtk", fens, subset(fes, cel))
             sfes = FESetP1(reshape(nodelist, length(nodelist), 1))
-            vtkexportmesh("cos_2t_press_hyperboloid_free-nodes$(p).vtk", fens, sfes)
+            vtkexportmesh("cos_2t_press_hyperboloid_free-subdomain-nodes$(p).vtk", fens, sfes)
             p += 1
         end
     end
