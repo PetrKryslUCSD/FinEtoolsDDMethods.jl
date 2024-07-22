@@ -1,8 +1,15 @@
 # Examples
 
-This is the README folder.
+This is the `examples` folder.
+There are two sub folders: 
+- `schur`: Schur-complement-based solver using domain decomposition and conjugate gradients
+on the complement matrix. Some of the examples are parallelized with MPI.
+- `conc`: coherent node cluster (CoNC) model reduction is used as a global solver in a preconditioned conjugate gradient based on the decomposition add two levels:
+local (classical additive Schwarz based on overlapping subdomains), and global (reduced model based on coherent clusters). The examples do not run in parallel yet.
 
-This is how to run an example:
+## How to run a parallel example
+
+Please do:
 
 - Clone the package, change into the `examples` folder, activate and instantiate this environment.
 - Request the binary `OpenMPI_jll`
@@ -20,6 +27,52 @@ Note the folder where the executable is installed.
 ```
  mpiexecjl -n 4 --project=. julia schur/heat/Poisson2D_cg_mpi_driver.jl
 ```
+## How to run a CoNC example
 
+There are shell scripts to run the studies reported in the paper.
+For instance, when in the folder `FinEtoolsDDMethods.jl/examples`, execute
+```
+$ bash conc/shells/hyp.sh
+```
+Warning: Running the examples may require a beefy machine,
+and it may take a long time to finish the simulations: some of the scripts run through many
+combinations of the parameters.
 
+To run one particular example with just selected input parameters, first change into the `examples` folder.
+```
+PS C:\temp\FinEtoolsDDMethods.jl> cd .\examples\
+```
+Then fire up Julia 
+```
+PS C:\temp\FinEtoolsDDMethods.jl\examples> julia
+               _
+   _       _ _(_)_     |  Documentation: https://docs.julialang.org
+  (_)     | (_) (_)    |
+   _ _   _| |_  __ _   |  Type "?" for help, "]?" for Pkg help.
+  | | | | | | |/ _` |  |
+  | | |_| | | | (_| |  |  Version 1.10.4 (2024-06-04)
+ _/ |\__'_|_|_|\__'_|  |  Official https://julialang.org/ release
+|__/                   |
+```
+and run
+```
+julia> using Pkg; Pkg.activate("."); Pkg.instantiate();
+  Activating project at `C:\temp\FinEtoolsDDMethods.jl\examples`
+
+julia> include("conc/shells/hyp.jl")
+Current folder: C:\temp\FinEtoolsDDMethods.jl\examples
+  Activating project at `C:\temp\FinEtoolsDDMethods.jl\examples`
+Refinement factor: 2
+Number of elements per partition: 200
+Number of 1D basis functions: 5
+Number of fine grid partitions: 2
+Overlap: 1
+Number of elements: 8192
+Number of free dofs = 24767
+Number coarse grid partitions: 41
+Size of the reduced problem: (3690, 3690)
+Mean fine partition size: 1.29775e+04
+Number of iterations:  11
+true
+```
 
