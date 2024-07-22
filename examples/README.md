@@ -4,7 +4,7 @@ This is the `examples` folder.
 There are two sub folders: 
 - `schur`: Schur-complement-based solver using domain decomposition and conjugate gradients
 on the complement matrix. Some of the examples are parallelized with MPI.
-- `conc`: coherent node cluster (CoNC) model reduction is used as a global solver in a preconditioned conjugate gradient based on the decomposition add two levels:
+- `conc`: coherent node cluster (CoNC) model reduction is used as a global solver in a preconditioned conjugate gradient based on the decomposition at two levels:
 local (classical additive Schwarz based on overlapping subdomains), and global (reduced model based on coherent clusters). The examples do not run in parallel yet.
 
 ## How to run a parallel example
