@@ -9,7 +9,6 @@ using ArgParse
 
 function parse_commandline()
     s = ArgParseSettings()
-    s = ArgParseSettings()
     @add_arg_table! s begin
         "--nelperpart"
         help = "Number of elements per partition"
