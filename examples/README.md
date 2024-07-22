@@ -76,3 +76,12 @@ Number of iterations:  11
 true
 ```
 
+Alternatively, a top level script may be run as
+```
+$ julia conc/shells/barrel.jl --nfpartitions 32
+```
+Run
+```
+$ julia conc/shells/barrel.jl --help
+```
+to see the available options.
