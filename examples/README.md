@@ -30,6 +30,11 @@ Note the folder where the executable is installed.
 ## How to run a CoNC example
 
 There are shell scripts to run the studies reported in the paper.
+There are three examples:
+- Single-sheet hyperboloid with cosine pressure loading and free edge. Driver `hyp.jl` (shell script `hyp.sh`).
+- Z-section cantilever under torsional loading. Driver `z.jl` (shell script `z.sh`).
+- Barrel with stiffeners.  Driver `barrel.jl` (shell script `barrel.sh`).
+
 For instance, when in the folder `FinEtoolsDDMethods.jl/examples`, execute
 ```
 $ bash conc/shells/hyp.sh
