@@ -114,7 +114,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
+function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -269,11 +269,39 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         q
     end
 
+    # peeksolution(iter, x) = begin
+    #     println("Iteration: $(iter)")
+    #     if iter % 10 == 0 
+    #         if iter > 10
+    #             f = "barrel_overlapped" *
+    #                 "-rf=$(ref)" *
+    #                 "-ne=$(nelperpart)" *
+    #                 "-n1=$(nbf1max)" *
+    #                 "-nf=$(nfpartitions)" *
+    #                 "-ov=$(overlap)" *
+    #                 "-cg-sol-iter$(iter-10)"
+    #             xp = DataDrop.retrieve_matrix(f * ".h5", "x")
+    #             scattersysvec!(dchi, x - xp)
+    #             VTK.vtkexportmesh("barrel-xincr-iter=$(iter).vtk", fens, fes;
+    #                 vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+    #         end
+    #         f = "barrel_overlapped" *
+    #             "-rf=$(ref)" *
+    #             "-ne=$(nelperpart)" *
+    #             "-n1=$(nbf1max)" *
+    #             "-nf=$(nfpartitions)" *
+    #             "-ov=$(overlap)" * 
+    #             "-cg-sol-iter$(iter)"
+    #         DataDrop.empty_hdf5_file(f * ".h5")
+    #         DataDrop.store_matrix(f * ".h5", "x", x)
+    #     end
+    # end
+
     t0 = time()
     norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        itmax=itmax, atol=1e-6 * norm_F_f, rtol=0)
+        itmax=itmax, atol= relrestol * norm_F_f, rtol=0)
     t1 = time()
     println("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
@@ -319,9 +347,8 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     true
 end
 
-function test(;nelperpart = 100, nbf1max = 5, nfpartitions = 32, overlap = 3, ref = 1, visualize = false) 
-    itmax = 2000
-    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
+function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, visualize = false, itmax = 2000, relrestol = 1e-6) 
+    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
 end
 
 nothing

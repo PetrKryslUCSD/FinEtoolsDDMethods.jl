@@ -30,7 +30,7 @@ This is a sequential version of the `pcg` function.
 - (`x`, `stats`): Tuple of solution vector and solution statistics.
 
 """
-function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)))
+function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltype(b)), rtol=√eps(eltype(b)), peeksolution = (iter, x) -> nothing)
     itmax = (itmax > 0 ? itmax : length(b))
     x = deepcopy(x0)
     p = similar(x)
@@ -58,6 +58,7 @@ function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltyp
         @. p = z + beta * p
         resnorm = sqrt(rho)
         push!(residuals, resnorm)
+        peeksolution(iter, x)
         if resnorm < tol
             break
         end
