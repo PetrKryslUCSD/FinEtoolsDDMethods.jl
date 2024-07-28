@@ -8,7 +8,7 @@ for rf in 1; do
                     if [ -f ${jsonfile} ]; then
                         echo "${jsonfile} exists" 
                     else
-                        julia conc/shells/${script}.jl --nelperpart $ne --nbf1max $n1 --ref $rf --nfpartitions $nf --overlap $ov ; 
+                        julia conc/shells/${script}.jl --nelperpart $ne --nbf1max $n1 --ref $rf --nfpartitions $nf --overlap $ov  --stabilize false; 
                     fi
                 done
             done 

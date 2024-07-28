@@ -123,7 +123,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
+function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
     CTE = 0.0
     distortion = 0.0
     n = ncoarse  * ref    # number of elements along the edge of the block
@@ -264,7 +264,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        itmax=itmax, atol=1e-6 * norm_F_f, rtol=0)
+        itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     t1 = time()
     println("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
@@ -311,9 +311,8 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     true
 end
 
-function test(;aspect = 100, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, visualize = false) 
-    itmax = 2000
-    _execute(32, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, visualize)
+function test(;aspect = 100, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false) 
+    _execute(32, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
 end
 
 nothing

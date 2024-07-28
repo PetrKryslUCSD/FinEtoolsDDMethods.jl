@@ -114,7 +114,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
+function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -180,6 +180,12 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     l1 = selectnode(fens; box = Float64[-Inf Inf 0 0 -Inf Inf], inflate = 0.01)
     for i in [2]
         setebc!(dchi, l1[1:1], true, i)
+    end
+    if stabilize
+        l1 = selectnode(fens; box = Float64[0 0 0 0 -Inf Inf], inflate = 0.02)
+        for i in [1, ]
+            setebc!(dchi, l1[1:1], true, i)
+        end
     end
     applyebc!(dchi)
     numberdofs!(dchi);
@@ -347,8 +353,8 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     true
 end
 
-function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, visualize = false, itmax = 2000, relrestol = 1e-6) 
-    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
+function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
+    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
 end
 
 nothing
