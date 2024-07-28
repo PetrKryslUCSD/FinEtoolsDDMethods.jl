@@ -31,6 +31,14 @@ function parse_commandline()
         help = "Refinement factor"
         arg_type = Int
         default = 2
+        "--itmax"
+        help = "Maximum number of iterations allowed"
+        arg_type = Int
+        default = 200
+        "--relrestol"
+        help = "Relative residual tolerance"
+        arg_type = Float64
+        default = 1.0e-6
         "--kind"
         help = "hex or tet"
         arg_type = String
@@ -68,5 +76,7 @@ fibers_overlapped_examples.test("cc";
     kind=p["kind"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
-    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"], visualize = p["visualize"])
+    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"], 
+    itmax=p["itmax"], relrestol=p["relrestol"],
+    visualize = p["visualize"])
 

@@ -304,7 +304,7 @@ function fine_grid_node_lists(fens, fes, npartitions, overlap)
     nodelists
 end
 
-function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, visualize)
+function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
     CTE = 0.0
     magn = 1.0
     
@@ -447,7 +447,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        itmax=itmax, atol=1e-6 * norm_F_f, rtol=0)
+        itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     t1 = time()
     println("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
@@ -494,7 +494,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
 end
 # test(ref = 1)
 
-function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, visualize = false)
+function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
     mesh = fibers_mesh_tet
     boundary_rule = TriRule(6)
     interior_rule = TetRule(4)
@@ -505,8 +505,7 @@ function test(label = "soft_hard"; kind = "hex", Em = 1.0e3, num = 0.4999, Ef = 
         interior_rule = GaussRule(3, 2)
         make_femm = FEMMDeforLinearMSH8
     end
-    itmax = 2000
-    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, visualize)
+    _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
 end
 
 nothing
