@@ -29,8 +29,18 @@ Note the folder where the executable is installed.
 ```
 ## How to run a CoNC example
 
+Two classes of problems solved here:
+- Three dimensional elasticity (composite of matrix with embedded fibers).
+- General three dimensional shells.
+
 There are shell scripts to run the studies reported in the paper.
-There are three examples:
+
+The three examples for the elasticity problem are:
+- Moderately compressible matrix. Driver `cc.jl` (shell script `cc.sh`).
+- Strongly compressible matrix. Driver `css.jl` (shell script `css.sh`).
+- Nearly incompressible matrix. Driver `cni.jl` (shell script `cni.sh`).
+
+The three examples for the shell problems are:
 - Single-sheet hyperboloid with cosine pressure loading and free edge. Driver `hyp.jl` (shell script `hyp.sh`).
 - Z-section cantilever under torsional loading. Driver `z.jl` (shell script `z.sh`).
 - Barrel with stiffeners.  Driver `barrel.jl` (shell script `barrel.sh`).
