@@ -34,6 +34,14 @@ function parse_commandline()
         help = "Aspect ratio, length divided by thickness"
         arg_type = Float64
         default = 10
+        "--itmax"
+        help = "Maximum number of iterations allowed"
+        arg_type = Int
+        default = 200
+        "--relrestol"
+        help = "Relative residual tolerance"
+        arg_type = Float64
+        default = 1.0e-6
         "--visualize"
         help = "Write out visualization files?"
         arg_type = Bool
@@ -51,5 +59,6 @@ using .LE5_Z_cantilever_overlapped_examples;
 LE5_Z_cantilever_overlapped_examples.test(;
     aspect=p["aspect"], nelperpart=p["nelperpart"], nbf1max=p["nbf1max"],
     nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"],
+    itmax=p["itmax"], relrestol=p["relrestol"],
     visualize=p["visualize"])
 
