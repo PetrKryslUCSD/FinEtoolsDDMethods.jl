@@ -54,57 +54,6 @@ function zcant!(csmatout, XYZ, tangents, feid, qpid)
     return csmatout
 end
 
-function coarse_grid_partitioning(fens, fes, elem_per_partition = 50, crease_ang = 30/180*pi, cluster_max_normal_deviation = 2 * crease_ang)
-    partitioning = zeros(Int, count(fens))
-    surfids, partitionids, surface_elem_per_partition = create_partitions(fens, fes, elem_per_partition;
-        crease_ang=crease_ang, cluster_max_normal_deviation=cluster_max_normal_deviation)
-    for i in eachindex(fes)
-        for k in fes.conn[i]
-            partitioning[k] = partitionids[i]
-        end
-    end
-    npartitions = maximum(partitioning)
-    partitioning, npartitions
-end
-
-function make_overlapping_partition(fens, fes, n2e, overlap, element_1st_partitioning, i)
-    enl = findall(x -> x == i, element_1st_partitioning)
-    touched = fill(false, count(fes)) 
-    touched[enl] .= true 
-    for ov in 1:overlap
-        sfes = subset(fes, enl)
-        bsfes = meshboundary(sfes)
-        addenl = Int[]
-        for e in eachindex(bsfes)
-            for n in bsfes.conn[e]
-                for ne in n2e.map[n]
-                    if !touched[ne] 
-                        touched[ne] = true
-                        push!(addenl, ne)
-                    end
-                end
-            end
-        end
-        enl = cat(enl, addenl; dims=1)
-    end
-    # vtkexportmesh("i=$i" * "-enl" * "-final" * ".vtk", fens, subset(fes, enl))
-    return connectednodes(subset(fes, enl))
-end
-
-function fine_grid_node_lists(fens, fes, npartitions, overlap)
-    femm = FEMMBase(IntegDomain(fes, PointRule()))
-    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
-    g = Metis.graph(C; check_hermitian=true)
-    element_1st_partitioning = Metis.partition(g, npartitions; alg=:KWAY)
-    npartitions = maximum(element_1st_partitioning)
-    n2e = FENodeToFEMap(fes, count(fens))
-    nodelists = []
-    for i in 1:npartitions
-        push!(nodelists, make_overlapping_partition(fens, fes, n2e, overlap, element_1st_partitioning, i))
-    end
-    nodelists
-end
-
 # Parameters:
 E = 210e9
 nu = 0.3
@@ -199,7 +148,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
 
     # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
-    cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
+    cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
     println("Number coarse grid partitions: $(ncpartitions)")
         
     if visualize
@@ -311,7 +260,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     true
 end
 
-function test(;aspect = 100, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false) 
+function test(;aspect = 100, nelperpart = 200, nbf1max = 2, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false) 
     _execute(32, aspect, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, visualize)
 end
 

@@ -240,10 +240,10 @@ uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
 version = "8.0.25"
 
 [[deps.FinEtoolsDDMethods]]
-deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "SparseArrays", "Statistics", "Test"]
+deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
 path = ".."
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
-version = "0.1.0"
+version = "0.2.0"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "SuiteSparse", "Test"]
