@@ -16,6 +16,8 @@ using .PartitionSchurDDModule: DOF_KIND_INTERFACE, PartitionSchurDD, mark_interf
 export DOF_KIND_INTERFACE, PartitionSchurDD, mark_interfaces!
 
 include("PartitionCoNCDDModule.jl")
+using .PartitionCoNCDDModule: coarse_grid_partitioning
+export coarse_grid_partitioning
 
 include("cg.jl")
 
