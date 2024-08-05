@@ -232,39 +232,41 @@ function fibers_mesh_tet(ref = 1)
     return fens, fes
 end # fibers_mesh
 
-function coarse_grid_partitioning(fens, fes, nelperpart)
-    partitioning = zeros(Int, count(fens))
-    nfiberparts = 0
-    for p in 1:maximum(fes.label)
-        fiberel = selectelem(fens, fes, label = p)
-        femm = FEMMBase(IntegDomain(subset(fes, fiberel), PointRule()))
-        C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
-        g = Metis.graph(C; check_hermitian=true)
-        ndoms = Int(ceil(length(fiberel) / nelperpart))
-        fiber_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
-        for e in eachindex(fiberel)
-            for n in fes.conn[fiberel[e]]
-                partitioning[n] = fiber_element_partitioning[e] + nfiberparts
-            end
-        end
-        nfiberparts += maximum(fiber_element_partitioning)
-    end
-    matrixel = selectelem(fens, fes, label = 0)
-    femm = FEMMBase(IntegDomain(subset(fes, matrixel), PointRule()))
-    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
-    g = Metis.graph(C; check_hermitian=true)
-    ndoms = Int(ceil(length(matrixel) / nelperpart))
-    matrix_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
-    for e in eachindex(matrixel)
-        for n in fes.conn[matrixel[e]]
-            if partitioning[n] == 0
-                partitioning[n] = matrix_element_partitioning[e] + nfiberparts
-            end
-        end
-    end
-    npartitions = maximum(partitioning)
-    partitioning, npartitions
-end
+# function coarse_grid_partitioning(fens, fes, nelperpart)
+#     partitioning = zeros(Int, count(fens))
+#     nfiberparts = 0
+#     for p in cat(1:maximum(fes.label), 0, dims=1)
+#         fiberel = selectelem(fens, fes, label = p)
+#         femm = FEMMBase(IntegDomain(subset(fes, fiberel), PointRule()))
+#         C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+#         g = Metis.graph(C; check_hermitian=true)
+#         ndoms = Int(ceil(length(fiberel) / nelperpart))
+#         fiber_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
+#         for e in eachindex(fiberel)
+#             for n in fes.conn[fiberel[e]]
+#                 if partitioning[n] == 0
+#                     partitioning[n] = fiber_element_partitioning[e] + nfiberparts
+#                 end
+#             end
+#         end
+#         nfiberparts += maximum(fiber_element_partitioning)
+#     end
+#     # matrixel = selectelem(fens, fes, label = 0)
+#     # femm = FEMMBase(IntegDomain(subset(fes, matrixel), PointRule()))
+#     # C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+#     # g = Metis.graph(C; check_hermitian=true)
+#     # ndoms = Int(ceil(length(matrixel) / nelperpart))
+#     # matrix_element_partitioning = Metis.partition(g, ndoms; alg=:KWAY)
+#     # for e in eachindex(matrixel)
+#     #     for n in fes.conn[matrixel[e]]
+#     #         if partitioning[n] == 0
+#     #             partitioning[n] = matrix_element_partitioning[e] + nfiberparts
+#     #         end
+#     #     end
+#     # end
+#     npartitions = maximum(partitioning)
+#     partitioning, npartitions
+# end
 
 function make_overlapping_partition(fens, fes, n2e, overlap, element_1st_partitioning, i)
     enl = findall(x -> x == i, element_1st_partitioning)
@@ -386,13 +388,15 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
 
     # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
-    cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
-    println("Number coarse grid partitions: $(ncpartitions)")
-        
-    # f = "fibers_soft_hard_$(string(kind))" *
-    #     "-rf=$(ref)" *
-    #     "-ne=$(nelperpart)" *
-    #     "-n1=$(nbf1max)" * "-partitioning"
+    # cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
+    # println("Number coarse grid partitions: $(ncpartitions)")
+    # f = "fibers-partitioning-original"
+    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
+    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
+    
+    cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
+    println("Number of clusters (coarse grid partitions): $(ncpartitions)")
+    # f = "fibers-partitioning-new"
     # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
     # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
     # @async run(`"paraview.exe" $File`)
