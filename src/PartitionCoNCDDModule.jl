@@ -20,9 +20,21 @@ import Base: size, eltype
 import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
+using ShellStructureTopo: make_topo_faces, create_partitions
 
+"""
+    cluster_partitioning(fens, fes, element_labels, nelperpart)
 
-function coarse_grid_partitioning(fens, fes, element_labels, nelperpart)
+Compute the coarse grid (cluster) partitioning.
+
+The elements are partitioned into subsets of approximately equal size
+(`nelperpart`). Then the nodes of the element subsets are assigned to clusters.
+
+The element subsets are determined by the `element_labels` array: The elements
+of a given label belong together.  Then the elements of the next subset are
+partitioned,  and so on. The elements of label 0 are partitioned last.
+"""
+function cluster_partitioning(fens, fes, element_labels, nelperpart)
     max_el_label = maximum(element_labels)
     partitioning = zeros(Int, count(fens))
     nparts = 0
@@ -41,6 +53,31 @@ function coarse_grid_partitioning(fens, fes, element_labels, nelperpart)
             end
         end
         nparts += maximum(subset_el_partitioning)
+    end
+    npartitions = maximum(partitioning)
+    partitioning, npartitions
+end
+
+
+"""
+    shell_cluster_partitioning(fens, fes, nelperpart = 50, crease_ang = 30/180*pi, cluster_max_normal_deviation = 2 * crease_ang)
+
+
+Compute the coarse grid (cluster) partitioning of a shell structure.
+
+The elements are partitioned into subsets with
+`ShellStructureTopo.create_partitions()` based on the number of elements per
+partition (`nelperpart`). Then the nodes of the element subsets are assigned to
+clusters.
+"""
+function shell_cluster_partitioning(fens, fes, nelperpart = 50, crease_ang = 30/180*pi, cluster_max_normal_deviation = 2 * crease_ang)
+    partitioning = zeros(Int, count(fens))
+    surfids, partitionids, surface_nelperpart = ShellStructureTopo.create_partitions(fens, fes, nelperpart;
+        crease_ang=crease_ang, cluster_max_normal_deviation=cluster_max_normal_deviation)
+    for i in eachindex(fes)
+        for k in fes.conn[i]
+            partitioning[k] = partitionids[i]
+        end
     end
     npartitions = maximum(partitioning)
     partitioning, npartitions

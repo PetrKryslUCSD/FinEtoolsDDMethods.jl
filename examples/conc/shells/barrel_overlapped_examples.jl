@@ -45,18 +45,18 @@ function zcant!(csmatout, XYZ, tangents, feid, qpid)
     return csmatout
 end
 
-function coarse_grid_partitioning(fens, fes, elem_per_partition = 50, crease_ang = 30/180*pi, cluster_max_normal_deviation = 2 * crease_ang)
-    partitioning = zeros(Int, count(fens))
-    surfids, partitionids, surface_elem_per_partition = create_partitions(fens, fes, elem_per_partition;
-        crease_ang=crease_ang, cluster_max_normal_deviation=cluster_max_normal_deviation)
-    for i in eachindex(fes)
-        for k in fes.conn[i]
-            partitioning[k] = partitionids[i]
-        end
-    end
-    npartitions = maximum(partitioning)
-    partitioning, npartitions
-end
+# function coarse_grid_partitioning(fens, fes, elem_per_partition = 50, crease_ang = 30/180*pi, cluster_max_normal_deviation = 2 * crease_ang)
+#     partitioning = zeros(Int, count(fens))
+#     surfids, partitionids, surface_elem_per_partition = create_partitions(fens, fes, elem_per_partition;
+#         crease_ang=crease_ang, cluster_max_normal_deviation=cluster_max_normal_deviation)
+#     for i in eachindex(fes)
+#         for k in fes.conn[i]
+#             partitioning[k] = partitionids[i]
+#         end
+#     end
+#     npartitions = maximum(partitioning)
+#     partitioning, npartitions
+# end
 
 function make_overlapping_partition(fens, fes, n2e, overlap, element_1st_partitioning, i)
     enl = findall(x -> x == i, element_1st_partitioning)
@@ -214,8 +214,8 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     # VTK.vtkexportmesh("forces.vtk", fens, fes; vectors=[("F", deepcopy(dchi.values[:, 1:3]),)])   
     # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
-    cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
-    println("Number coarse grid partitions: $(ncpartitions)")
+    cpartitioning, ncpartitions = FinEtoolsDDMethods.shell_cluster_partitioning(fens, fes, nelperpart)
+    println("Number of clusters (coarse grid partitions): $(ncpartitions)")
         
     if visualize
         f = "barrel_overlapped" *
