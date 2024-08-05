@@ -1,0 +1,8 @@
+include(raw"lindef/fibers_overlapped_examples.jl")
+fibers_overlapped_examples.test()
+include(raw"shells/barrel_overlapped_examples.jl")
+barrel_overlapped_examples.test()
+include(raw"shells/cos_2t_press_hyperboloid_free_overlapped_examples.jl")
+cos_2t_press_hyperboloid_free_overlapped_examples.test()
+include(raw"shells/LE5_Z_cantilever_overlapped_examples.jl")
+LE5_Z_cantilever_overlapped_examples.test()
