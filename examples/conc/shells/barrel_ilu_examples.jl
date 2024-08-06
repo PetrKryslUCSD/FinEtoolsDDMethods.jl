@@ -22,6 +22,7 @@ using SymRCM
 using Metis
 using Test
 using ILUZero
+using IncompleteLU
 using LinearAlgebra
 using SparseArrays
 using PlotlyLight
@@ -64,7 +65,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ref, itmax, relrestol, stabilize, visualize)
+function _execute(ref, preconditioner, itmax, relrestol, stabilize, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -156,13 +157,19 @@ function _execute(ref, itmax, relrestol, stabilize, visualize)
     K = stiffness(femm, geom0, u0, Rfield0, dchi);
     K_ff = K[fr, fr]
 
+    # Direct solution
     U_f = K_ff \ F_f
 
-    K_ff_factor = ilu0(K_ff)
+    if preconditioner == :ilu0
+        K_ff_factor = ILUZero.ilu0(K_ff)
+    elseif preconditioner == :ilu
+        K_ff_factor = IncompleteLU.ilu(K_ff, τ = mean(diag(K_ff)) / 1000.0)
+    end
     
-    peeksolution(iter, x) = begin
+    peeksolution(iter, x, resnorm) = begin
         println("Iteration: $(iter)")
         println("Norm of |x-U_f|: $(norm(x-U_f))")
+        println("Residual Norm: $(resnorm)")
     end
 
     t0 = time()
@@ -204,8 +211,8 @@ function _execute(ref, itmax, relrestol, stabilize, visualize)
     true
 end
 
-function test(;ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
-    _execute(ref, itmax, relrestol, stabilize, visualize)
+function test(;ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, preconditioner = :ilu, visualize = false) 
+    _execute(ref, preconditioner, itmax, relrestol, stabilize, visualize)
 end
 
 nothing
