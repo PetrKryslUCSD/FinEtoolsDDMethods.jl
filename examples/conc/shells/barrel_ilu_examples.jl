@@ -64,7 +64,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
+function _execute(ref, itmax, relrestol, stabilize, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -144,10 +144,6 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     dr = dofrange(dchi, DOF_KIND_DATA)
     
     println("Refinement factor: $(ref)")
-    println("Number of elements per partition: $(nelperpart)")
-    println("Number of 1D basis functions: $(nbf1max)")
-    println("Number of fine grid partitions: $(nfpartitions)")
-    println("Overlap: $(overlap)")
     println("Number of elements: $(count(fes))")
     println("Number of free dofs = $(nfreedofs(dchi))")
 
@@ -160,36 +156,37 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     K = stiffness(femm, geom0, u0, Rfield0, dchi);
     K_ff = K[fr, fr]
 
+    U_f = K_ff \ F_f
+
     K_ff_factor = ilu0(K_ff)
     
+    peeksolution(iter, x) = begin
+        println("Iteration: $(iter)")
+        println("Norm of |x-U_f|: $(norm(x-U_f))")
+    end
+
     t0 = time()
     norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> (q, p) -> ldip!(q, factor, p),
+        (M!)=(q, p) -> ldiv!(q, K_ff_factor, p),
+        peeksolution=peeksolution,
         itmax=itmax, atol= relrestol * norm_F_f, rtol=0)
     t1 = time()
     println("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     data = Dict(
         "nfreedofs_dchi" => nfreedofs(dchi),
-        "ncpartitions" => ncpartitions,
-        "nfpartitions" => nfpartitions,
-        "overlap" => overlap,
-        "size_Kr_ff" => size(Kr_ff),
+        "size_K_ff" => size(K_ff),
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "barrel_overlapped" *
-        "-rf=$(ref)" *
-        "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)"  * 
-        "-nf=$(nfpartitions)"  * 
-        "-ov=$(overlap)"  
+    f = "barrel_ilu" *
+        "-rf=$(ref)" 
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(dchi, u_f)
     
     if visualize
-        # f = "barrel_overlapped" *
+        # f = "barrel_ilu" *
         #     "-rf=$(ref)" *
         #     "-ne=$(nelperpart)" *
         #     "-n1=$(nbf1max)" * 
@@ -198,22 +195,17 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
         VTK.vtkexportmesh("barrel-sol.vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
-
-        p = 1
-        for nodelist in nodelists
-            cel = connectedelems(fes, nodelist, count(fens))
-            vtkexportmesh("barrel-patch$(p).vtk", fens, subset(fes, cel))
-            sfes = FESetP1(reshape(nodelist, length(nodelist), 1))
-            vtkexportmesh("barrel-nodes$(p).vtk", fens, sfes)
-            p += 1
-        end
+        scattersysvec!(dchi, U_f)
+        VTK.vtkexportmesh("barrel-sol-cg.vtk", fens, fes;
+            vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+        
     end
 
     true
 end
 
-function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
-    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
+function test(;ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
+    _execute(ref, itmax, relrestol, stabilize, visualize)
 end
 
 nothing
