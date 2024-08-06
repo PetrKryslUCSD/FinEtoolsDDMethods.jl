@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "29188768d6ff41ff8e3e8dbb548452f61f13fa85"
+project_hash = "800847fecca643dd2de675edd62cae45d337f081"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -243,7 +243,7 @@ version = "8.0.25"
 deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
 path = ".."
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
-version = "0.2.0"
+version = "0.3.0"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "SuiteSparse", "Test"]
@@ -301,6 +301,12 @@ version = "0.2.0"
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
 uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
 version = "0.1.1"
+
+[[deps.IncompleteLU]]
+deps = ["LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "6c676e79f98abb6d33fa28122cad099f1e464afe"
+uuid = "40713840-3770-5561-ab4c-a76e7d0d7895"
+version = "0.2.1"
 
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]

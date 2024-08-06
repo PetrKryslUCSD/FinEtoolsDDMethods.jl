@@ -58,7 +58,7 @@ function pcg_seq(Aop!, b, x0; M! =(q, p) -> (q .= p), itmax=0, atol=√eps(eltyp
         @. p = z + beta * p
         resnorm = sqrt(rho)
         push!(residuals, resnorm)
-        peeksolution(iter, x)
+        peeksolution(iter, x, resnorm)
         if resnorm < tol
             break
         end
