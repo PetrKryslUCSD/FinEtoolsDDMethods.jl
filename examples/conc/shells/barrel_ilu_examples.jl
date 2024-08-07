@@ -164,6 +164,10 @@ function _execute(ref, preconditioner, itmax, relrestol, stabilize, visualize)
         K_ff_factor = ILUZero.ilu0(K_ff)
     elseif preconditioner == :ilu
         K_ff_factor = IncompleteLU.ilu(K_ff, τ = mean(diag(K_ff)) / 1000.0)
+    elseif preconditioner == :none
+        K_ff_factor = LinearAlgebra.I
+    else
+        error("Unknown preconditioner")
     end
     
     peeksolution(iter, x, resnorm) = begin
@@ -173,7 +177,7 @@ function _execute(ref, preconditioner, itmax, relrestol, stabilize, visualize)
     end
 
     t0 = time()
-    norm_F_f = norm(F_f)
+    @show norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> ldiv!(q, K_ff_factor, p),
         peeksolution=peeksolution,
@@ -200,10 +204,11 @@ function _execute(ref, preconditioner, itmax, relrestol, stabilize, visualize)
         #     "-nf=$(nfpartitions)"  * 
         #     "-cg-sol"
         # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        VTK.vtkexportmesh("barrel-sol.vtk", fens, fes;
-            vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
         scattersysvec!(dchi, U_f)
-        VTK.vtkexportmesh("barrel-sol-cg.vtk", fens, fes;
+        VTK.vtkexportmesh("barrel_ilu-sol.vtk", fens, fes;
+            vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+        scattersysvec!(dchi, u_f)
+        VTK.vtkexportmesh("barrel_ilu-sol-cg.vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
         
     end

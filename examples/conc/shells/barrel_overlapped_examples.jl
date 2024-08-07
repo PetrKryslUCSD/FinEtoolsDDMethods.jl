@@ -252,10 +252,16 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     #     end
     # end
 
+    peeksolution(iter, x, resnorm) = begin
+        println("Iteration: $(iter)")
+        println("Residual Norm: $(resnorm)")
+    end
+
     t0 = time()
     norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
+        peeksolution=peeksolution,
         itmax=itmax, atol= relrestol * norm_F_f, rtol=0)
     t1 = time()
     println("Number of iterations:  $(stats.niter)")
@@ -286,7 +292,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         #     "-nf=$(nfpartitions)"  * 
         #     "-cg-sol"
         # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        VTK.vtkexportmesh("barrel-sol.vtk", fens, fes;
+        VTK.vtkexportmesh("barrel_overlapped-sol.vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
 
         p = 1
