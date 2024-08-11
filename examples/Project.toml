@@ -1,5 +1,6 @@
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CoNCMOR = "3a989f29-cff0-4f1c-87be-5dcdd41bd240"
 DataDrop = "aa547a04-dd37-49ab-8e73-656744f8a8fc"
