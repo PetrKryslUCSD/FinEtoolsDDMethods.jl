@@ -105,7 +105,7 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
     K_ff = K[fr, fr]
     M = mass(femm, geom, u)
     M_ff = M[fr, fr]
-    M_ff = diagm(ones(size(M_ff, 1))) 
+    M_ff = spdiagm(ones(size(M_ff, 1))) 
 
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
     println("Number of clusters (coarse grid partitions): $(ncpartitions)")
