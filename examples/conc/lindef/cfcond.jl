@@ -43,20 +43,12 @@ function parse_commandline()
         help = "hex or tet"
         arg_type = String
         default = "hex"
-        "--Ef"
-        help = "Young's modulus of the fibres"
-        arg_type = Float64
-        default = 1.00e5
-        "--nuf"
-        help = "Poisson ratio of the fibres"
-        arg_type = Float64
-        default = 0.3
-        "--Em"
-        help = "Young's modulus of the matrix"
+        "--E"
+        help = "Young's modulus of the material"
         arg_type = Float64
         default = 1.00e0
-        "--num"
-        help = "Poisson ratio of the matrix"
+        "--nu"
+        help = "Poisson ratio of the material"
         arg_type = Float64
         default = 0.4999
         "--visualize"
@@ -69,12 +61,12 @@ end
 
 p = parse_commandline()
 
-include(raw"fibers_overlapped_condition_examples.jl")
-using .fibers_overlapped_condition_examples; 
+include(raw"simple_block_condition_examples.jl")
+using .simple_block_condition_examples; 
 
-fibers_overlapped_condition_examples.test("css";
+simple_block_condition_examples.test(;
     kind=p["kind"], 
-    Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
+    E=p["E"], nu=p["nu"], 
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
     nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"], 
     itmax=p["itmax"], relrestol=p["relrestol"],
