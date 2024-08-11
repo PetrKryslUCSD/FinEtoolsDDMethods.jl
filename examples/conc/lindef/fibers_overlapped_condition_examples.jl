@@ -332,6 +332,18 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         check=1,
     )
     @show d
+    vectors = []
+    for i = 1:neigvs
+        scattersysvec!(u, v[:, i])
+        push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+    end
+    File = "fibers_overlapped_condition_examples-full" *
+    "-rf=$(ref)" *
+    ".vtk"
+    vtkexportmesh(
+        File, fens, fes;
+        vectors = vectors,
+    )
 
     d, v, nconv = Arpack.eigs(
         Symmetric(Kr_ff);
@@ -341,6 +353,20 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         check=1,
     )
     @show d
+    vectors = []
+    for i = 1:neigvs
+        scattersysvec!(u, Phi * v[:, i])
+        push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+    end
+    File = "fibers_overlapped_condition_examples-red" *
+    "-rf=$(ref)" *
+    "-ne=$(nelperpart)" *
+    "-n1=$(nbf1max)" *
+    ".vtk"
+    vtkexportmesh(
+        File, fens, fes;
+        vectors = vectors,
+    )
 
     if visualize
         f = "fibers-$(label)-$(string(kind))" *
