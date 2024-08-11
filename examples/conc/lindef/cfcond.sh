@@ -1,6 +1,6 @@
 script=cfcond
-Em=1.0
-Ef=1.0
+Em=1.0e3
+Ef=1.0e3
 num=0.3
 nuf=0.3
 for rf in 4; do
