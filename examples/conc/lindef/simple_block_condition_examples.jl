@@ -26,7 +26,7 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
     H = 4.0
     W = 5.0
     L = 30.0
-    nH, nW, nL = 4, 5, 30
+    nH, nW, nL = 4, 5, 10
     CTE = 0.0
     magn = 1.0
     rho = 1.0
@@ -144,6 +144,11 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
         vectors = vectors,
     )
 
+    # DataDrop.empty_hdf5_file("Kr_ff.h5")
+    # DataDrop.store_matrix("Kr_ff.h5", Kr_ff)
+    # DataDrop.empty_hdf5_file("Mr_ff.h5")
+    # DataDrop.store_matrix("Mr_ff.h5", Mr_ff)
+
     d, v, nconv = Arpack.eigs(
         # Symmetric(Kr_ff);
         Symmetric(Kr_ff), Symmetric(Mr_ff);
@@ -193,7 +198,7 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
 end
 # test(ref = 1)
 
-function test(; kind = "hex", E = 1.0e3, nu = 0.4999, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
+function test(; kind = "hex", E = 1.0e3, nu = 0.4999, nelperpart = 100, nbf1max = 3, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
     _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, relrestol, visualize)
 end
 
