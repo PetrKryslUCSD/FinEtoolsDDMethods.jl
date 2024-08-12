@@ -26,7 +26,7 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
     H = 4.0
     W = 5.0
     L = 30.0
-    nH, nW, nL = 4, 5, 30
+    nH, nW, nL = 4, 5, 10
     CTE = 0.0
     magn = 1.0
     rho = 1.0
@@ -103,9 +103,9 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
     associategeometry!(femm, geom)
     K = stiffness(femm, geom, u)
     K_ff = K[fr, fr]
-    M = mass(femm, geom, u)
-    M_ff = M[fr, fr]
-    M_ff = spdiagm(ones(size(M_ff, 1))) 
+    # M = mass(femm, geom, u)
+    # M_ff = M[fr, fr]
+    M_ff = spdiagm(ones(size(K_ff, 1))) # mass matrix is the identity matrix
 
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
     println("Number of clusters (coarse grid partitions): $(ncpartitions)")
@@ -131,18 +131,25 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
         check=1,
     )
     @show d
-    vectors = []
-    for i = 1:neigvs
-        scattersysvec!(u, v[:, i])
-        push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+    if visualize
+        vectors = []
+        for i = 1:neigvs
+            scattersysvec!(u, v[:, i])
+            push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+        end
+        File = "simple_block_condition-full" *
+               "-rf=$(ref)" *
+               ".vtk"
+        vtkexportmesh(
+            File, fens, fes;
+            vectors=vectors,
+        )
     end
-    File = "simple_block_condition-full" *
-    "-rf=$(ref)" *
-    ".vtk"
-    vtkexportmesh(
-        File, fens, fes;
-        vectors = vectors,
-    )
+
+    # DataDrop.empty_hdf5_file("Kr_ff.h5")
+    # DataDrop.store_matrix("Kr_ff.h5", Kr_ff)
+    # DataDrop.empty_hdf5_file("Mr_ff.h5")
+    # DataDrop.store_matrix("Mr_ff.h5", Mr_ff)
 
     d, v, nconv = Arpack.eigs(
         # Symmetric(Kr_ff);
@@ -153,47 +160,28 @@ function _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, re
         check=1,
     )
     @show d
-    vectors = []
-    for i = 1:neigvs
-        scattersysvec!(u, Phi * v[:, i])
-        push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
-    end
-    File = "simple_block_condition-red" *
-    "-rf=$(ref)" *
-    "-ne=$(nelperpart)" *
-    "-n1=$(nbf1max)" *
-    ".vtk"
-    vtkexportmesh(
-        File, fens, fes;
-        vectors = vectors,
-    )
-
     if visualize
-        f = "fibers-$(label)-$(string(kind))" *
-            "-rf=$(ref)" *
-            "-ne=$(nelperpart)" *
-            "-n1=$(nbf1max)" *
-            "-nf=$(nfpartitions)" *
-            "-cg-sol"
-        VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        
-        p = 1
-        for nodelist in nodelists
-            cel = connectedelems(fes, nodelist, count(fens))
-            f = "fibers-$(label)-$(string(kind))" *
-            "-rf=$(ref)" *
-            "-nf=$(nfpartitions)" *
-            "-p=$p"
-            vtkexportmesh(f * ".vtk", fens, subset(fes, cel))
-            p += 1
+        vectors = []
+        for i = 1:neigvs
+            scattersysvec!(u, Phi * v[:, i])
+            push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
         end
+        File = "simple_block_condition-red" *
+               "-rf=$(ref)" *
+               "-ne=$(nelperpart)" *
+               "-n1=$(nbf1max)" *
+               ".vtk"
+        vtkexportmesh(
+            File, fens, fes;
+            vectors=vectors,
+        )
     end
-    
+
     true
 end
 # test(ref = 1)
 
-function test(; kind = "hex", E = 1.0e3, nu = 0.4999, nelperpart = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
+function test(; kind = "hex", E = 1.0e3, nu = 0.4999, nelperpart = 100, nbf1max = 3, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
     _execute(kind, E, nu, nelperpart, nbf1max, nfpartitions, ref, itmax, relrestol, visualize)
 end
 
