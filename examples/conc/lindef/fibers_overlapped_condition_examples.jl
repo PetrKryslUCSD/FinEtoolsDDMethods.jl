@@ -309,6 +309,9 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
+    # M = mass(femm, geom, u)
+    # M_ff = M[fr, fr]
+    M_ff = spdiagm(ones(size(K_ff, 1))) # mass matrix is the identity matrix
 
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
     println("Number of clusters (coarse grid partitions): $(ncpartitions)")
@@ -320,75 +323,66 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     transfv(v, t, tT) = (tT * v)
     PhiT = Phi'
     Kr_ff = transfm(K_ff, Phi, PhiT)
+    Mr_ff = transfm(M_ff, Phi, PhiT)
     println("Size of the reduced problem: $(size(Kr_ff))")
     
     neigvs = 20
 
     d, v, nconv = Arpack.eigs(
-        Symmetric(K_ff);
+        # Symmetric(K_ff);
+        Symmetric(K_ff), Symmetric(M_ff);
         nev=neigvs,
         which=:SM,
         explicittransform=:none,
         check=1,
     )
     @show d
-    vectors = []
-    for i = 1:neigvs
-        scattersysvec!(u, v[:, i])
-        push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+    if visualize
+        vectors = []
+        for i = 1:neigvs
+            scattersysvec!(u, v[:, i])
+            push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+        end
+        File = "fibers_overlapped_condition-full" *
+               "-rf=$(ref)" *
+               ".vtk"
+        vtkexportmesh(
+            File, fens, fes;
+            vectors=vectors,
+        )
     end
-    File = "fibers_overlapped_condition_examples-full" *
-    "-rf=$(ref)" *
-    ".vtk"
-    vtkexportmesh(
-        File, fens, fes;
-        vectors = vectors,
-    )
+
+    # DataDrop.empty_hdf5_file("Kr_ff.h5")
+    # DataDrop.store_matrix("Kr_ff.h5", Kr_ff)
+    # DataDrop.empty_hdf5_file("Mr_ff.h5")
+    # DataDrop.store_matrix("Mr_ff.h5", Mr_ff)
 
     d, v, nconv = Arpack.eigs(
-        Symmetric(Kr_ff);
+        # Symmetric(Kr_ff);
+        Symmetric(Kr_ff), Symmetric(Mr_ff);
         nev=neigvs,
         which=:SM,
         explicittransform=:none,
         check=1,
     )
     @show d
-    vectors = []
-    for i = 1:neigvs
-        scattersysvec!(u, Phi * v[:, i])
-        push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
-    end
-    File = "fibers_overlapped_condition_examples-red" *
-    "-rf=$(ref)" *
-    "-ne=$(nelperpart)" *
-    "-n1=$(nbf1max)" *
-    ".vtk"
-    vtkexportmesh(
-        File, fens, fes;
-        vectors = vectors,
-    )
-
     if visualize
-        f = "fibers-$(label)-$(string(kind))" *
-            "-rf=$(ref)" *
-            "-ne=$(nelperpart)" *
-            "-n1=$(nbf1max)" *
-            "-nf=$(nfpartitions)" *
-            "-cg-sol"
-        VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        
-        p = 1
-        for nodelist in nodelists
-            cel = connectedelems(fes, nodelist, count(fens))
-            f = "fibers-$(label)-$(string(kind))" *
-            "-rf=$(ref)" *
-            "-nf=$(nfpartitions)" *
-            "-p=$p"
-            vtkexportmesh(f * ".vtk", fens, subset(fes, cel))
-            p += 1
+        vectors = []
+        for i = 1:neigvs
+            scattersysvec!(u, Phi * v[:, i])
+            push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
         end
+        File = "fibers_overlapped_condition-red" *
+               "-rf=$(ref)" *
+               "-ne=$(nelperpart)" *
+               "-n1=$(nbf1max)" *
+               ".vtk"
+        vtkexportmesh(
+            File, fens, fes;
+            vectors=vectors,
+        )
     end
-    
+
     true
 end
 # test(ref = 1)
