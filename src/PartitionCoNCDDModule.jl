@@ -176,4 +176,44 @@ function patch_coordinates(panelX, list)
     return lxy
 end
 
+function fine_grid_partitions(fens, fes, nfpartitions, overlap, dofnums, fr)
+    nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
+    @assert length(nodelists) == nfpartitions
+    fpartitions = []
+    for nodelist in nodelists
+        doflist = Int[]
+        for n in nodelist
+            for d in axes(dofnums, 2)
+                if dofnums[n, d] in fr
+                    push!(doflist, dofnums[n, d])
+                end
+            end
+        end
+        part = (nodelist = nodelist, doflist = doflist)
+        push!(fpartitions, part)
+    end
+    fpartitions
+end
+
+function preconditioner(fpartitions, Phi, K)
+    PhiT = transpose(Phi)
+    Kr = PhiT * K * Phi
+    Krfactor = lu(Kr)
+    __partitions = []
+    for part in fpartitions
+        pK = K[part.doflist, part.doflist]
+        pKfactor = lu(pK)
+        __part = (factor = pKfactor, doflist = part.doflist)
+        push!(__partitions, __part)
+    end
+    function M!(q, p)
+        q .= Phi * (Krfactor \ (PhiT * p))
+        for part in __partitions
+            q[part.doflist] .+= (part.factor \ p[part.doflist])
+        end
+        q
+    end
+    M!
+end
+
 end # module PartitionCoNCDDModule
