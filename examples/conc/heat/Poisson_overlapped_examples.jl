@@ -335,8 +335,20 @@ function Poisson_FE_T4_example(N = 25)
     true
 end # Poisson_FE_T4_example
 
-function test(; kind = "H20", N = 25, nelperpart = 200, nbf1max = 2, nfpartitions = 2, overlap = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
-    _execute(N, H20block, GaussRule(3, 3), nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
+function test(; kind = "H20", N = 25, nbf1max = 2, nelperpart = 8*(nbf1max+1)^3, nfpartitions = 2, overlap = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
+    if kind == "H20"
+        mesher = H20block
+        volrule = GaussRule(3, 3)
+    elseif kind == "T10"
+        mesher = T10block
+        volrule = TetRule(4)
+    elseif kind == "T4"
+        mesher = T4block
+        volrule = TetRule(1)
+    else
+        error("Unknown kind of element")
+    end
+    _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
 end
 
 nothing
