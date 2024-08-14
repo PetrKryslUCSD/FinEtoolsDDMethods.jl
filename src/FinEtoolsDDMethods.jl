@@ -16,8 +16,10 @@ using .PartitionSchurDDModule: DOF_KIND_INTERFACE, PartitionSchurDD, mark_interf
 export DOF_KIND_INTERFACE, PartitionSchurDD, mark_interfaces!
 
 include("PartitionCoNCDDModule.jl")
-using .PartitionCoNCDDModule: cluster_partitioning, shell_cluster_partitioning, fine_grid_node_lists
-export cluster_partitioning, shell_cluster_partitioning, fine_grid_node_lists
+using .PartitionCoNCDDModule: cluster_partitioning, shell_cluster_partitioning
+using .PartitionCoNCDDModule: fine_grid_partitions
+using .PartitionCoNCDDModule: preconditioner
+export cluster_partitioning, shell_cluster_partitioning, fine_grid_partitions, preconditioner
 
 include("cg.jl")
 

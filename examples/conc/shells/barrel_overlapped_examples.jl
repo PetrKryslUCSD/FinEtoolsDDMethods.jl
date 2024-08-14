@@ -31,6 +31,7 @@ import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
+using ILUZero
 using Statistics
 using ShellStructureTopo: make_topo_faces, create_partitions
 
@@ -193,7 +194,6 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
 
     # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
-    # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
     nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
     @assert length(nodelists) == nfpartitions
     

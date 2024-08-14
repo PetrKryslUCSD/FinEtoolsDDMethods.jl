@@ -352,6 +352,8 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         )
     end
 
+    # @show eigvals(Matrix(Mr_ff))
+
     # DataDrop.empty_hdf5_file("Kr_ff.h5")
     # DataDrop.store_matrix("Kr_ff.h5", Kr_ff)
     # DataDrop.empty_hdf5_file("Mr_ff.h5")
