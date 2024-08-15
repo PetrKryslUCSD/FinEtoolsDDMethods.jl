@@ -132,16 +132,6 @@ function fine_grid_node_lists(fens, fes, npartitions, overlap)
     nodelists
 end
 
-
-function element_overlap(fes, node_partitioning)
-    n = count(fes)
-    overlap = zeros(Int16, n)
-    for i  in eachindex(fes)
-        overlap[i] = length(unique([node_partitioning[j] for j in fes.conn[i]]))
-    end
-    overlap
-end
-
 function patch_coordinates(panelX, list)
     krondelta(i, k) = i == k ? 1.0 : 0.0
     lX = panelX[list, :]

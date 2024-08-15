@@ -8,7 +8,7 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCDDModule: patch_coordinates, element_overlap
+using FinEtoolsDDMethods.PartitionCoNCDDModule: patch_coordinates
 using SymRCM
 using Metis
 using Test
