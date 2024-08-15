@@ -45,8 +45,13 @@ function _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i
         enl = cat(enl, addenl; dims=1)
     end
     overlapping_element_list = enl
-    # vtkexportmesh("i=$i" * "-enl" * "-final" * ".vtk", fens, subset(fes, enl))
-    return (nonoverlapping = nonoverlapping_element_list, overlapping = overlapping_element_list)
+    n = connectednodes(subset(fes, overlapping_element_list))
+    all_connected_element_list = connectedelems(fes, n, length(n2e.map))
+    return (
+        nonoverlapping=nonoverlapping_element_list,
+        overlapping=overlapping_element_list,
+        all_connected=all_connected_element_list
+    )
 end
 
 """

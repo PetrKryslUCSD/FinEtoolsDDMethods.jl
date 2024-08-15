@@ -21,6 +21,7 @@ import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
+using DataDrop
 
 """
     cluster_partitioning(fens, fes, element_labels, nelperpart)
@@ -190,8 +191,8 @@ function preconditioner(fpartitions, Phi, K)
     Kr = PhiT * K * Phi
     Krfactor = lu(Kr)
     __partitions = []
-    for part in fpartitions
-        @show part.doflist
+    for i in eachindex(fpartitions)
+        part  =  fpartitions[i]
         pK = K[part.doflist, part.doflist]
         pKfactor = lu(pK)
         __part = (factor = pKfactor, doflist = part.doflist)
