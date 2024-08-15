@@ -245,7 +245,7 @@ version = "8.0.25"
 deps = ["CoNCMOR", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
 path = ".."
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
-version = "0.3.0"
+version = "0.3.1"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "SuiteSparse", "Test"]

@@ -23,9 +23,9 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
 
 
-function _constructnodelists(fes, n2e, overlap, element_1st_partitioning, i)
-    enl = findall(x -> x == i, element_1st_partitioning)
-    nonoverlapping_nodelist = connectednodes(subset(fes, enl))
+function _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i)
+    nonoverlapping_element_list = findall(x -> x == i, element_1st_partitioning)
+    enl = deepcopy(nonoverlapping_element_list)
     touched = fill(false, count(fes)) 
     touched[enl] .= true 
     for ov in 1:overlap
@@ -44,73 +44,84 @@ function _constructnodelists(fes, n2e, overlap, element_1st_partitioning, i)
         end
         enl = cat(enl, addenl; dims=1)
     end
+    overlapping_element_list = enl
     # vtkexportmesh("i=$i" * "-enl" * "-final" * ".vtk", fens, subset(fes, enl))
-    return (nonoverlapping = nonoverlapping_nodelist, overlapping = connectednodes(subset(fes, enl)))
+    return (nonoverlapping = nonoverlapping_element_list, overlapping = overlapping_element_list)
 end
 
 """
-    subdomain_node_lists(fens, fes, npartitions, overlap)
+    subdomain_element_lists(fens, fes, npartitions, overlap)
 
-Make node lists for all partitions of the grid subdomains.
+Make element lists for all grid subdomains.
 
-The grid is partitioned into `npartitions` using the Metis library. The
-partitions are extended by the given overlap. Then for each extended partition
-of elements, the list of nodes is collected.
-
-List of named tuples of these nodelists is returned. 
+The grid is partitioned into `npartitions` non-overlapping element partitions using the
+Metis library. The element partitions are extended by the given overlap. 
 """
-function subdomain_node_lists(fens, fes, npartitions, overlap)
+function subdomain_element_lists(fens, fes, npartitions, overlap)
     femm = FEMMBase(IntegDomain(fes, PointRule()))
     C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
     g = Metis.graph(C; check_hermitian=true)
     element_1st_partitioning = Metis.partition(g, npartitions; alg=:KWAY)
     npartitions = maximum(element_1st_partitioning)
     n2e = FENodeToFEMap(fes, count(fens))
-    nodelists = []
+    element_lists = []
     for i in 1:npartitions
-        push!(nodelists, _constructnodelists(fes, n2e, overlap, element_1st_partitioning, i))
+        push!(element_lists, _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i))
     end
-    nodelists
+    return element_lists
 end
 
-function fine_grid_partitions(fens, fes, nfpartitions, overlap, dofnums, fr)
-    nodelists = subdomain_node_lists(fens, fes, nfpartitions, overlap)
-    @assert length(nodelists) == nfpartitions
+"""
+    subdomain_node_lists(element_lists, fes)
+
+Make node lists for all grid subdomains.
+
+List of named tuples of these nodelists is returned. 
+"""
+function subdomain_node_lists(element_lists, fes)
+    nodelists = []
+    for i in eachindex(element_lists)
+        push!(nodelists,
+            (
+                nonoverlapping=connectednodes(subset(fes, element_lists[i].nonoverlapping)),
+                overlapping=connectednodes(subset(fes, element_lists[i].overlapping))
+            )
+        )
+    end
+    return nodelists
+end
+
+"""
+    subdomain_dof_lists(nodelists, dofnums, fr)
+
+Collect the degree-of-freedom lists for all partitions.
+"""
+function subdomain_dof_lists(nodelists, dofnums, fr)
     fpartitions = []
-    for nodelist in nodelists
-        doflist = Int[]
-        for n in nodelist
+    for n in nodelists
+        nonoverlapping_doflist = Int[]
+        for n in n.nonoverlapping
             for d in axes(dofnums, 2)
                 if dofnums[n, d] in fr
-                    push!(doflist, dofnums[n, d])
+                    push!(nonoverlapping_doflist, dofnums[n, d])
                 end
             end
         end
-        part = (nodelist = nodelist, doflist = doflist)
+        overlapping_doflist = Int[]
+        for n in n.overlapping
+            for d in axes(dofnums, 2)
+                if dofnums[n, d] in fr
+                    push!(overlapping_doflist, dofnums[n, d])
+                end
+            end
+        end
+        part = (nodelists=n,
+            doflists=(overlapping=overlapping_doflist,
+                nonoverlapping=nonoverlapping_doflist)
+        )
         push!(fpartitions, part)
     end
-    fpartitions
-end
-
-function preconditioner(fpartitions, Phi, K)
-    PhiT = transpose(Phi)
-    Kr = PhiT * K * Phi
-    Krfactor = lu(Kr)
-    __partitions = []
-    for part in fpartitions
-        pK = K[part.doflist, part.doflist]
-        pKfactor = lu(pK)
-        __part = (factor = pKfactor, doflist = part.doflist)
-        push!(__partitions, __part)
-    end
-    function M!(q, p)
-        q .= Phi * (Krfactor \ (PhiT * p))
-        for part in __partitions
-            q[part.doflist] .+= (part.factor \ p[part.doflist])
-        end
-        q
-    end
-    M!
+    return fpartitions
 end
 
 end # module PartitionCoNCDDMPIModule
