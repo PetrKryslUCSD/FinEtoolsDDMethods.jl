@@ -108,30 +108,41 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     
     t0 = time()
     element_lists = PartitionCoNCDDMPIModule.subdomain_element_lists(fens, fes, nfpartitions, overlap)
-    if visualize
-        File = "Poisson2D_overlapped_examples-nonoverlapping-"
-        for i in eachindex(element_lists)
-            el = element_lists[i].nonoverlapping
-            MeshExportModule.VTK.vtkexportmesh(File * "$(i)" * ".vtk", fens, subset(fes, el))
-        end
-        File = "Poisson2D_overlapped_examples-overlapping-"
-        for i in eachindex(element_lists)
-            el = element_lists[i].overlapping
-            MeshExportModule.VTK.vtkexportmesh(File * "$(i)" * ".vtk", fens, subset(fes, el))
-        end
-    end
-    # 
+    # if visualize
+    #     File = "Poisson2D_overlapped_examples-nonoverlapping-"
+    #     for i in eachindex(element_lists)
+    #         el = element_lists[i].nonoverlapping
+    #         MeshExportModule.VTK.vtkexportmesh(File * "$(i)" * ".vtk", fens, subset(fes, el))
+    #     end
+    #     File = "Poisson2D_overlapped_examples-overlapping-"
+    #     for i in eachindex(element_lists)
+    #         el = element_lists[i].overlapping
+    #         MeshExportModule.VTK.vtkexportmesh(File * "$(i)" * ".vtk", fens, subset(fes, el))
+    #     end
+    # end
+    
     node_lists = PartitionCoNCDDMPIModule.subdomain_node_lists(element_lists, fes)
+    dof_lists = PartitionCoNCDDMPIModule.subdomain_dof_lists(node_lists, Temp.dofnums, fr)
+    Kr_ff = spzeros(size(Phi_f, 2), size(Phi_f, 2))
     partition_matrices = []
     for i in eachindex(element_lists)
         el = element_lists[i].nonoverlapping
         femm1 = FEMMHeatDiff(IntegDomain(subset(fes, el), volrule, 1.0), material)
         K1 = conductivity(femm1, geom, Temp)
-        el = setdiff(element_lists[i].overlapping, element_lists[i].nonoverlapping)
+        el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
         femm2 = FEMMHeatDiff(IntegDomain(subset(fes, el), volrule, 1.0), material)
         K2 = conductivity(femm2, geom, Temp)
-        push!(partition_matrices, (nonoverlapping = K1[fr, fr], overlapping = K1+K2))
+        Kn = K1
+        Kn_ff = Kn[fr, fr]
+        Kr_ff .+= Phi_f' * Kn_ff * Phi_f
+        Ko = K1 + K2
+        odof = dof_lists[i].overlapping
+        Ko = Ko[odof, odof]
+        push!(partition_matrices, (nonoverlapping = Kn_ff, overlapping_factor = lu(Ko), odof = odof))
     end
+    Krfactor = lu(Kr_ff)
+
+    # @show norm(Kr_ff - Phi_f' * K_ff * Phi_f) / norm(Kr_ff)
 
     # Ka = spzeros(size(K, 1), size(K, 2))
     # for i in eachindex(partition_matrices)
@@ -146,9 +157,18 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
         for i in eachindex(partition_matrices)
             q .+= partition_matrices[i].nonoverlapping * p
         end
+        q
+    end
+    function precondition_solve!(q, p)
+        q .= Phi_f * (Krfactor \ (Phi_f' * p))
+        for i in eachindex(partition_matrices)
+            d = partition_matrices[i].odof
+            q[d] .+= (partition_matrices[i].overlapping_factor \ p[d])
+        end
+        q
     end
     (u_f, stats) = pcg_seq((q, p) -> partition_multiply!(q, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> M!(q, p),
+        (M!)=(q, p) -> precondition_solve!(q, p),
         itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
@@ -165,7 +185,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     true
 end # _execute
 
-function test(; kind = "Q8", N = 25, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, nfpartitions = 2, overlap = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
+function test(; kind = "Q8", N = 25, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, nfpartitions = 2, overlap = 1, itmax = 1000, relrestol = 1e-6, visualize = false)
     if kind == "Q8"
         mesher = Q8block
         volrule = GaussRule(2, 3)

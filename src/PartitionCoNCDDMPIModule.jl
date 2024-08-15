@@ -45,8 +45,13 @@ function _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i
         enl = cat(enl, addenl; dims=1)
     end
     overlapping_element_list = enl
-    # vtkexportmesh("i=$i" * "-enl" * "-final" * ".vtk", fens, subset(fes, enl))
-    return (nonoverlapping = nonoverlapping_element_list, overlapping = overlapping_element_list)
+    n = connectednodes(subset(fes, overlapping_element_list))
+    all_connected_element_list = connectedelems(fes, n, length(n2e.map))
+    return (
+        nonoverlapping=nonoverlapping_element_list,
+        overlapping=overlapping_element_list,
+        all_connected=all_connected_element_list
+    )
 end
 
 """
@@ -79,49 +84,47 @@ Make node lists for all grid subdomains.
 List of named tuples of these nodelists is returned. 
 """
 function subdomain_node_lists(element_lists, fes)
-    nodelists = []
+    node_lists = []
     for i in eachindex(element_lists)
-        push!(nodelists,
+        push!(node_lists,
             (
                 nonoverlapping=connectednodes(subset(fes, element_lists[i].nonoverlapping)),
                 overlapping=connectednodes(subset(fes, element_lists[i].overlapping))
             )
         )
     end
-    return nodelists
+    return node_lists
 end
 
 """
-    subdomain_dof_lists(nodelists, dofnums, fr)
+    subdomain_dof_lists(node_lists, dofnums, fr)
 
 Collect the degree-of-freedom lists for all partitions.
 """
-function subdomain_dof_lists(nodelists, dofnums, fr)
-    fpartitions = []
-    for n in nodelists
-        nonoverlapping_doflist = Int[]
+function subdomain_dof_lists(node_lists, dofnums, fr)
+    dof_lists = []
+    for n in node_lists
+        nonoverlapping_dof_list = Int[]
         for n in n.nonoverlapping
             for d in axes(dofnums, 2)
                 if dofnums[n, d] in fr
-                    push!(nonoverlapping_doflist, dofnums[n, d])
+                    push!(nonoverlapping_dof_list, dofnums[n, d])
                 end
             end
         end
-        overlapping_doflist = Int[]
+        overlapping_dof_list = Int[]
         for n in n.overlapping
             for d in axes(dofnums, 2)
                 if dofnums[n, d] in fr
-                    push!(overlapping_doflist, dofnums[n, d])
+                    push!(overlapping_dof_list, dofnums[n, d])
                 end
             end
         end
-        part = (nodelists=n,
-            doflists=(overlapping=overlapping_doflist,
-                nonoverlapping=nonoverlapping_doflist)
-        )
-        push!(fpartitions, part)
+        part = (overlapping=overlapping_dof_list,
+                nonoverlapping=nonoverlapping_dof_list)
+        push!(dof_lists, part)
     end
-    return fpartitions
+    return dof_lists
 end
 
 end # module PartitionCoNCDDMPIModule
