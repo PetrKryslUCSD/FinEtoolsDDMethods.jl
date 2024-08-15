@@ -191,6 +191,7 @@ function preconditioner(fpartitions, Phi, K)
     Krfactor = lu(Kr)
     __partitions = []
     for part in fpartitions
+        @show part.doflist
         pK = K[part.doflist, part.doflist]
         pKfactor = lu(pK)
         __part = (factor = pKfactor, doflist = part.doflist)
