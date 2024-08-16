@@ -127,64 +127,78 @@ function subdomain_dof_lists(node_lists, dofnums, fr)
     return dof_lists
 end
 
-struct CoNCPartitionMatrixCache{T, IT, FACTOR}
-    nonoverlapping::SparseMatrixCSC{T, IT}
-    overlapping_factor::FACTOR
-    odof::Vector{IT}
-    tempq::Vector{T}
-    tempp::Vector{T}
+struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL, DL} 
+    u::NF
+    element_lists::EL
+    dof_lists::DL
 end
 
-struct CoNCPartitioning{T, IT, RFACTOR, MC} 
-    Phi::SparseMatrixCSC{T, IT}
-    Krfactor::RFACTOR
-    caches::Vector{MC}
-end
-
-function CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, u::NodalField{T, IT}, Phi) where {T, IT}
-    element_lists = PartitionCoNCDDMPIModule.subdomain_element_lists(fens, fes, nfpartitions, overlap)
+function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T, IT}) where {T, IT}
+    element_lists = subdomain_element_lists(fens, fes, nfpartitions, overlap)
     node_lists = subdomain_node_lists(element_lists, fes)
     fr = dofrange(u, DOF_KIND_FREE)
     dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr)
-    Phi = Phi[fr, :]
-    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
-    caches = CoNCPartitionMatrixCache[]
-    for i in eachindex(element_lists)
-        el = element_lists[i].nonoverlapping
-        Kn = make_matrix(subset(fes, el))
-        Kn_ff = Kn[fr, fr]
-        Kr_ff .+= Phi' * Kn_ff * Phi
-        el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
-        Ke = make_matrix(subset(fes, el))
-        Ko = Kn + Ke
-        odof = dof_lists[i].overlapping
-        Ko = Ko[odof, odof]
-        tempq = zeros(T, length(odof))
-        tempp = zeros(T, length(odof))
-        push!(caches, 
-            CoNCPartitionMatrixCache(Kn_ff, lu(Ko), odof, tempq, tempp)
-        )
-    end
-    Krfactor = lu(Kr_ff)
-    return CoNCPartitioning(Phi, Krfactor, caches)
+    return CoNCPartitioningInfo(u, element_lists, dof_lists)
 end
 
-function partition_multiply!(q, cp::CP, p) where {CP<:CoNCPartitioning}
+struct CoNCPartitionData{T, IT, FACTOR}
+    nonoverlapping_K::SparseMatrixCSC{T, IT}
+    reduced_K::SparseMatrixCSC{T, IT}
+    overlapping_K_factor::FACTOR
+    ndof::Vector{IT}
+    ntempq::Vector{T}
+    ntempp::Vector{T}
+    odof::Vector{IT}
+    otempq::Vector{T}
+    otempp::Vector{T}
+end
+
+function CoNCPartitionData(cpi::CPI, i, fes, Phi, make_matrix) where {CPI<:CoNCPartitioningInfo}
+    element_lists = cpi.element_lists
+    dof_lists = cpi.dof_lists
+    fr = dofrange(cpi.u, DOF_KIND_FREE)
+    Phi = Phi[fr, :]
+    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
+    el = element_lists[i].nonoverlapping
+    Kn = make_matrix(subset(fes, el))
+    Kn_ff = Kn[fr, fr]
+    Kr_ff .+= Phi' * Kn_ff * Phi
+    el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
+    Ke = make_matrix(subset(fes, el))
+    Ko = Kn + Ke
+    odof = dof_lists[i].overlapping
+    Ko = Ko[odof, odof]
+    otempq = zeros(eltype(cpi.u.values), length(odof))
+    otempp = zeros(eltype(cpi.u.values), length(odof))
+    ndof = dof_lists[i].nonoverlapping
+    ntempq = zeros(eltype(cpi.u.values), length(ndof))
+    ntempp = zeros(eltype(cpi.u.values), length(ndof))
+    Kn_ff = Kn_ff[ndof, ndof]
+    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), ndof, ntempq, ntempp, odof, otempq, otempp)
+end
+
+function partition_multiply!(q, partitions, p)
     q .= zero(eltype(q))
-    for i in eachindex(cp.caches)
-        q .+= cp.caches[i].nonoverlapping * p
+    for _p in partitions
+        d = _p.ndof
+        _p.ntempp .= p[d]
+        mul!(_p.ntempq, _p.nonoverlapping_K, _p.ntempp)
+    end
+    for _p in partitions
+        d = _p.ndof
+        q[d] .+= _p.ntempq
     end
     q
 end
 
-function precondition_solve!(q, cp::CP, p) where {CP<:CoNCPartitioning}
-    q .= cp.Phi * (cp.Krfactor \ (cp.Phi' * p))
-    for i in eachindex(cp.caches)
-        d = cp.caches[i].odof
-        cp.caches[i].tempp .= p[d]
-        ldiv!(cp.caches[i].tempq, cp.caches[i].overlapping_factor, cp.caches[i].tempp)
-        q[d] .+= cp.caches[i].tempq
-        # q[d] .+= (cp.caches[i].overlapping_factor \ p[d])
+function precondition_solve!(q, Krfactor, Phi, partitions, p) 
+    q .= Phi * (Krfactor \ (Phi' * p))
+    for _p in partitions
+        d = _p.odof
+        _p.otempp .= p[d]
+        ldiv!(_p.otempq, _p.overlapping_K_factor, _p.otempp)
+        q[d] .+= _p.otempq
+        # q[d] .+= (cp.pdata[i].overlapping_factor \ p[d])
     end
     q
 end
