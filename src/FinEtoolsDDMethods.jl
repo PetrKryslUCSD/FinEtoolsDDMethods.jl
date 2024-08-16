@@ -21,6 +21,7 @@ using .PartitionCoNCDDModule: fine_grid_partitions
 using .PartitionCoNCDDModule: preconditioner
 export cluster_partitioning, shell_cluster_partitioning, fine_grid_partitions, preconditioner
 
+include("PartitionCoNCDDSEQModule.jl")
 include("PartitionCoNCDDMPIModule.jl")
 
 include("cg.jl")

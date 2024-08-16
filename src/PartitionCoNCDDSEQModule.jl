@@ -1,10 +1,10 @@
 """
-    PartitionCoNCDDMPIModule  
+    PartitionCoNCDDSEQModule  
 
 Module for operations on partitions of finite element models for solves based
 on the Coherent Nodal Clusters.
 """
-module PartitionCoNCDDMPIModule
+module PartitionCoNCDDSEQModule
 
 __precompile__(true)
 
@@ -142,7 +142,7 @@ struct CoNCPartitioning{T, IT, RFACTOR, MC}
 end
 
 function CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, u::NodalField{T, IT}, Phi) where {T, IT}
-    element_lists = PartitionCoNCDDMPIModule.subdomain_element_lists(fens, fes, nfpartitions, overlap)
+    element_lists = subdomain_element_lists(fens, fes, nfpartitions, overlap)
     node_lists = subdomain_node_lists(element_lists, fes)
     fr = dofrange(u, DOF_KIND_FREE)
     dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr)
@@ -189,4 +189,4 @@ function precondition_solve!(q, cp::CP, p) where {CP<:CoNCPartitioning}
     q
 end
 
-end # module PartitionCoNCDDMPIModule
+end # module PartitionCoNCDDSEQModule
