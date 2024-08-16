@@ -128,11 +128,14 @@ function subdomain_dof_lists(node_lists, dofnums, fr)
 end
 
 struct CoNCPartitionMatrixCache{T, IT, FACTOR}
-    nonoverlapping::SparseMatrixCSC{T, IT}
-    overlapping_factor::FACTOR
+    nonoverlapping_K::SparseMatrixCSC{T, IT}
+    overlapping_K_factor::FACTOR
+    ndof::Vector{IT}
+    ntempq::Vector{T}
+    ntempp::Vector{T}
     odof::Vector{IT}
-    tempq::Vector{T}
-    tempp::Vector{T}
+    otempq::Vector{T}
+    otempp::Vector{T}
 end
 
 struct CoNCPartitioning{T, IT, RFACTOR, MC} 
@@ -159,10 +162,14 @@ function CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, u::Noda
         Ko = Kn + Ke
         odof = dof_lists[i].overlapping
         Ko = Ko[odof, odof]
-        tempq = zeros(T, length(odof))
-        tempp = zeros(T, length(odof))
+        otempq = zeros(T, length(odof))
+        otempp = zeros(T, length(odof))
+        ndof = dof_lists[i].nonoverlapping
+        ntempq = zeros(T, length(ndof))
+        ntempp = zeros(T, length(ndof))
+        Kn_ff = Kn_ff[ndof, ndof]
         push!(caches, 
-            CoNCPartitionMatrixCache(Kn_ff, lu(Ko), odof, tempq, tempp)
+            CoNCPartitionMatrixCache(Kn_ff, lu(Ko), ndof, ntempq, ntempp, odof, otempq, otempp)
         )
     end
     Krfactor = lu(Kr_ff)
@@ -172,7 +179,13 @@ end
 function partition_multiply!(q, cp::CP, p) where {CP<:CoNCPartitioning}
     q .= zero(eltype(q))
     for i in eachindex(cp.caches)
-        q .+= cp.caches[i].nonoverlapping * p
+        d = cp.caches[i].ndof
+        cp.caches[i].ntempp .= p[d]
+        mul!(cp.caches[i].ntempq, cp.caches[i].nonoverlapping_K, cp.caches[i].ntempp)
+    end
+    for i in eachindex(cp.caches)
+        d = cp.caches[i].ndof
+        q[d] .+= cp.caches[i].ntempq
     end
     q
 end
@@ -181,9 +194,9 @@ function precondition_solve!(q, cp::CP, p) where {CP<:CoNCPartitioning}
     q .= cp.Phi * (cp.Krfactor \ (cp.Phi' * p))
     for i in eachindex(cp.caches)
         d = cp.caches[i].odof
-        cp.caches[i].tempp .= p[d]
-        ldiv!(cp.caches[i].tempq, cp.caches[i].overlapping_factor, cp.caches[i].tempp)
-        q[d] .+= cp.caches[i].tempq
+        cp.caches[i].otempp .= p[d]
+        ldiv!(cp.caches[i].otempq, cp.caches[i].overlapping_K_factor, cp.caches[i].otempp)
+        q[d] .+= cp.caches[i].otempq
         # q[d] .+= (cp.caches[i].overlapping_factor \ p[d])
     end
     q
