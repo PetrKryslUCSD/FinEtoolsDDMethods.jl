@@ -5,6 +5,7 @@ version = "0.3.1"
 
 [deps]
 CoNCMOR = "3a989f29-cff0-4f1c-87be-5dcdd41bd240"
+DataDrop = "aa547a04-dd37-49ab-8e73-656744f8a8fc"
 FinEtools = "91bb5406-6c9a-523d-811d-0644c4229550"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
