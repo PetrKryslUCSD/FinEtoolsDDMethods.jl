@@ -20,7 +20,7 @@ using SymRCM
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCDDMPIModule
+using FinEtoolsDDMethods.PartitionCoNCDDSEQModule
 using Statistics
 
 function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
@@ -111,13 +111,13 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
         femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
         return conductivity(femm2, geom, Temp)
     end
-    cp = PartitionCoNCDDMPIModule.CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, Temp, Phi) 
+    cp = PartitionCoNCDDSEQModule.CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, Temp, Phi) 
     @info("Create partitioning ($(round(time() - t0, digits=3)) [s])")
 
     t0 = time()
     norm_F_f = norm(F_f)
-    (u_f, stats) = pcg_seq((q, p) -> PartitionCoNCDDMPIModule.partition_multiply!(q, cp, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> PartitionCoNCDDMPIModule.precondition_solve!(q, cp, p),
+    (u_f, stats) = pcg_seq((q, p) -> PartitionCoNCDDSEQModule.partition_multiply!(q, cp, p), F_f, zeros(size(F_f));
+        (M!)=(q, p) -> PartitionCoNCDDSEQModule.precondition_solve!(q, cp, p),
         itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
