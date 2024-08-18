@@ -24,33 +24,6 @@ using FinEtoolsDDMethods.PartitionCoNCDDMPIModule
 using Statistics
 using MPI
 
-function partition_multiply!(q, partition, p)
-    q .= zero(eltype(q))
-    if partition !== nothing
-        d = partition.ndof
-        partition.ntempp .= p[d]
-        mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
-        q[d] .+= partition.ntempq
-    end
-    q
-end
-
-function precondition_global_solve!(q, Krfactor, Phi, p) 
-    q .= Phi * (Krfactor \ (Phi' * p))
-    q
-end
-
-function precondition_local_solve!(q, partition, p) 
-    q .= zero(eltype(q))
-    if partition !== nothing
-        d = partition.odof
-        partition.otempp .= p[d]
-        ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
-        q[d] .+= partition.otempq
-    end
-    q
-end
-
 function peeksolution(iter, x, resnorm)
     @info("Iteration: $(iter), Residual norm: $(resnorm)")
 end
@@ -131,8 +104,8 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     t1 = time()
     partition = nothing
     if rank > 0
-        cpi = PartitionCoNCDDMPIModule.CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
-        partition = PartitionCoNCDDMPIModule.CoNCPartitionData(cpi, rank, fes, Phi, make_matrix)
+        cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
+        partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix)
     end
     
     rank == 0 && (@info "Create partitions time: $(time() - t1)")
@@ -191,7 +164,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     true
 end # _execute
 
-function test(; kind = "Q8", N = 25, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, nfpartitions = 2, overlap = 1, itmax = 1000, relrestol = 1e-6, visualize = false)
+function test(; kind = "Q8", N = 253, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, nfpartitions = 2, overlap = 1, itmax = 1000, relrestol = 1e-6, visualize = false)
     if kind == "Q8"
         mesher = Q8block
         volrule = GaussRule(2, 3)
