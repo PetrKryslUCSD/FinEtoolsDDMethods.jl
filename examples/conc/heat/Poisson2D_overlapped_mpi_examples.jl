@@ -28,7 +28,7 @@ function peeksolution(iter, x, resnorm)
     @info("Iteration: $(iter), Residual norm: $(resnorm)")
 end
 
-function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
+function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relrestol, visualize)
     # @info("""
     # Heat conduction example described by Amuthan A. Ramabathiran
     # http://www.codeproject.com/Articles/579983/Finite-Element-programming-in-Julia:
@@ -50,10 +50,10 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     rank = MPI.Comm_rank(comm)
     nprocs = MPI.Comm_size(comm)
 
-    npartitions = nprocs - 1
+    nfpartitions = nprocs - 1
 
     rank == 0 && (@info "Number of processes: $nprocs")
-    rank == 0 && (@info "Number of partitions: $npartitions")
+    rank == 0 && (@info "Number of partitions: $nfpartitions")
 
     t1 = time()
     fens, fes = mesher(A, A, N, N)
@@ -106,9 +106,17 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     if rank > 0
         cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
         partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix)
-    end
-    
+    end    
     rank == 0 && (@info "Create partitions time: $(time() - t1)")
+
+    t1 = time()
+    F_f_1 = zeros(size(K_ff, 2))
+    if rank > 0
+        F_f_1 .= partition.data_rhs
+    end
+    MPI.Reduce!(F_f_1, MPI.SUM, comm; root=0) # Reduce the data-determined rhs
+    rank == 0 && (@show norm(F_f_1 + (K[:, dr] * T_d)[fr]))
+    rank == 0 && (@info "Compute RHS: $(time() - t1)")
     
     t1 = time()
     Kr_ff = spzeros(size(Phi_f, 2), size(Phi_f, 2))
@@ -164,7 +172,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     true
 end # _execute
 
-function test(; kind = "Q8", N = 253, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, nfpartitions = 2, overlap = 1, itmax = 1000, relrestol = 1e-6, visualize = false)
+function test(; kind = "Q8", N = 253, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, overlap = 1, itmax = 1000, relrestol = 1e-6, visualize = false)
     if kind == "Q8"
         mesher = Q8block
         volrule = GaussRule(2, 3)
@@ -177,7 +185,7 @@ function test(; kind = "Q8", N = 253, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2,
     else
         error("Unknown kind of element")
     end
-    _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
+    _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relrestol, visualize)
 end
 
 test()
