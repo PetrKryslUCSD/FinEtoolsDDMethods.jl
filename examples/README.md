@@ -27,6 +27,12 @@ Note the folder where the executable is installed.
 ```
  mpiexecjl -n 4 --project=. julia schur/heat/Poisson2D_cg_mpi_driver.jl
 ```
+
+On Windows 11, the following would work:
+```
+mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_overlapped_mpi_examples.jl
+```
+
 ## How to run a CoNC example
 
 Two classes of problems solved here:
