@@ -4,10 +4,10 @@ http://www.codeproject.com/Articles/579983/Finite-Element-programming-in-Julia:
 Unit cube, with known temperature distribution along the boundary,
 and uniform heat generation rate inside.
 
-Solution with domain decomposition.
-Version: 08/03/2024
+Solution with domain decomposition. Sequential execution.
+Version: 08/18/2024
 """
-module Poisson2D_overlapped_examples
+module Poisson2D_overlapped_seq_examples
 using FinEtools
 using FinEtools.AlgoBaseModule: solve_blocked!, matrix_blocked, vector_blocked
 using FinEtools.AssemblyModule
@@ -20,7 +20,7 @@ using SymRCM
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCDDMPIModule
+using FinEtoolsDDMethods.PartitionCoNCDDSEQModule
 using Statistics
 
 function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
@@ -80,24 +80,26 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     @info("Size of the reduced problem: $(size(Phi_f, 2))")
     @info "Clustering ($(round(time() - t0, digits=3)) [s])"
 
+    
     t0 = time()
-    fpartitions = fine_grid_partitions(fens, fes, nfpartitions, overlap, Temp.dofnums, fr)
-    meansize = mean([length(part.doflist) for part in fpartitions])
-    @info("Mean fine partition size: $(meansize)")
-    @info "Fine grid partitioning ($(round(time() - t0, digits=3)) [s])"
-    t0 = time()
-    M! = preconditioner(fpartitions, Phi_f, K_ff)
-    @info "Preconditioner setup ($(round(time() - t0, digits=3)) [s])"
+    function make_matrix(fes)
+        femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
+        return conductivity(femm2, geom, Temp)
+    end
+    cp = PartitionCoNCDDSEQModule.CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, Temp, Phi) 
+    @info("Create partitioning ($(round(time() - t0, digits=3)) [s])")
 
     t0 = time()
     norm_F_f = norm(F_f)
-    (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> M!(q, p),
+    (u_f, stats) = pcg_seq((q, p) -> PartitionCoNCDDSEQModule.partition_multiply!(q, cp, p), F_f, zeros(size(F_f));
+        (M!)=(q, p) -> PartitionCoNCDDSEQModule.precondition_solve!(q, cp, p),
         itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     scattersysvec!(Temp, u_f, DOF_KIND_FREE)
     @info("Solution ($(round(time() - t0, digits=3)) [s])")
+
+    
     t0 = time()
     Error = 0.0
     for k in axes(fens.xyz, 1)
@@ -105,83 +107,6 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     end
     @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
 
-    
-    t0 = time()
-    element_lists = PartitionCoNCDDMPIModule.subdomain_element_lists(fens, fes, nfpartitions, overlap)
-    # if visualize
-    #     File = "Poisson2D_overlapped_examples-nonoverlapping-"
-    #     for i in eachindex(element_lists)
-    #         el = element_lists[i].nonoverlapping
-    #         MeshExportModule.VTK.vtkexportmesh(File * "$(i)" * ".vtk", fens, subset(fes, el))
-    #     end
-    #     File = "Poisson2D_overlapped_examples-overlapping-"
-    #     for i in eachindex(element_lists)
-    #         el = element_lists[i].overlapping
-    #         MeshExportModule.VTK.vtkexportmesh(File * "$(i)" * ".vtk", fens, subset(fes, el))
-    #     end
-    # end
-    
-    node_lists = PartitionCoNCDDMPIModule.subdomain_node_lists(element_lists, fes)
-    dof_lists = PartitionCoNCDDMPIModule.subdomain_dof_lists(node_lists, Temp.dofnums, fr)
-    Kr_ff = spzeros(size(Phi_f, 2), size(Phi_f, 2))
-    partition_matrices = []
-    for i in eachindex(element_lists)
-        el = element_lists[i].nonoverlapping
-        femm1 = FEMMHeatDiff(IntegDomain(subset(fes, el), volrule, 1.0), material)
-        K1 = conductivity(femm1, geom, Temp)
-        el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
-        femm2 = FEMMHeatDiff(IntegDomain(subset(fes, el), volrule, 1.0), material)
-        K2 = conductivity(femm2, geom, Temp)
-        Kn = K1
-        Kn_ff = Kn[fr, fr]
-        Kr_ff .+= Phi_f' * Kn_ff * Phi_f
-        Ko = K1 + K2
-        odof = dof_lists[i].overlapping
-        Ko = Ko[odof, odof]
-        push!(partition_matrices, (nonoverlapping = Kn_ff, overlapping_factor = lu(Ko), odof = odof))
-    end
-    Krfactor = lu(Kr_ff)
-
-    # @show norm(Kr_ff - Phi_f' * K_ff * Phi_f) / norm(Kr_ff)
-
-    # Ka = spzeros(size(K, 1), size(K, 2))
-    # for i in eachindex(partition_matrices)
-    #     Ka += partition_matrices[i].nonoverlapping
-    # end
-    # @show norm(K - Ka) / norm(K)
-
-    t0 = time()
-    norm_F_f = norm(F_f)
-    function partition_multiply!(q, p)
-        q .= zero(eltype(q))
-        for i in eachindex(partition_matrices)
-            q .+= partition_matrices[i].nonoverlapping * p
-        end
-        q
-    end
-    function precondition_solve!(q, p)
-        q .= Phi_f * (Krfactor \ (Phi_f' * p))
-        for i in eachindex(partition_matrices)
-            d = partition_matrices[i].odof
-            q[d] .+= (partition_matrices[i].overlapping_factor \ p[d])
-        end
-        q
-    end
-    (u_f, stats) = pcg_seq((q, p) -> partition_multiply!(q, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> precondition_solve!(q, p),
-        itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
-    @info("Number of iterations:  $(stats.niter)")
-    stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
-    scattersysvec!(Temp, u_f, DOF_KIND_FREE)
-    @info("Solution ($(round(time() - t0, digits=3)) [s])")
-
-    # if visualize
-    #     geometry = xyz3(fens)
-    #     geometry[:, 3] .= Temp.values
-    #     fens.xyz = geometry
-    #     File = "Poisson2D_overlapped_examples-sol.vtk"
-    #     MeshExportModule.VTK.vtkexportmesh(File, fens, fes; scalars=[("Temp", Temp.values)])
-    # end
     true
 end # _execute
 

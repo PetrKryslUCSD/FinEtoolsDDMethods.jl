@@ -145,6 +145,7 @@ struct CoNCPartitionData{T, IT, FACTOR}
     nonoverlapping_K::SparseMatrixCSC{T, IT}
     reduced_K::SparseMatrixCSC{T, IT}
     overlapping_K_factor::FACTOR
+    data_rhs::Vector{T}
     ndof::Vector{IT}
     ntempq::Vector{T}
     ntempp::Vector{T}
@@ -157,48 +158,59 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi, make_matrix) where {CPI<:CoNCP
     element_lists = cpi.element_lists
     dof_lists = cpi.dof_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
-    Phi = Phi[fr, :]
-    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
+    dr = dofrange(cpi.u, DOF_KIND_DATA)
+    Phi = Phi[fr, :] # 
+    # Compute the matrix for the non overlapping elements
     el = element_lists[i].nonoverlapping
     Kn = make_matrix(subset(fes, el))
+    # Now compute the (contribution to) reduced matrix for the global preconditioner
     Kn_ff = Kn[fr, fr]
-    Kr_ff .+= Phi' * Kn_ff * Phi
+    Kn_fd = Kn[fr, dr]
+    # Compute the right hand side contribution
+    u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
+    data_rhs = - Kn_fd * u_d
+    Kr_ff = Phi' * Kn_ff * Phi
+    # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
     Ke = make_matrix(subset(fes, el))
     Ko = Kn + Ke
+    # Reduce the matrix to adjust the degrees of freedom referenced
     odof = dof_lists[i].overlapping
     Ko = Ko[odof, odof]
+    # Reduce the matrix to adjust the degrees of freedom referenced
+    ndof = dof_lists[i].nonoverlapping
+    Kn_ff = Kn_ff[ndof, ndof]
+    # Allocate some temporary vectors
     otempq = zeros(eltype(cpi.u.values), length(odof))
     otempp = zeros(eltype(cpi.u.values), length(odof))
-    ndof = dof_lists[i].nonoverlapping
     ntempq = zeros(eltype(cpi.u.values), length(ndof))
     ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    Kn_ff = Kn_ff[ndof, ndof]
-    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), ndof, ntempq, ntempp, odof, otempq, otempp)
+    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), data_rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
-function partition_multiply!(q, partitions, p)
+function partition_multiply!(q, partition, p)
     q .= zero(eltype(q))
-    for _p in partitions
-        d = _p.ndof
-        _p.ntempp .= p[d]
-        mul!(_p.ntempq, _p.nonoverlapping_K, _p.ntempp)
-    end
-    for _p in partitions
-        d = _p.ndof
-        q[d] .+= _p.ntempq
+    if partition !== nothing
+        d = partition.ndof
+        partition.ntempp .= p[d]
+        mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
+        q[d] .+= partition.ntempq
     end
     q
 end
 
-function precondition_solve!(q, Krfactor, Phi, partitions, p) 
+function precondition_global_solve!(q, Krfactor, Phi, p) 
     q .= Phi * (Krfactor \ (Phi' * p))
-    for _p in partitions
-        d = _p.odof
-        _p.otempp .= p[d]
-        ldiv!(_p.otempq, _p.overlapping_K_factor, _p.otempp)
-        q[d] .+= _p.otempq
-        # q[d] .+= (cp.pdata[i].overlapping_factor \ p[d])
+    q
+end
+
+function precondition_local_solve!(q, partition, p) 
+    q .= zero(eltype(q))
+    if partition !== nothing
+        d = partition.odof
+        partition.otempp .= p[d]
+        ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
+        q[d] .+= partition.otempq
     end
     q
 end

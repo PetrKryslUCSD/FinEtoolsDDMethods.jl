@@ -1,10 +1,9 @@
 """
-    PartitionCoNCDDModule  
+    CoNCUtilitiesModule  
 
-Module for operations on partitions of finite element models for solves based
-on the Coherent Nodal Clusters.
+Module for setting up the Coherent Nodal Clusters.
 """
-module PartitionCoNCDDModule
+module CoNCUtilitiesModule
 
 __precompile__(true)
 
@@ -84,6 +83,47 @@ function shell_cluster_partitioning(fens, fes, nelperpart = 50, crease_ang = 30/
     partitioning, npartitions
 end
 
+"""
+    patch_coordinates(panelX, list)
+
+Return an array of local coordinates for a cluster of nodes.
+
+The cluster corresponds to a patch of elements on the surface.
+"""
+function patch_coordinates(panelX, list)
+    krondelta(i, k) = i == k ? 1.0 : 0.0
+    lX = panelX[list, :]
+    center = mean(lX, dims=1)
+    for j in axes(lX, 1)
+        lX[j, :] -= center[:]
+    end
+    It = fill(0.0, 3, 3)
+    for j in axes(lX, 1)
+        r2 = dot(lX[j, :], lX[j, :])
+        for i in 1:3
+            for k in i:3
+                It[i, k] += krondelta(i, k) * r2 - lX[j, i] * lX[j, k]
+            end
+        end
+    end
+    for i in 1:3
+        for k in 1:i-1
+            It[i, k] = It[k, i]
+        end
+    end
+    @assert It == It'
+    epsol = eigen(It)
+    normal = epsol.vectors[:, 3]
+    e1 = epsol.vectors[:, 1]
+    e2 = epsol.vectors[:, 2]
+    lxy = fill(0.0, length(list), 2)
+    for j in axes(lX, 1)
+        lxy[j, 1] = dot(lX[j, :], e1)
+        lxy[j, 2] = dot(lX[j, :], e2)
+    end
+    return lxy
+end
+
 function _make_overlapping_partition(fes, n2e, overlap, element_1st_partitioning, i)
     enl = findall(x -> x == i, element_1st_partitioning)
     touched = fill(false, count(fes)) 
@@ -131,59 +171,6 @@ function fine_grid_node_lists(fens, fes, npartitions, overlap)
         push!(nodelists, _make_overlapping_partition(fes, n2e, overlap, element_1st_partitioning, i))
     end
     nodelists
-end
-
-function patch_coordinates(panelX, list)
-    krondelta(i, k) = i == k ? 1.0 : 0.0
-    lX = panelX[list, :]
-    center = mean(lX, dims=1)
-    for j in axes(lX, 1)
-        lX[j, :] -= center[:]
-    end
-    It = fill(0.0, 3, 3)
-    for j in axes(lX, 1)
-        r2 = dot(lX[j, :], lX[j, :])
-        for i in 1:3
-            for k in i:3
-                It[i, k] += krondelta(i, k) * r2 - lX[j, i] * lX[j, k]
-            end
-        end
-    end
-    for i in 1:3
-        for k in 1:i-1
-            It[i, k] = It[k, i]
-        end
-    end
-    @assert It == It'
-    epsol = eigen(It)
-    normal = epsol.vectors[:, 3]
-    e1 = epsol.vectors[:, 1]
-    e2 = epsol.vectors[:, 2]
-    lxy = fill(0.0, length(list), 2)
-    for j in axes(lX, 1)
-        lxy[j, 1] = dot(lX[j, :], e1)
-        lxy[j, 2] = dot(lX[j, :], e2)
-    end
-    return lxy
-end
-
-function fine_grid_partitions(fens, fes, nfpartitions, overlap, dofnums, fr)
-    nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
-    @assert length(nodelists) == nfpartitions
-    fpartitions = []
-    for nodelist in nodelists
-        doflist = Int[]
-        for n in nodelist
-            for d in axes(dofnums, 2)
-                if dofnums[n, d] in fr
-                    push!(doflist, dofnums[n, d])
-                end
-            end
-        end
-        part = (nodelist = nodelist, doflist = doflist)
-        push!(fpartitions, part)
-    end
-    fpartitions
 end
 
 function preconditioner(fpartitions, Phi, K)
