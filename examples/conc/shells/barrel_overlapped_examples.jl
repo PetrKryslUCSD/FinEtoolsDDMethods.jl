@@ -17,7 +17,8 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCDDModule: patch_coordinates
+using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
+using FinEtoolsDDMethods.CompatibilityModule
 using SymRCM
 using Metis
 using Test
@@ -194,7 +195,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
 
     # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
-    nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
+    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
     @assert length(nodelists) == nfpartitions
     
     partitions = []
@@ -223,34 +224,6 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         end
         q
     end
-
-    # peeksolution(iter, x) = begin
-    #     println("Iteration: $(iter)")
-    #     if iter % 10 == 0 
-    #         if iter > 10
-    #             f = "barrel_overlapped" *
-    #                 "-rf=$(ref)" *
-    #                 "-ne=$(nelperpart)" *
-    #                 "-n1=$(nbf1max)" *
-    #                 "-nf=$(nfpartitions)" *
-    #                 "-ov=$(overlap)" *
-    #                 "-cg-sol-iter$(iter-10)"
-    #             xp = DataDrop.retrieve_matrix(f * ".h5", "x")
-    #             scattersysvec!(dchi, x - xp)
-    #             VTK.vtkexportmesh("barrel-xincr-iter=$(iter).vtk", fens, fes;
-    #                 vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
-    #         end
-    #         f = "barrel_overlapped" *
-    #             "-rf=$(ref)" *
-    #             "-ne=$(nelperpart)" *
-    #             "-n1=$(nbf1max)" *
-    #             "-nf=$(nfpartitions)" *
-    #             "-ov=$(overlap)" * 
-    #             "-cg-sol-iter$(iter)"
-    #         DataDrop.empty_hdf5_file(f * ".h5")
-    #         DataDrop.store_matrix(f * ".h5", "x", x)
-    #     end
-    # end
 
     peeksolution(iter, x, resnorm) = begin
         println("Iteration: $(iter)")

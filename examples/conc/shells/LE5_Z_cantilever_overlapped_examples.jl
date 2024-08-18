@@ -26,7 +26,8 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCDDModule: patch_coordinates
+using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
+using FinEtoolsDDMethods.CompatibilityModule
 using SymRCM
 using Metis
 using Test
@@ -179,7 +180,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
     # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
-    nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
+    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
     @assert length(nodelists) == nfpartitions
     
     partitions = []
