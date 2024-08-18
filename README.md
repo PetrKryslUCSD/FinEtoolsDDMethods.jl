@@ -4,9 +4,23 @@
 
 Domain decomposition methods: solvers and algorithms used with FinEtools applications. 
 
+## Capabilities and limitations
+
+Only linear problems are addressed at the moment. `FinEtools` discretization only.
+
+- Schur-based decomposition for conjugate gradient iteration. 
+- Overlapping Schwarz two-level preconditioning of conjugate gradient iteration.
+
+Both of the above can now be expressed as MPI-parallel algorithms.
+
+## Examples
+
 Please refer to the `README` in the `examples` folder for instructions 
 on how to get the examples to run.
+
+## References
 
 Paper [submitted](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4902156) for 
 the coherent node cluster conjugate gradient preconditioner with applications 
 to almost incompressible elasticity and general shells.
+
