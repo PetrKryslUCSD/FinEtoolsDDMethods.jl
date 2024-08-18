@@ -26,6 +26,8 @@ using .PartitionCoNCDDMPIModule: partition_multiply!, precondition_global_solve!
 export CoNCPartitioningInfo, CoNCPartitionData
 export partition_multiply!, precondition_global_solve!, precondition_local_solve!
 
+include("CompatibilityModule.jl")
+
 include("cg.jl")
 
 end # module FinEtoolsDDMethods

@@ -145,7 +145,7 @@ struct CoNCPartitionData{T, IT, FACTOR}
     nonoverlapping_K::SparseMatrixCSC{T, IT}
     reduced_K::SparseMatrixCSC{T, IT}
     overlapping_K_factor::FACTOR
-    data_rhs::Vector{T}
+    rhs::Vector{T}
     ndof::Vector{IT}
     ntempq::Vector{T}
     ntempp::Vector{T}
@@ -154,7 +154,10 @@ struct CoNCPartitionData{T, IT, FACTOR}
     otempp::Vector{T}
 end
 
-function CoNCPartitionData(cpi::CPI, i, fes, Phi, make_matrix) where {CPI<:CoNCPartitioningInfo}
+function CoNCPartitionData(cpi::CPI, i, fes, Phi, 
+    make_matrix, 
+    make_interior_load = nothing
+    ) where {CPI<:CoNCPartitioningInfo}
     element_lists = cpi.element_lists
     dof_lists = cpi.dof_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
@@ -168,7 +171,11 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi, make_matrix) where {CPI<:CoNCP
     Kn_fd = Kn[fr, dr]
     # Compute the right hand side contribution
     u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
-    data_rhs = - Kn_fd * u_d
+    rhs = - Kn_fd * u_d
+    if make_interior_load !== nothing
+        rhs .+= make_interior_load(subset(fes, el))[fr]
+    end
+    # Compute contribution to the reduced matrix
     Kr_ff = Phi' * Kn_ff * Phi
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
@@ -185,7 +192,7 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi, make_matrix) where {CPI<:CoNCP
     otempp = zeros(eltype(cpi.u.values), length(odof))
     ntempq = zeros(eltype(cpi.u.values), length(ndof))
     ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), data_rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
+    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
 function partition_multiply!(q, partition, p)

@@ -6,6 +6,7 @@ using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
+using FinEtoolsDDMethods.CompatibilityModule
 using SymRCM
 using Metis
 using Test
@@ -343,7 +344,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
     # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
-    nodelists = fine_grid_node_lists(fens, fes, nfpartitions, overlap)
+    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
     @assert length(nodelists) == nfpartitions
     
     partitions = []

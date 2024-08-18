@@ -33,7 +33,8 @@ On Windows 11, the following would work:
 mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_overlapped_mpi_examples.jl
 ```
 
-## How to run a CoNC example
+
+## How to run a CoNC (sequential) example
 
 Two classes of problems solved here:
 - Three dimensional elasticity (composite of matrix with embedded fibers).
@@ -106,3 +107,14 @@ Run
 $ julia conc/shells/barrel.jl --help
 ```
 to see the available options.
+
+## How to run a CoNC (MPI-parallel) example
+
+At the moment only the heat conduction examples have been cast in this form. Try
+```
+mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_overlapped_mpi_examples.jl
+```
+
+## To do
+
+- MPI parallelization: When making the stiffness matrices of the partitions, for the shell it will be necessary to associate the geometry (normals!) with the entire geometry.

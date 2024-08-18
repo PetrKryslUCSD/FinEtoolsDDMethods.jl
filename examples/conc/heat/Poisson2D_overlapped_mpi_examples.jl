@@ -69,31 +69,34 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     List = vcat(l1, l2, l3, l4, )
     setebc!(Temp, List, true, 1, tempf(geom.values[List, :])[:])
     numberdofs!(Temp)
-    fr = dofrange(Temp, DOF_KIND_FREE)
-    dr = dofrange(Temp, DOF_KIND_DATA)
-    rank == 0 && @info("Number of free degrees of freedom: $(nfreedofs(Temp)) ($(round(time() - t1, digits=3)) [s])")
-    t1 = time()
+
     material = MatHeatDiff(thermal_conductivity)
-    femm = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
-    K = conductivity(femm, geom, Temp)
-    rank == 0 && @info("Conductivity ($(round(time() - t1, digits=3)) [s])")
-    K_ff = K[fr, fr]
-    t1 = time()
-    fi = ForceIntensity(Float64[Q])
-    F1 = distribloads(femm, geom, Temp, fi, 3)
-    rank == 0 && @info("Internal heat generation ($(round(time() - t1, digits=3)) [s])")
-    t1 = time()
-    T_d = gathersysvec(Temp, DOF_KIND_DATA)
-    F_f = (F1 .- K[:, dr] * T_d)[fr]
-    rank == 0 && @info("Right hand side ($(round(time() - t1, digits=3)) [s])")
+
+    # fr = dofrange(Temp, DOF_KIND_FREE)
+    # dr = dofrange(Temp, DOF_KIND_DATA)
+    # rank == 0 && @info("Number of free degrees of freedom: $(nfreedofs(Temp)) ($(round(time() - t1, digits=3)) [s])")
+    # t1 = time()
+    
+    # femm = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
+    # K = conductivity(femm, geom, Temp)
+    # rank == 0 && @info("Conductivity ($(round(time() - t1, digits=3)) [s])")
+    # K_ff = K[fr, fr]
+    # t1 = time()
+    # fi = ForceIntensity(Float64[Q])
+    # F1 = distribloads(femm, geom, Temp, fi, 3)
+    # rank == 0 && @info("Internal heat generation ($(round(time() - t1, digits=3)) [s])")
+    # t1 = time()
+    # T_d = gathersysvec(Temp, DOF_KIND_DATA)
+    # F_f = (F1 .- K[:, dr] * T_d)[fr]
+    # rank == 0 && @info("Right hand side ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
     rank == 0 && @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, Temp)
-    Phi_f = Phi[fr, :]
-    rank == 0 && @info("Size of the reduced problem: $(size(Phi_f, 2))")
+    Phi = Phi[freedofs(Temp), :]
+    rank == 0 && @info("Size of the reduced problem: $(size(Phi, 2))")
     rank == 0 && @info "Clustering ($(round(time() - t1, digits=3)) [s])"
 
     function make_matrix(fes)
@@ -101,25 +104,31 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
         return conductivity(femm2, geom, Temp)
     end
 
+    function make_interior_load(fes)
+        femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
+        fi = ForceIntensity(Float64[Q])
+        return distribloads(femm2, geom, Temp, fi, 3)
+    end
+
     t1 = time()
     partition = nothing
     if rank > 0
         cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
-        partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix)
+        partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix, make_interior_load)
     end    
+    MPI.Barrier(comm)
     rank == 0 && (@info "Create partitions time: $(time() - t1)")
 
     t1 = time()
-    F_f_1 = zeros(size(K_ff, 2))
+    F_f = zeros(nfreedofs(Temp))
     if rank > 0
-        F_f_1 .= partition.data_rhs
+        F_f .= partition.rhs
     end
-    MPI.Reduce!(F_f_1, MPI.SUM, comm; root=0) # Reduce the data-determined rhs
-    rank == 0 && (@show norm(F_f_1 + (K[:, dr] * T_d)[fr]))
+    MPI.Reduce!(F_f, MPI.SUM, comm; root=0) # Reduce the data-determined rhs
     rank == 0 && (@info "Compute RHS: $(time() - t1)")
     
     t1 = time()
-    Kr_ff = spzeros(size(Phi_f, 2), size(Phi_f, 2))
+    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     if rank > 0
         Kr_ff = partition.reduced_K
     end
@@ -140,7 +149,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
         (q, p) -> partition_multiply!(q, partition, p),
         F_f,
         zeros(size(F_f)),
-        (q, p) -> precondition_global_solve!(q, Krfactor, Phi_f, p), 
+        (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
         (q, p) -> precondition_local_solve!(q, partition, p);
         itmax=itmax, atol=relrestol * norm_F_f, rtol=0,
         peeksolution=peeksolution)
