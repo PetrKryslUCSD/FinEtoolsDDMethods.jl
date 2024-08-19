@@ -6,10 +6,10 @@ Domain decomposition methods: solvers and algorithms used with FinEtools applica
 
 ## Capabilities and limitations
 
-Only linear problems are addressed at the moment. `FinEtools` discretization only.
+Only linear static problems are addressed at the moment. `FinEtools` discretization only.
 
 - Schur-based decomposition for conjugate gradient iteration. 
-- Overlapping Schwarz two-level preconditioning of conjugate gradient iteration.
+- Overlapping Schwarz two-level preconditioning of conjugate gradient iteration with coherent node clusters.
 
 Both of the above can now be expressed as MPI-parallel algorithms.
 
