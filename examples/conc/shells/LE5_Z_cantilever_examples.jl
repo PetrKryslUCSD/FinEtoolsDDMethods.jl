@@ -121,13 +121,13 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    println("Refinement factor: $(ref)")
-    println("Number of elements per partition: $(nelperpart)")
-    println("Number of 1D basis functions: $(nbf1max)")
-    println("Number of fine grid partitions: $(nfpartitions)")
-    println("Overlap: $(overlap)")
-    println("Number of elements: $(count(fes))")
-    println("Number of free dofs = $(nfreedofs(dchi))")
+    @info("Refinement factor: $(ref)")
+    @info("Number of elements per partition: $(nelperpart)")
+    @info("Number of 1D basis functions: $(nbf1max)")
+    @info("Number of fine grid partitions: $(nfpartitions)")
+    @info("Overlap: $(overlap)")
+    @info("Number of elements: $(count(fes))")
+    @info("Number of free dofs = $(nfreedofs(dchi))")
 
     nl = selectnode(fens; box = Float64[10.0 10.0 1.0 1.0 0 0], tolerance = tolerance)
     loadbdry1 = FESetP1(reshape(nl, 1, 1))
@@ -150,7 +150,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
     cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
-    println("Number coarse grid partitions: $(ncpartitions)")
+    @info("Number coarse grid partitions: $(ncpartitions)")
         
     if visualize
         f = "LE5_Z_cantilever" *
@@ -169,7 +169,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     transfv(v, t, tT) = (tT * v)
     PhiT = Phi'
     Kr_ff = transfm(K_ff, Phi, PhiT)
-    println("Size of the reduced problem: $(size(Kr_ff))")
+    @info("Size of the reduced problem: $(size(Kr_ff))")
     Krfactor = lu(Kr_ff)
 
     # display(MatrixSpy.spy_matrix(sparse(Phi'), "Phi"))
@@ -200,7 +200,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     end
 
     meansize = mean([length(part.doflist) for part in partitions])
-    println("Mean fine partition size: $(meansize)")
+    @info("Mean fine partition size: $(meansize)")
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
@@ -216,7 +216,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
         (M!)=(q, p) -> M!(q, p),
         itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     t1 = time()
-    println("Number of iterations:  $(stats.niter)")
+    @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     data = Dict(
         "nfreedofs_dchi" => nfreedofs(dchi),
