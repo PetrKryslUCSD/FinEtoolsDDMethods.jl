@@ -25,7 +25,7 @@ using Statistics
 using MPI
 
 function peeksolution(iter, x, resnorm)
-    @info("Iteration: $(iter), Residual norm: $(resnorm)")
+    @info("Iteration $(iter): residual norm $(resnorm)")
 end
 
 function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relrestol, visualize)
