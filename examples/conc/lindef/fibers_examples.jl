@@ -288,15 +288,15 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     fr = dofrange(u, DOF_KIND_FREE)
     dr = dofrange(u, DOF_KIND_DATA)
     
-    println("Kind: $(string(kind))")
-    println("Materials: $(Ef), $(nuf), $(Em), $(num)")
-    println("Refinement factor: $(ref)")
-    println("Number of elements per partition: $(nelperpart)")
-    println("Number of 1D basis functions: $(nbf1max)")
-    println("Number of fine grid partitions: $(nfpartitions)")
-    println("Overlap: $(overlap)")
-    println("Number of elements: $(count(fes))")
-    println("Number of free dofs = $(nfreedofs(u))")
+    @info("Kind: $(string(kind))")
+    @info("Materials: $(Ef), $(nuf), $(Em), $(num)")
+    @info("Refinement factor: $(ref)")
+    @info("Number of elements per partition: $(nelperpart)")
+    @info("Number of 1D basis functions: $(nbf1max)")
+    @info("Number of fine grid partitions: $(nfpartitions)")
+    @info("Overlap: $(overlap)")
+    @info("Number of elements: $(count(fes))")
+    @info("Number of free dofs = $(nfreedofs(u))")
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
     el2femm = FEMMBase(IntegDomain(loadfes, boundary_rule))
@@ -316,13 +316,13 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
 
     # cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
-    # println("Number coarse grid partitions: $(ncpartitions)")
+    # @info("Number coarse grid partitions: $(ncpartitions)")
     # f = "fibers-partitioning-original"
     # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
     # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
     
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
-    println("Number of clusters (coarse grid partitions): $(ncpartitions)")
+    @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
     # f = "fibers-partitioning-new"
     # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
     # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
@@ -335,7 +335,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     transfv(v, t, tT) = (tT * v)
     PhiT = Phi'
     Kr_ff = transfm(K_ff, Phi, PhiT)
-    println("Size of the reduced problem: $(size(Kr_ff))")
+    @info("Size of the reduced problem: $(size(Kr_ff))")
     Krfactor = lu(Kr_ff)
 
     # U_f = Phi * (Krfactor \ (PhiT * F_f))
@@ -364,7 +364,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     end
 
     meansize = mean([length(part.doflist) for part in partitions])
-    println("Mean fine partition size: $(meansize)")
+    @info("Mean fine partition size: $(meansize)")
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))
@@ -380,7 +380,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         (M!)=(q, p) -> M!(q, p),
         itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
     t1 = time()
-    println("Number of iterations:  $(stats.niter)")
+    @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     data = Dict(
         "nfreedofs_u" => nfreedofs(u),
