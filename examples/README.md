@@ -110,11 +110,11 @@ to see the available options.
 
 ## How to run a CoNC (MPI-parallel) example
 
-At the moment only the heat conduction examples have been cast in this form. Try
+At the moment only the heat conduction and shell analysis examples have been cast in this form. Try
 ```
 mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
-
-## To do
-
-- MPI parallelization: When making the stiffness matrices of the partitions, for the shell it will be necessary to associate the geometry (normals!) with the entire geometry.
+or
+```
+mpiexec -n 5 julia --project=. .\conc\shells\barrel_mpi_driver.jl
+```
