@@ -7,7 +7,7 @@ on the complement matrix. Some of the examples are parallelized with MPI.
 - `conc`: coherent node cluster (CoNC) model reduction is used as a global solver in a preconditioned conjugate gradient based on the decomposition at two levels:
 local (classical additive Schwarz based on overlapping subdomains), and global (reduced model based on coherent clusters). The examples do not run in parallel yet.
 
-## How to run a parallel example
+## How to run a Schur-complement CG parallel example
 
 Please do:
 
@@ -34,7 +34,7 @@ mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
 
 
-## How to run a CoNC (sequential) example
+## How to run a CoNC-preconditioned CG (sequential) example
 
 Two classes of problems solved here:
 - Three dimensional elasticity (composite of matrix with embedded fibers).
@@ -108,7 +108,7 @@ $ julia conc/shells/barrel.jl --help
 ```
 to see the available options.
 
-## How to run a CoNC (MPI-parallel) example
+## How to run a CoNC-preconditioned CG (MPI-parallel) example
 
 At the moment only the heat conduction and shell analysis examples have been cast in this form. Try
 ```
