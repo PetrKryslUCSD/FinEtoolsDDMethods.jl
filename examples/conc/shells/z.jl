@@ -52,11 +52,11 @@ end
 
 p = parse_commandline()
 
-include(raw"LE5_Z_cantilever_overlapped_examples.jl")
-using .LE5_Z_cantilever_overlapped_examples; 
+include(raw"LE5_Z_cantilever_examples.jl")
+using .LE5_Z_cantilever_examples; 
 
 
-LE5_Z_cantilever_overlapped_examples.test(;
+LE5_Z_cantilever_examples.test(;
     aspect=p["aspect"], nelperpart=p["nelperpart"], nbf1max=p["nbf1max"],
     nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"],
     itmax=p["itmax"], relrestol=p["relrestol"],

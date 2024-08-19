@@ -30,7 +30,7 @@ Note the folder where the executable is installed.
 
 On Windows 11, the following would work:
 ```
-mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_overlapped_mpi_examples.jl
+mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
 
 
@@ -112,7 +112,7 @@ to see the available options.
 
 At the moment only the heat conduction examples have been cast in this form. Try
 ```
-mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_overlapped_mpi_examples.jl
+mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
 
 ## To do

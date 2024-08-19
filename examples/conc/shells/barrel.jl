@@ -52,11 +52,11 @@ end
 
 p = parse_commandline()
 
-include(raw"barrel_overlapped_examples.jl")
-using .barrel_overlapped_examples; 
+include(raw"barrel_examples.jl")
+using .barrel_examples; 
 
 
-barrel_overlapped_examples.test(;
+barrel_examples.test(;
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"],
     nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"],
     itmax=p["itmax"], relrestol=p["relrestol"],

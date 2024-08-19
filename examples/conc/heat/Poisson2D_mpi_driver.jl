@@ -4,10 +4,10 @@ http://www.codeproject.com/Articles/579983/Finite-Element-programming-in-Julia:
 Unit cube, with known temperature distribution along the boundary,
 and uniform heat generation rate inside.
 
-Solution with domain decomposition.
-Version: 08/16/2024
+Solution with domain decomposition and MPI.
+Version: 08/19/2024
 """
-module Poisson2D_overlapped_mpi_examples
+module Poisson2D_mpi_driver
 using FinEtools
 using FinEtools.AlgoBaseModule: solve_blocked!, matrix_blocked, vector_blocked
 using FinEtools.AssemblyModule
@@ -71,24 +71,6 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     numberdofs!(Temp)
 
     material = MatHeatDiff(thermal_conductivity)
-
-    # fr = dofrange(Temp, DOF_KIND_FREE)
-    # dr = dofrange(Temp, DOF_KIND_DATA)
-    # rank == 0 && @info("Number of free degrees of freedom: $(nfreedofs(Temp)) ($(round(time() - t1, digits=3)) [s])")
-    # t1 = time()
-    
-    # femm = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
-    # K = conductivity(femm, geom, Temp)
-    # rank == 0 && @info("Conductivity ($(round(time() - t1, digits=3)) [s])")
-    # K_ff = K[fr, fr]
-    # t1 = time()
-    # fi = ForceIntensity(Float64[Q])
-    # F1 = distribloads(femm, geom, Temp, fi, 3)
-    # rank == 0 && @info("Internal heat generation ($(round(time() - t1, digits=3)) [s])")
-    # t1 = time()
-    # T_d = gathersysvec(Temp, DOF_KIND_DATA)
-    # F_f = (F1 .- K[:, dr] * T_d)[fr]
-    # rank == 0 && @info("Right hand side ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
@@ -171,7 +153,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
             geometry = xyz3(fens)
             geometry[:, 3] .= Temp.values
             fens.xyz = geometry
-            File = "Poisson2D_overlapped_examples-sol.vtk"
+            File = "Poisson2D_examples-sol.vtk"
             MeshExportModule.VTK.vtkexportmesh(File, fens, fes; scalars=[("Temp", Temp.values)])
         end
     end
@@ -200,4 +182,4 @@ end
 test()
 
 nothing
-end # module Poisson2D_overlapped_examples
+end # module Poisson2D_mpi_driver

@@ -4,7 +4,7 @@ for rf in 1; do
         for n1 in 4 5 6; do
             for ne in $(seq 200 400 1000); do
                 for ov in 1 3 5; do
-                    jsonfile=barrel_overlapped-rf=$rf-ne=$ne-n1=$n1-nf=$nf-ov=$ov.json
+                    jsonfile=barrel-rf=$rf-ne=$ne-n1=$n1-nf=$nf-ov=$ov.json
                     if [ -f ${jsonfile} ]; then
                         echo "${jsonfile} exists" 
                     else
