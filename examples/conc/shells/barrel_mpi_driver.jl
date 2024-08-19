@@ -7,7 +7,7 @@ creases in the surface, and junctions with more than two shell faces joined
 along a an intersection.
 
 """
-module barrel_overlapped_examples
+module barrel_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK, VTKWrite
 using FinEtoolsDeforLinear
@@ -16,9 +16,9 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq
+using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
+using FinEtoolsDDMethods.PartitionCoNCDDMPIModule
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.CompatibilityModule
 using SymRCM
 using Metis
 using Test
@@ -35,6 +35,7 @@ using DataDrop
 using ILUZero
 using Statistics
 using ShellStructureTopo: make_topo_faces, create_partitions
+using MPI
 
 # using MatrixSpy
 
@@ -68,6 +69,16 @@ end
 function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
     CTE = 0.0
         
+    MPI.Init()
+    comm = MPI.COMM_WORLD
+    rank = MPI.Comm_rank(comm)
+    nprocs = MPI.Comm_size(comm)
+
+    nfpartitions = nprocs - 1
+
+    rank == 0 && (@info "Number of processes: $nprocs")
+    rank == 0 && (@info "Number of partitions: $nfpartitions")
+
     if !isfile(joinpath(dirname(@__FILE__()), input))
         success(run(`unzip -qq -d $(dirname(@__FILE__())) $(joinpath(dirname(@__FILE__()), "barrel_w_stiffeners-s3-mesh.zip"))`; wait = false))
     end
@@ -144,13 +155,13 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    println("Refinement factor: $(ref)")
-    println("Number of elements per partition: $(nelperpart)")
-    println("Number of 1D basis functions: $(nbf1max)")
-    println("Number of fine grid partitions: $(nfpartitions)")
-    println("Overlap: $(overlap)")
-    println("Number of elements: $(count(fes))")
-    println("Number of free dofs = $(nfreedofs(dchi))")
+    rank == 0 && (@info("Refinement factor: $(ref)"))
+    rank == 0 && (@info("Number of elements per partition: $(nelperpart)"))
+    rank == 0 && (@info("Number of 1D basis functions: $(nbf1max)"))
+    rank == 0 && (@info("Number of fine grid partitions: $(nfpartitions)"))
+    rank == 0 && (@info("Overlap: $(overlap)"))
+    rank == 0 && (@info("Number of elements: $(count(fes))"))
+    rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
 
     lfemm = FEMMBase(IntegDomain(subset(fes, vessel), TriRule(3)))
     fi = ForceIntensity(Float64, 6, computetrac!);
@@ -158,114 +169,75 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
-    K = stiffness(femm, geom0, u0, Rfield0, dchi);
-    K_ff = K[fr, fr]
-
-    # scattersysvec!(dchi, F, DOF_KIND_ALL)
-    # VTK.vtkexportmesh("forces.vtk", fens, fes; vectors=[("F", deepcopy(dchi.values[:, 1:3]),)])   
-    # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
-
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.shell_cluster_partitioning(fens, fes, nelperpart)
-    println("Number of clusters (coarse grid partitions): $(ncpartitions)")
-        
-    if visualize
-        f = "barrel_overlapped" *
-            "-rf=$(ref)" *
-            "-ne=$(nelperpart)" * "-partitioning"
-        partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-        vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
-        # @async run(`"paraview.exe" $File`)
-    end
-       
     
+    cpartitioning, ncpartitions = FinEtoolsDDMethods.shell_cluster_partitioning(fens, fes, nelperpart)
+    rank == 0 && (@info("Number of clusters (coarse grid partitions): $(ncpartitions)"))
+        
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
-    transfm(m, t, tT) = (tT * m * t)
-    transfv(v, t, tT) = (tT * v)
-    PhiT = Phi'
-    Kr_ff = transfm(K_ff, Phi, PhiT)
-    println("Size of the reduced problem: $(size(Kr_ff))")
-    Krfactor = lu(Kr_ff)
-
-    # display(MatrixSpy.spy_matrix(sparse(Phi'), "Phi"))
-
-    # U_f = Phi * (Krfactor \ (PhiT * F_f))
-    # scattersysvec!(u, U_f)
-
-    # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
-    
-    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
-    @assert length(nodelists) == nfpartitions
-    
-    partitions = []
-    for nodelist in nodelists
-        doflist = Int[]
-        for n in nodelist
-            for d in axes(dchi.dofnums, 2)
-                if dchi.dofnums[n, d] in fr
-                    push!(doflist, dchi.dofnums[n, d])
-                end
-            end
-        end
-        pK = K[doflist, doflist]
-        pKfactor = lu(pK)
-        part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
-        push!(partitions, part)
+    rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
+        
+    function make_matrix(fes)
+        femm.integdomain.fes = fes
+        return stiffness(femm, geom0, u0, Rfield0, dchi);
     end
 
-    meansize = mean([length(part.doflist) for part in partitions])
-    println("Mean fine partition size: $(meansize)")
-
-    function M!(q, p)
-        q .= Phi * (Krfactor \ (PhiT * p))
-        for part in partitions
-            q[part.doflist] .+= (part.factor \ p[part.doflist])
-        end
-        q
-    end
+    t1 = time()
+    partition = nothing
+    if rank > 0
+        cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
+        partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix, nothing)
+    end    
+    MPI.Barrier(comm)
+    rank == 0 && (@info "Create partitions time: $(time() - t1)")
 
     peeksolution(iter, x, resnorm) = begin
-        println("Iteration: $(iter)")
-        println("Residual Norm: $(resnorm)")
+        rank == 0 && (@info("Iteration: $(iter)"))
+        rank == 0 && (@info("Residual Norm: $(resnorm)"))
     end
 
-    t0 = time()
-    norm_F_f = norm(F_f)
-    (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> M!(q, p),
-        peeksolution=peeksolution,
-        itmax=itmax, atol= relrestol * norm_F_f, rtol=0)
     t1 = time()
-    println("Number of iterations:  $(stats.niter)")
-    stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
-    data = Dict(
-        "nfreedofs_dchi" => nfreedofs(dchi),
-        "ncpartitions" => ncpartitions,
-        "nfpartitions" => nfpartitions,
-        "overlap" => overlap,
-        "size_Kr_ff" => size(Kr_ff),
-        "stats" => stats,
-        "time" => t1 - t0,
-    )
-    f = "barrel_overlapped" *
-        "-rf=$(ref)" *
-        "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)"  * 
-        "-nf=$(nfpartitions)"  * 
-        "-ov=$(overlap)"  
-    DataDrop.store_json(f * ".json", data)
-    scattersysvec!(dchi, u_f)
+    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
+    if rank > 0
+        Kr_ff = partition.reduced_K
+    end
+    ks = MPI.gather(Kr_ff, comm; root=0)
+    if rank == 0
+        for k in ks
+            Kr_ff += k
+        end
+        Krfactor = lu(Kr_ff)
+    end
+    rank == 0 && (@info "Create global factor: $(time() - t1)")
     
+    t1 = time()
+    norm_F_f = norm(F_f) 
+    (u_f, stats) = pcg_mpi_2level_Schwarz(
+        comm, 
+        rank,
+        (q, p) -> partition_multiply!(q, partition, p),
+        F_f,
+        zeros(size(F_f)),
+        (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
+        (q, p) -> precondition_local_solve!(q, partition, p);
+        itmax=itmax, atol=relrestol * norm_F_f, rtol=0,
+        peeksolution=peeksolution)
+
+    rank == 0 && @info("Number of iterations:  $(stats.niter)")
+    stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
+    scattersysvec!(dchi, u_f, DOF_KIND_FREE)
+    rank == 0 && @info("Solution ($(round(time() - t1, digits=3)) [s])")
+
     if visualize
-        # f = "barrel_overlapped" *
+        # f = "barrel" *
         #     "-rf=$(ref)" *
         #     "-ne=$(nelperpart)" *
         #     "-n1=$(nbf1max)" * 
         #     "-nf=$(nfpartitions)"  * 
         #     "-cg-sol"
         # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        VTK.vtkexportmesh("barrel_overlapped-sol.vtk", fens, fes;
+        VTK.vtkexportmesh("barrel-sol.vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
 
         p = 1
@@ -284,6 +256,8 @@ end
 function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
     _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
 end
+
+test()
 
 nothing
 end # module

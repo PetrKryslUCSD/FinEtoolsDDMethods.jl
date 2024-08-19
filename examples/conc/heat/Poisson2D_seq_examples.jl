@@ -5,9 +5,9 @@ Unit cube, with known temperature distribution along the boundary,
 and uniform heat generation rate inside.
 
 Solution with domain decomposition. Sequential execution.
-Version: 08/18/2024
+Version: 08/19/2024
 """
-module Poisson2D_overlapped_seq_examples
+module Poisson2D_seq_examples
 using FinEtools
 using FinEtools.AlgoBaseModule: solve_blocked!, matrix_blocked, vector_blocked
 using FinEtools.AssemblyModule
@@ -127,4 +127,4 @@ function test(; kind = "Q8", N = 25, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, 
 end
 
 nothing
-end # module Poisson2D_overlapped_examples
+end # module Poisson2D_examples

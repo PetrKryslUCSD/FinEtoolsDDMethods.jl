@@ -1,4 +1,4 @@
-module cos_2t_press_hyperboloid_free_overlapped_examples
+module cos_2t_press_hyperboloid_free_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
@@ -197,7 +197,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "cos_2t_press_hyperboloid_free_overlapped" *
+    f = "cos_2t_press_hyperboloid_free" *
         "-as=$(aspect)" *
         "-rf=$(ref)" *
         "-ne=$(nelperpart)" *

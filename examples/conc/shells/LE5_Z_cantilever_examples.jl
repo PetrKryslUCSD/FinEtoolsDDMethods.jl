@@ -16,7 +16,7 @@ NAFEMS REFERENCE SOLUTION
 
 Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 """
-module LE5_Z_cantilever_overlapped_examples
+module LE5_Z_cantilever_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
@@ -153,7 +153,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     println("Number coarse grid partitions: $(ncpartitions)")
         
     if visualize
-        f = "LE5_Z_cantilever_overlapped" *
+        f = "LE5_Z_cantilever" *
             "-rf=$(ref)" *
             "-ne=$(nelperpart)" * "-partitioning"
         partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
@@ -227,7 +227,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "LE5_Z_cantilever_overlapped" *
+    f = "LE5_Z_cantilever" *
         "-as=$(aspect)" *
         "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
@@ -238,7 +238,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     scattersysvec!(dchi, u_f)
     
     if visualize
-        # f = "LE5_Z_cantilever_overlapped" *
+        # f = "LE5_Z_cantilever" *
         #     "-rf=$(ref)" *
         #     "-ne=$(nelperpart)" *
         #     "-n1=$(nbf1max)" * 

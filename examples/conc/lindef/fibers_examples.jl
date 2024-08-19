@@ -1,4 +1,4 @@
-module fibers_overlapped_condition_examples
+module fibers_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtools.MeshExportModule: CSV
@@ -6,6 +6,7 @@ using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
+using FinEtoolsDDMethods.CompatibilityModule
 using SymRCM
 using Metis
 using Test
@@ -20,7 +21,6 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-using Arpack
 
 function rotate(fens)
     Q = [cos(pi/2) -sin(pi/2); sin(pi/2) cos(pi/2)]
@@ -309,13 +309,25 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
-    # M = mass(femm, geom, u)
-    # M_ff = M[fr, fr]
-    M_ff = spdiagm(ones(size(K_ff, 1))) # mass matrix is the identity matrix
 
+    # U_f = K_ff \ F_f
+    # scattersysvec!(u, U_f)
+
+    # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
+
+    # cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
+    # println("Number coarse grid partitions: $(ncpartitions)")
+    # f = "fibers-partitioning-original"
+    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
+    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
+    
     cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
     println("Number of clusters (coarse grid partitions): $(ncpartitions)")
- 
+    # f = "fibers-partitioning-new"
+    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
+    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
+    # @async run(`"paraview.exe" $File`)
+    
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, u)
     Phi = Phi[fr, :]
@@ -323,68 +335,92 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     transfv(v, t, tT) = (tT * v)
     PhiT = Phi'
     Kr_ff = transfm(K_ff, Phi, PhiT)
-    Mr_ff = transfm(M_ff, Phi, PhiT)
     println("Size of the reduced problem: $(size(Kr_ff))")
+    Krfactor = lu(Kr_ff)
+
+    # U_f = Phi * (Krfactor \ (PhiT * F_f))
+    # scattersysvec!(u, U_f)
+
+    # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
-    neigvs = 20
-
-    d, v, nconv = Arpack.eigs(
-        # Symmetric(K_ff);
-        Symmetric(K_ff), Symmetric(M_ff);
-        nev=neigvs,
-        which=:SM,
-        explicittransform=:none,
-        check=1,
-    )
-    @show d
-    if visualize
-        vectors = []
-        for i = 1:neigvs
-            scattersysvec!(u, v[:, i])
-            push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+    # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
+    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
+    @assert length(nodelists) == nfpartitions
+    
+    partitions = []
+    for nodelist in nodelists
+        doflist = Int[]
+        for n in nodelist
+            for d in axes(u.dofnums, 2)
+                if u.dofnums[n, d] in fr
+                    push!(doflist, u.dofnums[n, d])
+                end
+            end
         end
-        File = "fibers_overlapped_condition-full" *
-               "-rf=$(ref)" *
-               ".vtk"
-        vtkexportmesh(
-            File, fens, fes;
-            vectors=vectors,
-        )
+        pK = K[doflist, doflist]
+        pKfactor = lu(pK)
+        part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
+        push!(partitions, part)
     end
 
-    # @show eigvals(Matrix(Mr_ff))
+    meansize = mean([length(part.doflist) for part in partitions])
+    println("Mean fine partition size: $(meansize)")
 
-    # DataDrop.empty_hdf5_file("Kr_ff.h5")
-    # DataDrop.store_matrix("Kr_ff.h5", Kr_ff)
-    # DataDrop.empty_hdf5_file("Mr_ff.h5")
-    # DataDrop.store_matrix("Mr_ff.h5", Mr_ff)
-
-    d, v, nconv = Arpack.eigs(
-        # Symmetric(Kr_ff);
-        Symmetric(Kr_ff), Symmetric(Mr_ff);
-        nev=neigvs,
-        which=:SM,
-        explicittransform=:none,
-        check=1,
-    )
-    @show d
-    if visualize
-        vectors = []
-        for i = 1:neigvs
-            scattersysvec!(u, Phi * v[:, i])
-            push!(vectors, ("Mode_$(i)_$(d[i])", deepcopy(u.values)))
+    function M!(q, p)
+        q .= Phi * (Krfactor \ (PhiT * p))
+        for part in partitions
+            q[part.doflist] .+= (part.factor \ p[part.doflist])
         end
-        File = "fibers_overlapped_condition-red" *
-               "-rf=$(ref)" *
-               "-ne=$(nelperpart)" *
-               "-n1=$(nbf1max)" *
-               ".vtk"
-        vtkexportmesh(
-            File, fens, fes;
-            vectors=vectors,
-        )
+        q
     end
 
+    t0 = time()
+    norm_F_f = norm(F_f)
+    (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
+        (M!)=(q, p) -> M!(q, p),
+        itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
+    t1 = time()
+    println("Number of iterations:  $(stats.niter)")
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
+    data = Dict(
+        "nfreedofs_u" => nfreedofs(u),
+        "ncpartitions" => ncpartitions,
+        "nfpartitions" => nfpartitions,
+        "overlap" => overlap,
+        "size_Kr_ff" => size(Kr_ff),
+        "stats" => stats,
+        "time" => t1 - t0,
+    )
+    f = "fibers-$(label)-$(string(kind))" *
+        "-rf=$(ref)" *
+        "-ne=$(nelperpart)" *
+        "-n1=$(nbf1max)"  * 
+        "-nf=$(nfpartitions)"  * 
+        "-ov=$(overlap)"  
+    DataDrop.store_json(f * ".json", data)
+    scattersysvec!(u, u_f)
+
+    if visualize
+        f = "fibers-$(label)-$(string(kind))" *
+            "-rf=$(ref)" *
+            "-ne=$(nelperpart)" *
+            "-n1=$(nbf1max)" *
+            "-nf=$(nfpartitions)" *
+            "-cg-sol"
+        VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
+        
+        p = 1
+        for nodelist in nodelists
+            cel = connectedelems(fes, nodelist, count(fens))
+            f = "fibers-$(label)-$(string(kind))" *
+            "-rf=$(ref)" *
+            "-nf=$(nfpartitions)" *
+            "-p=$p"
+            vtkexportmesh(f * ".vtk", fens, subset(fes, cel))
+            p += 1
+        end
+    end
+    
     true
 end
 # test(ref = 1)
