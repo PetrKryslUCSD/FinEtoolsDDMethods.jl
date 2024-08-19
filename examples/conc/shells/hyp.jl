@@ -52,11 +52,11 @@ end
 
 p = parse_commandline()
 
-include(raw"cos_2t_press_hyperboloid_free_examples.jl")
-using .cos_2t_press_hyperboloid_free_examples; 
+include(raw"cos_2t_p_hyp_free_examples.jl")
+using .cos_2t_p_hyp_free_examples; 
 
 
-cos_2t_press_hyperboloid_free_examples.test(;
+cos_2t_p_hyp_free_examples.test(;
     aspect=p["aspect"], nelperpart=p["nelperpart"], nbf1max=p["nbf1max"],
     nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"],
     itmax=p["itmax"], relrestol=p["relrestol"],

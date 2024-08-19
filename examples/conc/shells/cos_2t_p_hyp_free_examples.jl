@@ -1,4 +1,4 @@
-module cos_2t_press_hyperboloid_free_examples
+module cos_2t_p_hyp_free_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
@@ -129,7 +129,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
         
     if visualize
         partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-        vtkexportmesh("cos_2t_press_hyperboloid_free-clusters.vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
+        vtkexportmesh("cos_2t_p_hyp_free-clusters.vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
     end
     
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
@@ -197,7 +197,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "cos_2t_press_hyperboloid_free" *
+    f = "cos_2t_p_hyp_free" *
         "-as=$(aspect)" *
         "-rf=$(ref)" *
         "-ne=$(nelperpart)" *
@@ -208,15 +208,15 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     scattersysvec!(dchi, u_f)
     
     if visualize
-        VTK.vtkexportmesh("cos_2t_press_hyperboloid_free-sol.vtk", fens, fes;
+        VTK.vtkexportmesh("cos_2t_p_hyp_free-sol.vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
 
         p = 1
         for nodelist in nodelists
             cel = connectedelems(fes, nodelist, count(fens))
-            vtkexportmesh("cos_2t_press_hyperboloid_free-subdomain-patch$(p).vtk", fens, subset(fes, cel))
+            vtkexportmesh("cos_2t_p_hyp_free-subdomain-patch$(p).vtk", fens, subset(fes, cel))
             sfes = FESetP1(reshape(nodelist, length(nodelist), 1))
-            vtkexportmesh("cos_2t_press_hyperboloid_free-subdomain-nodes$(p).vtk", fens, sfes)
+            vtkexportmesh("cos_2t_p_hyp_free-subdomain-nodes$(p).vtk", fens, sfes)
             p += 1
         end
     end

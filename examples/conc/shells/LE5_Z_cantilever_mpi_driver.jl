@@ -1,15 +1,24 @@
 """
-Free vibration of steel barrel
+MODEL DESCRIPTION
 
-The structure represents a barrel container with spherical caps, two T
-stiffeners, and edge stiffener. This example tests the ability to represent
-creases in the surface, and junctions with more than two shell faces joined
-along a an intersection.
+Z-section cantilever under torsional loading.
 
+Linear elastic analysis, Young's modulus = 210 GPa, Poisson's ratio = 0.3.
+
+All displacements are fixed at X=0.
+
+Torque of 1.2 MN-m applied at X=10. The torque is applied by two 
+uniformly distributed shear loads of 0.6 MN at each flange surface.
+
+Objective of the analysis is to compute the axial stress at X = 2.5 from fixed end.
+
+NAFEMS REFERENCE SOLUTION
+
+Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 """
-module barrel_examples
+module LE5_Z_cantilever_mpi_driver
 using FinEtools
-using FinEtools.MeshExportModule: VTK, VTKWrite
+using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
 using FinEtoolsFlexStructures.FESetShellT3Module: FESetShellT3
 using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
@@ -33,10 +42,8 @@ import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
-using ILUZero
 using Statistics
-using ShellStructureTopo: make_topo_faces, create_partitions
-
+using ShellStructureTopo: create_partitions
 
 # using MatrixSpy
 
@@ -50,26 +57,29 @@ function zcant!(csmatout, XYZ, tangents, feid, qpid)
 end
 
 # Parameters:
-E = 200e3 * phun("MPa")
+E = 210e9
 nu = 0.3
-rho = 7850 * phun("KG/M^3")
-thickness = 2.0 * phun("mm")
-pressure = 100.0 * phun("kilo*Pa")
-
-input = "barrel_w_stiffeners-s3.h5mesh"
-# input = "barrel_w_stiffeners-100.inp"
+L = 10.0
+input = "nle5xf3c.inp"
 
 function computetrac!(forceout, XYZ, tangents, feid, qpid)
+    r = vec(XYZ); r[2] = 0.0
+    r .= vec(r)/norm(vec(r))
+    theta = atan(r[3], r[1])
     n = cross(tangents[:, 1], tangents[:, 2]) 
     n = n/norm(n)
-    forceout[1:3] = n*pressure
+    forceout[1:3] = n*pressure*cos(2*theta)
     forceout[4:6] .= 0.0
+    # @show dot(n, forceout[1:3])
     return forceout
 end
 
-function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
+function _execute(ncoarse, aspect, nelperpart, nbf1max, overlap, ref, itmax, relrestol, visualize)
     CTE = 0.0
-        
+    distortion = 0.0
+    n = ncoarse  * ref    # number of elements along the edge of the block
+    thickness = 0.1
+    
     MPI.Init()
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
@@ -80,43 +90,18 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     rank == 0 && (@info "Number of processes: $nprocs")
     rank == 0 && (@info "Number of partitions: $nfpartitions")
 
-    if !isfile(joinpath(dirname(@__FILE__()), input))
-        success(run(`unzip -qq -d $(dirname(@__FILE__())) $(joinpath(dirname(@__FILE__()), "barrel_w_stiffeners-s3-mesh.zip"))`; wait = false))
-    end
-    output = FinEtools.MeshImportModule.import_H5MESH(joinpath(dirname(@__FILE__()), input))
-    fens, fes  = output["fens"], output["fesets"][1]
-    fens.xyz .*= phun("mm");
-
-    box = boundingbox(fens.xyz)
-    middle = [(box[2] + box[1])/2, (box[4] + box[3])/2, (box[6] + box[5])/2]
-    fens.xyz[:, 1] .-= middle[1]
-    fens.xyz[:, 2] .-= middle[2]
-    fens.xyz[:, 3] .-= middle[3]
-
-    # output = import_ABAQUS(joinpath(dirname(@__FILE__()), input))
-    # fens = output["fens"]
-    # fes = output["fesets"][1]
+    tolerance = thickness/1000
+    output = import_ABAQUS(joinpath(dirname(@__FILE__()), input))
+    fens = output["fens"]
+    fes = output["fesets"][1]
 
     connected = findunconnnodes(fens, fes);
     fens, new_numbering = compactnodes(fens, connected);
     fes = renumberconn!(fes, new_numbering);
 
-    fens, fes = make_topo_faces(fens, fes)
-    unique_surfaces =  unique(fes.label)
-    # for i in 1:length(unique_surfaces)
-    #     el = selectelem(fens, fes, label = unique_surfaces[i])
-    #     VTKWrite.vtkwrite("surface-$(unique_surfaces[i]).vtk", fens, subset(fes, el))
-    # end
-    # return
-    vessel = []
-    for i in [1, 2, 6, 7, 8]
-        el = selectelem(fens, fes, label = unique_surfaces[i])
-        append!(vessel, el)
+    for r in 1:ref
+        fens, fes = T3refine(fens, fes)
     end
-
-    # for r in 1:ref
-    #     fens, fes = T3refine(fens, fes)
-    # end
     
     MR = DeforModelRed3D
     mater = MatDeforElastIso(MR, 0.0, E, nu, CTE)
@@ -136,19 +121,10 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     dchi = NodalField(zeros(size(fens.xyz,1), 6))
 
     # Apply EBC's
-    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf 0 0], inflate = 0.01)
-    for i in [1, 3, 4, 5, 6]
-        setebc!(dchi, [l1[1], l1[end]], true, i)
-    end
-    l1 = selectnode(fens; box = Float64[-Inf Inf 0 0 -Inf Inf], inflate = 0.01)
-    for i in [2]
-        setebc!(dchi, l1[1:1], true, i)
-    end
-    if stabilize
-        l1 = selectnode(fens; box = Float64[0 0 0 0 -Inf Inf], inflate = 0.02)
-        for i in [1, ]
-            setebc!(dchi, l1[1:1], true, i)
-        end
+    # plane of symmetry perpendicular to Z
+    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf -Inf Inf], inflate = tolerance)
+    for i in [1,2,3,]
+        setebc!(dchi, l1, true, i)
     end
     applyebc!(dchi)
     numberdofs!(dchi);
@@ -164,21 +140,28 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     rank == 0 && (@info("Number of elements: $(count(fes))"))
     rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
 
-    lfemm = FEMMBase(IntegDomain(subset(fes, vessel), TriRule(3)))
-    fi = ForceIntensity(Float64, 6, computetrac!);
-    F = distribloads(lfemm, geom0, dchi, fi, 2);
+    nl = selectnode(fens; box = Float64[10.0 10.0 1.0 1.0 0 0], tolerance = tolerance)
+    loadbdry1 = FESetP1(reshape(nl, 1, 1))
+    lfemm1 = FEMMBase(IntegDomain(loadbdry1, PointRule()))
+    fi1 = ForceIntensity(Float64[0, 0, +0.6e6, 0, 0, 0]);
+    nl = selectnode(fens; box = Float64[10.0 10.0 -1.0 -1.0 0 0], tolerance = tolerance)
+    loadbdry2 = FESetP1(reshape(nl, 1, 1))
+    lfemm2 = FEMMBase(IntegDomain(loadbdry2, PointRule()))
+    fi2 = ForceIntensity(Float64[0, 0, -0.6e6, 0, 0, 0]);
+    F = distribloads(lfemm1, geom0, dchi, fi1, 3) + distribloads(lfemm2, geom0, dchi, fi2, 3);
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
-    
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.shell_cluster_partitioning(fens, fes, nelperpart)
+   
+    cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
     rank == 0 && (@info("Number of clusters (coarse grid partitions): $(ncpartitions)"))
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
     rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
-        
+    
+
     function make_matrix(fes)
         femm.integdomain.fes = fes
         return stiffness(femm, geom0, u0, Rfield0, dchi);
@@ -228,14 +211,14 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
     scattersysvec!(dchi, u_f, DOF_KIND_FREE)
     rank == 0 && @info("Solution ($(round(time() - t1, digits=3)) [s])")
-
+    
     MPI.Finalize()
     
     true
 end
 
-function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
-    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
+function test(;aspect = 100, nelperpart = 200, nbf1max = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false) 
+    _execute(32, aspect, nelperpart, nbf1max, overlap, ref, itmax, relrestol, visualize)
 end
 
 test()
