@@ -17,6 +17,10 @@ Please do:
 using MPIPreferences
 MPIPreferences.use_jll_binary("OpenMPI_jll")
 ```
+Or, use the trampoline
+```
+MPIPreferences.use_jll_binary( "MPItrampoline_jll")
+```
 - Install the helper script `mpiexecjl`
 ```
 using MPI

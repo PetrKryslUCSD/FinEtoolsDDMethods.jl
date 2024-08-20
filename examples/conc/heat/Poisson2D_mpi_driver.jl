@@ -99,7 +99,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
         partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix, make_interior_load)
     end    
     MPI.Barrier(comm)
-    rank == 0 && (@info "Create partitions time: $(time() - t1)")
+    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     F_f = zeros(nfreedofs(Temp))
@@ -107,7 +107,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
         F_f .= partition.rhs
     end
     MPI.Reduce!(F_f, MPI.SUM, comm; root=0) # Reduce the data-determined rhs
-    rank == 0 && (@info "Compute RHS: $(time() - t1)")
+    rank == 0 && (@info "Compute RHS ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
@@ -121,7 +121,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
         end
         Krfactor = lu(Kr_ff)
     end
-    rank == 0 && (@info "Create global factor: $(time() - t1)")
+    rank == 0 && (@info "Create global factor ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
     norm_F_f = norm(F_f) 

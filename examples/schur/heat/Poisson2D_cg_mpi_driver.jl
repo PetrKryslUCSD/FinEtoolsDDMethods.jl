@@ -55,7 +55,7 @@ function test()
     fens, fes = T3block(A, A, N, N)
     geom = NodalField(fens.xyz)
     Temp = NodalField(zeros(count(fens), 1))
-    rank == 0 && (@info "Mesh generation time: $(time() - t1)")
+    rank == 0 && (@info "Mesh generation ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
     femm = FEMMBase(IntegDomain(fes, TriRule(1)))
@@ -75,7 +75,7 @@ function test()
     setebc!(Temp, List, true, 1, tempf(geom.values[List, :])[:])
     applyebc!(Temp)
     numberdofs!(Temp, 1:count(fens), [DOF_KIND_FREE, DOF_KIND_INTERFACE, DOF_KIND_DATA])
-    rank == 0 && (@info "Partitioning, boundary condition time: $(time() - t1)")
+    rank == 0 && (@info "Partitioning, boundary condition ($(round(time() - t1, digits=3)) [s])")
 
     material = MatHeatDiff(thermal_conductivity)
 
@@ -110,7 +110,7 @@ function test()
                 )
     end
     
-    rank == 0 && (@info "Create partitions time: $(time() - t1)")
+    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     rank == 0 && (@info "Building the right hand side")
@@ -119,7 +119,7 @@ function test()
     rank > 0 && assemble_rhs!(b, partition)
     MPI.Reduce!(b, MPI.SUM, comm; root=0)
     
-    rank == 0 && (@info "Build rhs time: $(time() - t1)")
+    rank == 0 && (@info "Build rhs ($(round(time() - t1, digits=3)) [s])")
     
     rank == 0 && (@info "Building the preconditioner")
     K_ii = spzeros(size(b, 1), size(b, 1))
@@ -133,7 +133,7 @@ function test()
         end
     end
     K_ii_factor = ilu0(K_ii)
-    rank == 0 && (@info "Preconditioner time: $(time() - t1)")
+    rank == 0 && (@info "Preconditioner ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
     rank == 0 && (@info "Solving the Linear System using CG")
@@ -143,13 +143,13 @@ function test()
         M! = (q, p) -> ldiv!(q, K_ii_factor, p)
         )
     rank == 0 && (@info "$(stats)")
-    rank == 0 && (@info "CG time: $(time() - t1)")
+    rank == 0 && (@info "CG ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
     rank == 0 && (@info "Reconstructing free dofs")
     rank > 0 && reconstruct_free_dofs!(partition, T_i)
     
-    rank == 0 && (@info "Reconstruct free dofs time: $(time() - t1)")
+    rank == 0 && (@info "Reconstruct free dofs ($(round(time() - t1, digits=3)) [s])")
 
     T_d = gathersysvec(Temp, DOF_KIND_DATA)
     MPI.Reduce!(Temp.values, MPI.SUM, comm; root=0)
