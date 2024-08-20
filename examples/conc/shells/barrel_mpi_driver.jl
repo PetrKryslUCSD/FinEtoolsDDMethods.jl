@@ -190,9 +190,10 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     if rank > 0
         cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
         partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix, nothing)
+        @info "DEBUG rank=$rank, $(length(partition.odof)) ($(round(time() - t1, digits=3)) [s])"
     end    
     MPI.Barrier(comm)
-    rank == 0 && (@info "Create partitions time: $(time() - t1)")
+    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     function peeksolution(iter, x, resnorm)
         @info("Iteration $(iter): residual norm $(resnorm)")
@@ -210,7 +211,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         end
         Krfactor = lu(Kr_ff)
     end
-    rank == 0 && (@info "Create global factor: $(time() - t1)")
+    rank == 0 && (@info "Create global factor ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
     norm_F_f = norm(F_f) 
