@@ -172,13 +172,15 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
 
     associategeometry!(femm, geom0)
     
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.shell_cluster_partitioning(fens, fes, nelperpart)
+    t1 = time()
+    cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
     rank == 0 && (@info("Number of clusters (coarse grid partitions): $(ncpartitions)"))
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
     rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
+    rank == 0 && (@info "Generate clusters ($(round(time() - t1, digits=3)) [s])")
         
     function make_matrix(fes)
         femm.integdomain.fes = fes

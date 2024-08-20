@@ -128,7 +128,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, overlap, ref, itmax, rel
 
     associategeometry!(femm, geom0)
     
-
+    t1 = time()
     cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
     rank == 0 && (@info("Number of clusters (coarse grid partitions): $(ncpartitions)"))
         
@@ -136,7 +136,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, overlap, ref, itmax, rel
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
     rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
-    
+    rank == 0 && (@info "Generate clusters ($(round(time() - t1, digits=3)) [s])")
 
     function make_matrix(fes)
         femm.integdomain.fes = fes
