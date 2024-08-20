@@ -74,6 +74,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
     nprocs = MPI.Comm_size(comm)
+    rank == 0 && (@info "$(MPI.Get_library_version())")
 
     nfpartitions = nprocs - 1
 
