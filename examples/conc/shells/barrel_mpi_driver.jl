@@ -6,8 +6,9 @@ stiffeners, and edge stiffener. This example tests the ability to represent
 creases in the surface, and junctions with more than two shell faces joined
 along a an intersection.
 
+Parallel simulation with MPI.
 """
-module barrel_examples
+module barrel_mpi_driver
 using FinEtools
 using FinEtools.MeshExportModule: VTK, VTKWrite
 using FinEtoolsDeforLinear
@@ -75,6 +76,10 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     rank = MPI.Comm_rank(comm)
     nprocs = MPI.Comm_size(comm)
     rank == 0 && (@info "$(MPI.Get_library_version())")
+
+    BLAS_THREADS = get(ENV, "BLAS_THREADS", 1)
+    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    BLAS.set_num_threads(BLAS_THREADS)
 
     nfpartitions = nprocs - 1
 
