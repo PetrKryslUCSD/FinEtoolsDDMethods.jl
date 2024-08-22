@@ -77,7 +77,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     nprocs = MPI.Comm_size(comm)
     rank == 0 && (@info "$(MPI.Get_library_version())")
 
-    BLAS_THREADS = get(ENV, "BLAS_THREADS", 1)
+    BLAS_THREADS = parse(Int, get(ENV, "BLAS_THREADS", 1))
     rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
     BLAS.set_num_threads(BLAS_THREADS)
 
