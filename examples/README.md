@@ -114,7 +114,7 @@ to see the available options.
 
 ## How to run a CoNC-preconditioned CG (MPI-parallel) example
 
-At the moment only the heat conduction and shell analysis examples have been cast in this form. Try
+At the moment only the heat conduction and shell analysis examples have been cast in this form. In an interactive run on Windows, try
 ```
 mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
@@ -122,3 +122,29 @@ or
 ```
 mpiexec -n 5 julia --project=. .\conc\shells\barrel_mpi_driver.jl
 ```
+
+Batch execution on the Ookami A64FX nodes is described with the following `sbatch` script
+```
+#!/usr/bin/env bash
+
+#SBATCH --job-name=job_barrel
+#SBATCH --output=job_barrel.log
+#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks=24
+#SBATCH --time=00:15:00
+#SBATCH -p short
+
+export JULIA_DEPOT_PATH="~/a64fx/depot"
+module load julia
+module load gcc/13.1.0
+module load slurm
+module load openmpi/gcc8/4.1.2
+
+export JULIA_NUM_THREADS=1
+export BLAS_THREADS=2
+
+cd FinEtoolsDDMethods.jl/examples
+/lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl julia --project=. conc/shells/barrel_mpi_driver.jl
+```
+The above executes on 24 nodes (root + 23 partitions), using 2 BLAS threads per process.
+
