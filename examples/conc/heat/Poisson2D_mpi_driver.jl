@@ -50,6 +50,10 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     rank = MPI.Comm_rank(comm)
     nprocs = MPI.Comm_size(comm)
 
+    BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
+    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    BLAS.set_num_threads(BLAS_THREADS)
+
     nfpartitions = nprocs - 1
 
     rank == 0 && (@info "Number of processes: $nprocs")

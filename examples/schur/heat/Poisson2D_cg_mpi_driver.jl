@@ -44,6 +44,10 @@ function test()
     rank = MPI.Comm_rank(comm)
     nprocs = MPI.Comm_size(comm)
 
+    BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
+    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    BLAS.set_num_threads(BLAS_THREADS)
+
     npartitions = nprocs - 1
 
     if rank == 0
