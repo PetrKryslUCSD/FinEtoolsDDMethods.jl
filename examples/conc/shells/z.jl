@@ -37,7 +37,7 @@ function parse_commandline()
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
-        default = 200
+        default = 2000
         "--relrestol"
         help = "Relative residual tolerance"
         arg_type = Float64
