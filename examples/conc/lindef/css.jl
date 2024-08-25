@@ -58,7 +58,7 @@ function parse_commandline()
         "--num"
         help = "Poisson ratio of the matrix"
         arg_type = Float64
-        default = 0.4999
+        default = 0.3
         "--visualize"
         help = "Write out visualization files?"
         arg_type = Bool
