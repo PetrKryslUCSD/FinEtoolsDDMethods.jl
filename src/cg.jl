@@ -4,8 +4,8 @@ using LinearAlgebra
 using SparseArrays
 using MPI
 
-const NORM_UNPRECONDITIONED = 0
-const NORM_NATURAL = 1
+const KSP_NORM_UNPRECONDITIONED = 0
+const KSP_NORM_NATURAL = 1
 
 """
     pcg_seq(Aop!, b, x0; 
@@ -48,10 +48,10 @@ function pcg_seq(Aop!, b, x0;
     atol=√eps(eltype(b)), 
     rtol=√eps(eltype(b)), 
     peeksolution = (iter, x, resnorm) -> nothing,
-    normtype = NORM_NATURAL
+    normtype = KSP_NORM_NATURAL
 )
     itmax = (itmax > 0 ? itmax : length(b))
-    (normtype == NORM_UNPRECONDITIONED || normtype == NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
+    (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
     x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
     Ap = z # Alias for legibility
     Aop!(Ap, x) 
@@ -59,7 +59,7 @@ function pcg_seq(Aop!, b, x0;
     M!(z, r)
     @. p = z
     rhoold = dot(z, r)
-    if normtype == NORM_UNPRECONDITIONED
+    if normtype == KSP_NORM_UNPRECONDITIONED
         tol = atol + rtol * sqrt(dot(r, r))
     else
         tol = atol + rtol * sqrt(rhoold)
@@ -77,7 +77,7 @@ function pcg_seq(Aop!, b, x0;
         rho = dot(z, r)
         beta = rho / rhoold;   rhoold = rho
         @. p = z + beta * p
-        if normtype == NORM_UNPRECONDITIONED
+        if normtype == KSP_NORM_UNPRECONDITIONED
             resnorm = sqrt(dot(r, r))
         else
             resnorm = sqrt(rho) 

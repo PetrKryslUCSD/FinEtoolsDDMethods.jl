@@ -29,5 +29,7 @@ export partition_multiply!, precondition_global_solve!, precondition_local_solve
 include("CompatibilityModule.jl")
 
 include("cg.jl")
+using .FinEtoolsDDMethods.CGModule: KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
+export KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 
 end # module FinEtoolsDDMethods
