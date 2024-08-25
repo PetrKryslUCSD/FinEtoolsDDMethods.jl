@@ -1,8 +1,10 @@
 """
     DDCoNCSeqModule  
 
-Module for operations on partitions of finite element models for solves based
+Module for operations on partitions of finite element models for CG solves based
 on the Coherent Nodal Clusters.
+
+Implementation for sequential execution.
 """
 module DDCoNCSeqModule
 
