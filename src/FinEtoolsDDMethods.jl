@@ -32,4 +32,8 @@ include("cg.jl")
 using .FinEtoolsDDMethods.CGModule: KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 export KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 
+include("PartitionCoNCModule.jl")
+include("DDCoNCSeqModule.jl")
+include("DDCoNCThrModule.jl")
+
 end # module FinEtoolsDDMethods
