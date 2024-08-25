@@ -47,36 +47,78 @@ function pcg_seq(Aop!, b, x0;
     peeksolution = (iter, x, resnorm) -> nothing
 )
     itmax = (itmax > 0 ? itmax : length(b))
-    x = deepcopy(x0)
-    p = similar(x)
-    r = similar(x)
-    z = similar(x)
-    Ap = similar(x)
+    x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
+    Ap = z # Alias for legibility
     Aop!(Ap, x) 
     @. r = b - Ap
     M!(z, r)
     @. p = z
-    rho = dot(z, r)
-    tol = atol + rtol * sqrt(rho)
+    rhoold = dot(z, r)
+    tol = atol + rtol * sqrt(rhoold)
     resnorm = Inf
     residuals = typeof(tol)[]
     stats = (niter=itmax, resnorm=resnorm, residuals=residuals)
     iter = 1
     while iter < itmax
         Aop!(Ap, p)
-        rho = dot(z, r)
-        alpha = rho / dot(p, Ap)
+        alpha = rhoold / dot(p, Ap)
         @. x += alpha * p
         @. r -= alpha * Ap
         M!(z, r)
-        beta = dot(z, r) / rho
+        rho = dot(z, r)
+        beta = rho / rhoold;   rhoold = rho
         @. p = z + beta * p
-        resnorm = sqrt(rho)
+        resnorm = sqrt(rho) # CRITERION NEEDS TO BE CHECKED
         push!(residuals, resnorm)
         peeksolution(iter, x, resnorm)
         if resnorm < tol
             break
         end
+        iter += 1
+    end
+    stats = (niter=iter, resnorm=resnorm, residuals=residuals)
+    return (x, stats)
+end
+
+# Smith, Gropp  1996
+# There is something weird about this: it takes quite a few more iterations!
+function pcg_seq_sg(Aop!, b, x0; 
+    M! =(q, p) -> (q .= p), 
+    itmax=0, 
+    atol=√eps(eltype(b)), 
+    rtol=√eps(eltype(b)), 
+    peeksolution = (iter, x, resnorm) -> nothing
+)
+    itmax = (itmax > 0 ? itmax : length(b))
+    x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
+    Ap = z # Alias for legibility
+    tol = zero(typeof(atol))
+    resnorm = Inf
+    residuals = typeof(tol)[]
+    stats = (niter=itmax, resnorm=resnorm, residuals=residuals)
+    betaold = one(typeof(atol))
+    Aop!(Ap, x) 
+    @. r = b - Ap
+    M!(z, r)
+    @. p = z
+    betaold = dot(z, r)
+    iter = 1
+    while iter < itmax
+        beta = dot(z, r)
+        c = beta / betaold; betaold = beta
+        @. p = z + c * p
+        Aop!(Ap, p)
+        @show a = beta / dot(p, Ap)
+        @. x += a * p
+        @. r -= a * Ap
+        resnorm = sqrt(dot(r, r))
+        push!(residuals, resnorm)
+        peeksolution(iter, x, resnorm)
+        tol == 0 && (tol = atol + rtol * sqrt(beta))
+        if resnorm < tol
+            break
+        end
+        M!(z, r)
         iter += 1
     end
     stats = (niter=iter, resnorm=resnorm, residuals=residuals)

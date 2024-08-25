@@ -237,6 +237,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         itmax=itmax, atol= relrestol * norm_F_f, rtol=0)
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
+    @info "Final relative residual = $(stats.residuals[end] ./ norm_F_f)"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     data = Dict(
         "nfreedofs_dchi" => nfreedofs(dchi),
