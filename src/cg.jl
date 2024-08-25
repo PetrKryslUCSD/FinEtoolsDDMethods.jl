@@ -4,6 +4,9 @@ using LinearAlgebra
 using SparseArrays
 using MPI
 
+const NORM_UNPRECONDITIONED = 0
+const NORM_NATURAL = 1
+
 """
     pcg_seq(Aop!, b, x0; 
         M! =(q, p) -> (q .= p), 
@@ -44,9 +47,11 @@ function pcg_seq(Aop!, b, x0;
     itmax=0, 
     atol=√eps(eltype(b)), 
     rtol=√eps(eltype(b)), 
-    peeksolution = (iter, x, resnorm) -> nothing
+    peeksolution = (iter, x, resnorm) -> nothing,
+    normtype = NORM_NATURAL
 )
     itmax = (itmax > 0 ? itmax : length(b))
+    (normtype == NORM_UNPRECONDITIONED || normtype == NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
     x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
     Ap = z # Alias for legibility
     Aop!(Ap, x) 
@@ -54,7 +59,11 @@ function pcg_seq(Aop!, b, x0;
     M!(z, r)
     @. p = z
     rhoold = dot(z, r)
-    tol = atol + rtol * sqrt(rhoold)
+    if normtype == NORM_UNPRECONDITIONED
+        tol = atol + rtol * sqrt(dot(r, r))
+    else
+        tol = atol + rtol * sqrt(rhoold)
+    end
     resnorm = Inf
     residuals = typeof(tol)[]
     stats = (niter=itmax, resnorm=resnorm, residuals=residuals)
@@ -68,7 +77,11 @@ function pcg_seq(Aop!, b, x0;
         rho = dot(z, r)
         beta = rho / rhoold;   rhoold = rho
         @. p = z + beta * p
-        resnorm = sqrt(rho) # CRITERION NEEDS TO BE CHECKED
+        if normtype == NORM_UNPRECONDITIONED
+            resnorm = sqrt(dot(r, r))
+        else
+            resnorm = sqrt(rho) 
+        end
         push!(residuals, resnorm)
         peeksolution(iter, x, resnorm)
         if resnorm < tol
