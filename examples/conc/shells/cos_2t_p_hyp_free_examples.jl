@@ -181,13 +181,17 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     end
 
     t0 = time()
-    norm_F_f = norm(F_f)
     (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
+        # peeksolution=peeksolution,
+        itmax=itmax, 
+        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
+        # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
+        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+        )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
-    stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs_dchi" => nfreedofs(dchi),
         "ncpartitions" => ncpartitions,
