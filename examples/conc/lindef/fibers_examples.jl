@@ -309,6 +309,8 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
+    K = nothing # free memory
+    GC.gc()
 
     # U_f = K_ff \ F_f
     # scattersysvec!(u, U_f)
