@@ -213,8 +213,6 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi,
     otempp = zeros(eltype(cpi.u.values), length(odof))
     ntempq = zeros(eltype(cpi.u.values), length(ndof))
     ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    @show i, size(Ko)
-    lu(Ko)
     return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
