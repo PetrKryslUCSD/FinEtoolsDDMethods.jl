@@ -340,9 +340,9 @@ version = "1.14.0"
 
 [[deps.JuliaInterpreter]]
 deps = ["CodeTracking", "InteractiveUtils", "Random", "UUIDs"]
-git-tree-sha1 = "7ae67d8567853d367e3463719356b8989e236069"
+git-tree-sha1 = "4b415b6cccb9ab61fec78a621572c82ac7fa5776"
 uuid = "aa1ae85d-cabe-5617-a682-6adf51b2e16a"
-version = "0.9.34"
+version = "0.9.35"
 
 [[deps.Krylov]]
 deps = ["LinearAlgebra", "Printf", "SparseArrays"]
