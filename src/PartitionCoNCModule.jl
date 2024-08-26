@@ -189,22 +189,23 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi,
     Kn = make_matrix(subset(fes, el))
     # Now compute the (contribution to) reduced matrix for the global preconditioner
     Kn_ff = Kn[fr, fr]
-    Kn_fd = Kn[fr, dr]
     # Compute the right hand side contribution
     u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
-    rhs = - Kn_fd * u_d
+    rhs = - Kn[fr, dr] * u_d
     if make_interior_load !== nothing
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
+    Kn = nothing
     # Compute contribution to the reduced matrix
     Kr_ff = Phi' * Kn_ff * Phi
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
     Ke = make_matrix(subset(fes, el))
-    Ko = Kn + Ke
+    Ko_ff = Kn_ff + Ke[fr, fr]
+    Ke = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
     odof = dof_lists[i].overlapping
-    Ko = Ko[odof, odof]
+    Ko_ff = Ko_ff[odof, odof]
     # Reduce the matrix to adjust the degrees of freedom referenced
     ndof = dof_lists[i].nonoverlapping
     Kn_ff = Kn_ff[ndof, ndof]
@@ -213,7 +214,7 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi,
     otempp = zeros(eltype(cpi.u.values), length(odof))
     ntempq = zeros(eltype(cpi.u.values), length(ndof))
     ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
+    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko_ff), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
 end # module PartitionCoNCModule

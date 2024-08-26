@@ -322,10 +322,10 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     end
 
     t1 = time()
-    partition_list  = CoNCPartitionData[]
     cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u) 
+    partition_list  = [CoNCPartitionData(cpi) for i in 1:nfpartitions]
     for i in 1:npartitions(cpi)
-        push!(partition_list, CoNCPartitionData(cpi, i, fes, Phi, make_matrix, nothing))
+        partition_list[i] = CoNCPartitionData(cpi, i, fes, Phi, make_matrix, nothing)
     end    
     @info "Create partitions time: $(time() - t1)"
 
