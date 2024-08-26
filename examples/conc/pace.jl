@@ -1,6 +1,12 @@
 # Take the examples from the paper and pace them through the default test.
 include(raw"lindef/fibers_examples.jl")
 fibers_examples.test()
+include(raw"lindef/fibers_examples.jl")
+fibers_examples.test(kind="tet")
+include(raw"lindef/fibers_seq_examples.jl")
+fibers_seq_examples.test()
+include(raw"lindef/fibers_seq_examples.jl")
+fibers_seq_examples.test(kind="tet")
 include(raw"shells/barrel_examples.jl")
 barrel_examples.test(stabilize=false)
 barrel_examples.test(stabilize=true)
