@@ -22,7 +22,6 @@ using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
 
-
 function _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i)
     nonoverlapping_element_list = findall(x -> x == i, element_1st_partitioning)
     enl = deepcopy(nonoverlapping_element_list)
@@ -179,16 +178,23 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi,
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
+    @info "Partition $i =========================================="
     element_lists = cpi.element_lists
     dof_lists = cpi.dof_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     Phi = Phi[fr, :] # 
+    @info "typeof(Phi) = $(typeof(Phi))"
+    @info "size(Phi) = $(size(Phi))"
     # Compute the matrix for the non overlapping elements
     el = element_lists[i].nonoverlapping
     Kn = make_matrix(subset(fes, el))
+    @info "typeof(Kn) = $(typeof(Kn))"
+    @info "size(Kn) = $(size(Kn))"
     # Now compute the (contribution to) reduced matrix for the global preconditioner
     Kn_ff = Kn[fr, fr]
+    @info "typeof(Kn_ff) = $(typeof(Kn_ff))"
+    @info "size(Kn_ff) = $(size(Kn_ff))"
     # Compute the right hand side contribution
     u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
     rhs = - Kn[fr, dr] * u_d
@@ -198,17 +204,27 @@ function CoNCPartitionData(cpi::CPI, i, fes, Phi,
     Kn = nothing
     # Compute contribution to the reduced matrix
     Kr_ff = Phi' * Kn_ff * Phi
+    @info "typeof(Kr_ff) = $(typeof(Kr_ff))"
+    @info "size(Kr_ff) = $(size(Kr_ff))"
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
     Ke = make_matrix(subset(fes, el))
+    @info "typeof(Ke) = $(typeof(Ke))"
+    @info "size(Ke) = $(size(Ke))"
     Ko_ff = Kn_ff + Ke[fr, fr]
+    @info "typeof(Ko_ff) = $(typeof(Ko_ff))"
+    @info "size(Ko_ff) = $(size(Ko_ff))"
     Ke = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
     odof = dof_lists[i].overlapping
     Ko_ff = Ko_ff[odof, odof]
+    @info "typeof(Ko_ff) = $(typeof(Ko_ff))"
+    @info "size(Ko_ff) = $(size(Ko_ff))"
     # Reduce the matrix to adjust the degrees of freedom referenced
     ndof = dof_lists[i].nonoverlapping
     Kn_ff = Kn_ff[ndof, ndof]
+    @info "typeof(Kn_ff) = $(typeof(Kn_ff))"
+    @info "size(Kn_ff) = $(size(Kn_ff))"
     # Allocate some temporary vectors
     otempq = zeros(eltype(cpi.u.values), length(odof))
     otempp = zeros(eltype(cpi.u.values), length(odof))

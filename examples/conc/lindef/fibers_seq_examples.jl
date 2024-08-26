@@ -22,6 +22,7 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
+using About
 
 function rotate(fens)
     Q = [cos(pi/2) -sin(pi/2); sin(pi/2) cos(pi/2)]
@@ -348,7 +349,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        peeksolution=peeksolution,
+        # peeksolution=peeksolution,
         itmax=itmax, 
         # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
         # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
