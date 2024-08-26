@@ -359,7 +359,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
                 end
             end
         end
-        pK = K[doflist, doflist]
+        pK = K_ff[doflist, doflist]
         pKfactor = lu(pK)
         part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
         push!(partitions, part)
