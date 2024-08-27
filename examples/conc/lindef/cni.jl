@@ -69,10 +69,10 @@ end
 
 p = parse_commandline()
 
-include(raw"fibers_examples.jl")
-using .fibers_examples; 
+include(raw"fibers_thr_examples.jl")
+using .fibers_thr_examples; 
 
-fibers_examples.test("cni";
+fibers_thr_examples.test("cni";
     kind=p["kind"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     nelperpart=p["nelperpart"], nbf1max=p["nbf1max"], 
