@@ -1,0 +1,51 @@
+function meminfo_julia(where = "")
+    toint(n) = Int(ceil(n))
+    @info """Memory: $(where)
+    GC total:  $(toint(Base.gc_total_bytes(Base.gc_num())/2^20)) [MiB]
+    GC live:   $(toint(Base.gc_live_bytes()/2^20)) [MiB]
+    JIT:       $(toint(Base.jit_total_bytes()/2^20)) [MiB]
+    Max. RSS:  $(toint(Sys.maxrss()/2^20)) [MiB]
+    """
+end
+
+function allbytes(a)
+    T = typeof(a)
+    return if isbitstype(T)
+        sizeof(a)
+    else
+        return if fieldcount(T) == 0
+            if length(a) > 0
+                sum(allbytes(a[i]) for i in eachindex(a))
+            else
+                sizeof(a)
+            end
+        else
+            sum(allbytes(getfield(a, fieldname(T, i))) for i in 1:fieldcount(T))
+        end
+    end
+end
+
+function mib(a)
+    return round(float(allbytes(a))/2^20, digits=1)
+end
+
+# @show allbytes(1)
+# @show allbytes([1, 2, 3])
+# @show allbytes([1, 2, [3, 2]])
+# @show allbytes([1, 2, [3, 2.0+1im]])
+
+# using SparseArrays
+# a = sparse([1, 3, 4, 5, 2, 1], [4, 3, 2, 1, 5, 5], ones(6), 5, 5)
+# # using About
+# # about(a)
+# T = typeof(a)
+# for i in 1:fieldcount(T)
+#     @show fieldname(T, i), fieldtype(T, i)
+# end
+# @show allbytes(a)
+
+# using About
+# about(1)
+# about([1, 2, 3])
+# about([1, 2, [3, 2]])
+# about([1, 2, [3, 2.0+1im]])

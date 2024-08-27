@@ -2,7 +2,17 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "26a83c466fa2f884e9272ab8676cbfa6ee31512e"
+project_hash = "ce564c74700ff66522d8b7e19e628f17022bfacf"
+
+[[deps.About]]
+deps = ["InteractiveUtils", "JuliaSyntaxHighlighting", "PrecompileTools", "StyledStrings"]
+git-tree-sha1 = "3a94c01a1d7678f1c29b7d97216f5046f1ed1768"
+uuid = "69d22d85-9f48-4c46-bbbe-7ad8341ff72a"
+version = "1.0.0"
+weakdeps = ["Pkg"]
+
+    [deps.About.extensions]
+    PkgExt = "Pkg"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -343,6 +353,17 @@ deps = ["CodeTracking", "InteractiveUtils", "Random", "UUIDs"]
 git-tree-sha1 = "4b415b6cccb9ab61fec78a621572c82ac7fa5776"
 uuid = "aa1ae85d-cabe-5617-a682-6adf51b2e16a"
 version = "0.9.35"
+
+[[deps.JuliaSyntax]]
+git-tree-sha1 = "956ac689b31cd871a48fbb70978b798c5e95018a"
+uuid = "70703baa-626e-46a2-a12c-08ffd08c73b4"
+version = "0.4.9"
+
+[[deps.JuliaSyntaxHighlighting]]
+deps = ["JuliaSyntax", "StyledStrings"]
+git-tree-sha1 = "19ecee1ea81c60156486a92b062e443b6bba60b7"
+uuid = "ac6e5ff7-fb65-4e79-a425-ec3bc9c03011"
+version = "0.1.0"
 
 [[deps.Krylov]]
 deps = ["LinearAlgebra", "Printf", "SparseArrays"]
@@ -738,6 +759,12 @@ deps = ["Dates", "UUIDs"]
 git-tree-sha1 = "ca4bccb03acf9faaf4137a9abc1881ed1841aa70"
 uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
 version = "1.10.0"
+
+[[deps.StyledStrings]]
+deps = ["PrecompileTools", "TOML"]
+git-tree-sha1 = "711c9650010c95814911c2005ea04e70e70e65ed"
+uuid = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
+version = "1.0.3"
 
 [[deps.SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]

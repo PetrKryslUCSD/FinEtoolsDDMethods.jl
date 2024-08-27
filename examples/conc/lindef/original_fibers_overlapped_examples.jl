@@ -5,6 +5,7 @@ using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
+using FinEtoolsDDMethods: mib
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using SymRCM
 using Metis
@@ -380,6 +381,9 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
     K_ff = K[fr, fr]
+    K = nothing
+    GC.gc()
+    @info("Global stiffness matrix: $(mib(K_ff)) [MiB]")
 
     # U_f = K_ff \ F_f
     # scattersysvec!(u, U_f)
@@ -406,6 +410,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     Kr_ff = transfm(K_ff, Phi, PhiT)
     println("Size of the reduced problem: $(size(Kr_ff))")
     Krfactor = lu(Kr_ff)
+    @info("Global reduced factor: $(mib(Krfactor)) [MiB]")
 
     # U_f = Phi * (Krfactor \ (PhiT * F_f))
     # scattersysvec!(u, U_f)
@@ -426,7 +431,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
                 end
             end
         end
-        pK = K[doflist, doflist]
+        pK = K_ff[doflist, doflist]
         pKfactor = lu(pK)
         part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
         push!(partitions, part)
@@ -434,6 +439,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
 
     meansize = mean([length(part.doflist) for part in partitions])
     println("Mean fine partition size: $(meansize)")
+    @info "Total partition allocations: $(sum([mib(_p.factor) for _p in partitions])) [MiB]" 
 
     function M!(q, p)
         q .= Phi * (Krfactor \ (PhiT * p))

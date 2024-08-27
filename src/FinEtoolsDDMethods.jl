@@ -7,6 +7,8 @@ end
 
 using FinEtools
 
+include("utility.jl")
+
 include("FENodeToPartitionMapModule.jl")
 using .FENodeToPartitionMapModule: FENodeToPartitionMap
 export FENodeToPartitionMap
@@ -35,15 +37,5 @@ export KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 include("PartitionCoNCModule.jl")
 include("DDCoNCSeqModule.jl")
 include("DDCoNCThrModule.jl")
-
-function meminfo_julia(where = "")
-    toint(n) = Int(ceil(n))
-    @info """Memory: $(where)
-    GC total:  $(toint(Base.gc_total_bytes(Base.gc_num())/2^20)) [MiB]
-    GC live:   $(toint(Base.gc_live_bytes()/2^20)) [MiB]
-    JIT:       $(toint(Base.jit_total_bytes()/2^20)) [MiB]
-    Max. RSS:  $(toint(Sys.maxrss()/2^20)) [MiB]
-    """
-end
 
 end # module FinEtoolsDDMethods

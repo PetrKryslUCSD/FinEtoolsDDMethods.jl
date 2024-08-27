@@ -5,7 +5,7 @@ using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods: meminfo_julia
+using FinEtoolsDDMethods: mib
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, partition_size 
 using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!
@@ -312,6 +312,7 @@ function _execute(label, kind, Em, num, Ef, nuf,
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, u)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info("Transformation matrix: $(mib(Phi)) [MiB]")
     @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function make_matrix(fes)
@@ -328,20 +329,23 @@ function _execute(label, kind, Em, num, Ef, nuf,
     cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u) 
     partition_list  = [CoNCPartitionData(cpi) for i in 1:nfpartitions]
     for i in 1:npartitions(cpi)
-        partition_list[i] = CoNCPartitionData(cpi, i, fes, Phi, make_matrix, nothing)
-        meminfo_julia()
+        partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, nothing)
     end    
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
+    @info "Mean partition allocations: $(mean([mib(_p) for _p in partition_list])) [MiB]" 
+    @info "Total partition allocations: $(sum([mib(_p) for _p in partition_list])) [MiB]" 
     @info "Create partitions time: $(time() - t1)"
 
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        Kr_ff += partition.reduced_K
+        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
     end
     Krfactor = lu(Kr_ff)
-    meminfo_julia()
+    Kr_ff = nothing
+    GC.gc()
     @info "Create global factor: $(time() - t1)"
+    @info("Global reduced factor: $(mib(Krfactor)) [MiB]")
 
     
     function peeksolution(iter, x, resnorm)
@@ -368,7 +372,7 @@ function _execute(label, kind, Em, num, Ef, nuf,
         "ncpartitions" => ncpartitions,
         "nfpartitions" => nfpartitions,
         "overlap" => overlap,
-        "size_Kr_ff" => size(Kr_ff),
+        "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
         "time" => t1 - t0,
     )
