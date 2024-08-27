@@ -1,12 +1,14 @@
-module fibers_examples
+module fibers_thr_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
+using FinEtoolsDDMethods: mib
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.CompatibilityModule
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, partition_size 
+using FinEtoolsDDMethods.DDCoNCThrModule: partition_multiply!, preconditioner!
 using SymRCM
 using Metis
 using Test
@@ -233,7 +235,9 @@ function fibers_mesh_tet(ref = 1)
     return fens, fes
 end # fibers_mesh
 
-function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
+function _execute(label, kind, Em, num, Ef, nuf, 
+    nelperpart, nbf1max, nfpartitions, overlap, ref, 
+    mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
     CTE = 0.0
     magn = 1.0
     
@@ -273,9 +277,6 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     bfes = meshboundary(subset(fes, fiberel))
     sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
     loadfes = subset(bfes, sectionL)
-    # end cross-section surface  for the shear loading
-    # sectionL = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 +1.0])
-    # 0 cross-section surface  for the reactions
     bfes = meshboundary(fes)
     section0 = selectelem(fens, bfes; facing = true, direction = [0.0 0.0 -1.0])
 
@@ -302,87 +303,67 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     el2femm = FEMMBase(IntegDomain(loadfes, boundary_rule))
     F = distribloads(el2femm, geom, u, fi, 2)
     F_f = F[fr]
-    femmm = make_femm(MR, IntegDomain(subset(fes, matrixel), interior_rule), matm)
-    associategeometry!(femmm, geom)
-    K = stiffness(femmm, geom, u)
-    femmf = make_femm(MR, IntegDomain(subset(fes, fiberel), interior_rule), matf)
-    associategeometry!(femmf, geom)
-    K += stiffness(femmf, geom, u)
-    K_ff = K[fr, fr]
 
-    # U_f = K_ff \ F_f
-    # scattersysvec!(u, U_f)
-
-    # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
-
-    # cpartitioning, ncpartitions = coarse_grid_partitioning(fens, fes, nelperpart)
-    # @info("Number coarse grid partitions: $(ncpartitions)")
-    # f = "fibers-partitioning-original"
-    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
-    
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
+    t1 = time()
+    cpartitioning, ncpartitions = cluster_partitioning(fens, fes, fes.label, nelperpart)
     @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
-    # f = "fibers-partitioning-new"
-    # partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-    # vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
-    # @async run(`"paraview.exe" $File`)
-    
+        
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, u)
     Phi = Phi[fr, :]
-    transfm(m, t, tT) = (tT * m * t)
-    transfv(v, t, tT) = (tT * v)
-    PhiT = Phi'
-    Kr_ff = transfm(K_ff, Phi, PhiT)
-    @info("Size of the reduced problem: $(size(Kr_ff))")
+    @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info("Transformation matrix: $(mib(Phi)) [MiB]")
+    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+
+    function make_matrix(fes)
+        matrixel = selectelem(fens, fes, label = 0)
+        fiberel = setdiff(1:count(fes), matrixel)
+        femmm = make_femm(MR, IntegDomain(subset(fes, matrixel), interior_rule), matm)
+        associategeometry!(femmm, geom)
+        femmf = make_femm(MR, IntegDomain(subset(fes, fiberel), interior_rule), matf)
+        associategeometry!(femmf, geom)
+        return stiffness(femmm, geom, u) + stiffness(femmf, geom, u)
+    end
+
+    t1 = time()
+    cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u) 
+    partition_list  = [CoNCPartitionData(cpi) for i in 1:nfpartitions]
+    for i in 1:npartitions(cpi)
+        partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, nothing)
+    end    
+    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
+    @info "Mean partition allocations: $(mean([mib(_p) for _p in partition_list])) [MiB]" 
+    @info "Total partition allocations: $(sum([mib(_p) for _p in partition_list])) [MiB]" 
+    @info "Create partitions time: $(time() - t1)"
+
+    t1 = time()
+    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
+    for partition in partition_list
+        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
+    end
     Krfactor = lu(Kr_ff)
+    Kr_ff = nothing
+    GC.gc()
+    @info "Create global factor: $(time() - t1)"
+    @info("Global reduced factor: $(mib(Krfactor)) [MiB]")
 
-    # U_f = Phi * (Krfactor \ (PhiT * F_f))
-    # scattersysvec!(u, U_f)
-
-    # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
     
-    # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
-    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
-    @assert length(nodelists) == nfpartitions
+    function peeksolution(iter, x, resnorm)
+        @info("it $(iter): residual norm =  $(resnorm)")
+    end
     
-    partitions = []
-    for nodelist in nodelists
-        doflist = Int[]
-        for n in nodelist
-            for d in axes(u.dofnums, 2)
-                if u.dofnums[n, d] in fr
-                    push!(doflist, u.dofnums[n, d])
-                end
-            end
-        end
-        pK = K[doflist, doflist]
-        pKfactor = lu(pK)
-        part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
-        push!(partitions, part)
-    end
-
-    meansize = mean([length(part.doflist) for part in partitions])
-    @info("Mean fine partition size: $(meansize)")
-
-    function M!(q, p)
-        q .= Phi * (Krfactor \ (PhiT * p))
-        for part in partitions
-            q[part.doflist] .+= (part.factor \ p[part.doflist])
-        end
-        q
-    end
-
     t0 = time()
-    (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
+    M! = preconditioner!(Krfactor, Phi, partition_list)
+    (u_f, stats) = pcg_seq(
+        (q, p) -> partition_multiply!(q, partition_list, p), 
+        F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
         # peeksolution=peeksolution,
-        itmax=itmax,
-        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL atol=relrestol *
-        # norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
-        atol=0, rtol=relrestol, normtype=KSP_NORM_UNPRECONDITIONED
-    )
+        itmax=itmax, 
+        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
+        # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
+        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+        )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
@@ -391,7 +372,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         "ncpartitions" => ncpartitions,
         "nfpartitions" => nfpartitions,
         "overlap" => overlap,
-        "size_Kr_ff" => size(Kr_ff),
+        "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
         "time" => t1 - t0,
     )
