@@ -23,6 +23,16 @@ using Targe2
 using DataDrop
 using Statistics
 
+function meminfo_julia()
+    toint(n) = Int(ceil(n))
+    @info """Memory:
+    GC total:  $(toint(Base.gc_total_bytes(Base.gc_num())/2^20)) [MiB]
+    GC live:   $(toint(Base.gc_live_bytes()/2^20)) [MiB]
+    JIT:       $(toint(Base.jit_total_bytes()/2^20)) [MiB]
+    Max. RSS:  $(toint(Sys.maxrss()/2^20)) [MiB]
+    """
+end
+
 function rotate(fens)
     Q = [cos(pi/2) -sin(pi/2); sin(pi/2) cos(pi/2)]
     for i in 1:count(fens)
@@ -326,6 +336,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     partition_list  = [CoNCPartitionData(cpi) for i in 1:nfpartitions]
     for i in 1:npartitions(cpi)
         partition_list[i] = CoNCPartitionData(cpi, i, fes, Phi, make_matrix, nothing)
+        meminfo_julia()
     end    
     @info "Create partitions time: $(time() - t1)"
 
@@ -335,6 +346,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         Kr_ff += partition.reduced_K
     end
     Krfactor = lu(Kr_ff)
+    meminfo_julia()
     @info "Create global factor: $(time() - t1)"
 
     
