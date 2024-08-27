@@ -56,6 +56,10 @@ function _precondition_local_solve!(q, partition_list, p)
 end
 
 function preconditioner!(Krfactor, Phi, partition_list)
+    # Make sure the partitions only refer to the local non-overlapping dofs
+    for _p in partition_list
+        _p.nonoverlapping_K = _p.nonoverlapping_K[_p.ndof, _p.ndof]
+    end
     function M!(q, p)
         q .= zero(eltype(q))
         _precondition_local_solve!(q, partition_list, p)

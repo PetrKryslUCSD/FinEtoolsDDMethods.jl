@@ -20,6 +20,7 @@ import Base: size, eltype
 import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
+using ..FinEtoolsDDMethods: allbytes
 using ShellStructureTopo
 
 function _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i)
@@ -145,9 +146,9 @@ function npartitions(cpi::CoNCPartitioningInfo)
     return length(cpi.element_lists)
 end
 
-struct CoNCPartitionData{T, IT, FACTOR}
+mutable struct CoNCPartitionData{T, IT, FACTOR}
     nonoverlapping_K::SparseMatrixCSC{T, IT}
-    reduced_K::SparseMatrixCSC{T, IT}
+    # reduced_K::SparseMatrixCSC{T, IT}
     overlapping_K_factor::FACTOR
     rhs::Vector{T}
     ndof::Vector{IT}
@@ -162,7 +163,7 @@ function CoNCPartitionData(cpi::CPI) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
         spzeros(eltype(cpi.u.values), 0, 0),
-        spzeros(eltype(cpi.u.values), 0, 0),
+        # spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
         Int[],
@@ -177,7 +178,7 @@ end
 function CoNCPartitionData(cpi::CPI, 
     i, 
     fes, 
-    Phi, 
+    # Phi, 
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
@@ -185,7 +186,7 @@ function CoNCPartitionData(cpi::CPI,
     dof_lists = cpi.dof_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
-    Phi = Phi[fr, :] # 
+    # Phi = Phi[fr, :] # 
     # Compute the matrix for the non overlapping elements
     el = element_lists[i].nonoverlapping
     Kn = make_matrix(subset(fes, el))
@@ -202,7 +203,7 @@ function CoNCPartitionData(cpi::CPI,
     end
     Kn = nothing
     # Compute contribution to the reduced matrix
-    Kr_ff = Phi' * Kn_ff * Phi
+    # Kr_ff = Phi' * Kn_ff * Phi
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
     Ke = make_matrix(subset(fes, el))
@@ -213,13 +214,13 @@ function CoNCPartitionData(cpi::CPI,
     Ko_ff = Ko_ff[odof, odof]
     # Reduce the matrix to adjust the degrees of freedom referenced
     ndof = dof_lists[i].nonoverlapping
-    Kn_ff = Kn_ff[ndof, ndof]
+    # Kn_ff = Kn_ff[ndof, ndof]
     # Allocate some temporary vectors
     otempq = zeros(eltype(cpi.u.values), length(odof))
     otempp = zeros(eltype(cpi.u.values), length(odof))
     ntempq = zeros(eltype(cpi.u.values), length(ndof))
     ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko_ff), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
+    return CoNCPartitionData(Kn_ff, lu(Ko_ff), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
 function partition_size(cpd::CoNCPartitionData)
