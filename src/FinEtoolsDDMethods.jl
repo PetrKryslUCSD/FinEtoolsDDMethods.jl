@@ -9,6 +9,8 @@ using FinEtools
 
 include("utility.jl")
 
+export mib
+
 include("FENodeToPartitionMapModule.jl")
 using .FENodeToPartitionMapModule: FENodeToPartitionMap
 export FENodeToPartitionMap
@@ -23,10 +25,6 @@ export cluster_partitioning, shell_cluster_partitioning
 
 include("PartitionCoNCDDSEQModule.jl")
 include("PartitionCoNCDDMPIModule.jl")
-using .PartitionCoNCDDMPIModule: CoNCPartitioningInfo, CoNCPartitionData
-using .PartitionCoNCDDMPIModule: partition_multiply!, precondition_global_solve!, precondition_local_solve!
-export CoNCPartitioningInfo, CoNCPartitionData
-export partition_multiply!, precondition_global_solve!, precondition_local_solve!
 
 include("CompatibilityModule.jl")
 
@@ -35,7 +33,13 @@ using .FinEtoolsDDMethods.CGModule: KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 export KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 
 include("PartitionCoNCModule.jl")
+using .PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
+export CoNCPartitioningInfo, CoNCPartitionData
+using .PartitionCoNCModule: partition_size
+export partition_size
 include("DDCoNCSeqModule.jl")
+using .DDCoNCSeqModule: preconditioner!
+export preconditioner!
 include("DDCoNCThrModule.jl")
 
 end # module FinEtoolsDDMethods
