@@ -5,6 +5,7 @@ using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
+using FinEtoolsDDMethods: meminfo_julia
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CompatibilityModule
 using SymRCM
@@ -308,9 +309,11 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     femmf = make_femm(MR, IntegDomain(subset(fes, fiberel), interior_rule), matf)
     associategeometry!(femmf, geom)
     K += stiffness(femmf, geom, u)
+    meminfo_julia(@__LINE__)
     K_ff = K[fr, fr]
     K = nothing # free memory
     GC.gc()
+    meminfo_julia(@__LINE__)
 
     # U_f = K_ff \ F_f
     # scattersysvec!(u, U_f)
@@ -339,6 +342,8 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     Kr_ff = transfm(K_ff, Phi, PhiT)
     @info("Size of the reduced problem: $(size(Kr_ff))")
     Krfactor = lu(Kr_ff)
+    GC.gc()
+    meminfo_julia(@__LINE__)
 
     # U_f = Phi * (Krfactor \ (PhiT * F_f))
     # scattersysvec!(u, U_f)
@@ -363,6 +368,8 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         pKfactor = lu(pK)
         part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
         push!(partitions, part)
+        GC.gc()
+        meminfo_julia(@__LINE__)
     end
 
     meansize = mean([length(part.doflist) for part in partitions])

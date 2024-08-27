@@ -5,6 +5,7 @@ using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
+using FinEtoolsDDMethods: meminfo_julia
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
 using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!
@@ -22,16 +23,6 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-
-function meminfo_julia()
-    toint(n) = Int(ceil(n))
-    @info """Memory:
-    GC total:  $(toint(Base.gc_total_bytes(Base.gc_num())/2^20)) [MiB]
-    GC live:   $(toint(Base.gc_live_bytes()/2^20)) [MiB]
-    JIT:       $(toint(Base.jit_total_bytes()/2^20)) [MiB]
-    Max. RSS:  $(toint(Sys.maxrss()/2^20)) [MiB]
-    """
-end
 
 function rotate(fens)
     Q = [cos(pi/2) -sin(pi/2); sin(pi/2) cos(pi/2)]
