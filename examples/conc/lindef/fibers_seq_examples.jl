@@ -7,7 +7,7 @@ using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods: meminfo_julia
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, partition_size 
 using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!
 using SymRCM
 using Metis
@@ -235,7 +235,9 @@ function fibers_mesh_tet(ref = 1)
     return fens, fes
 end # fibers_mesh
 
-function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
+function _execute(label, kind, Em, num, Ef, nuf, 
+    nelperpart, nbf1max, nfpartitions, overlap, ref, 
+    mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
     CTE = 0.0
     magn = 1.0
     
@@ -329,6 +331,7 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
         partition_list[i] = CoNCPartitionData(cpi, i, fes, Phi, make_matrix, nothing)
         meminfo_julia()
     end    
+    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     @info "Create partitions time: $(time() - t1)"
 
     t1 = time()

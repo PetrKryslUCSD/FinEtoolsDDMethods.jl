@@ -222,4 +222,8 @@ function CoNCPartitionData(cpi::CPI,
     return CoNCPartitionData(Kn_ff, Kr_ff, lu(Ko_ff), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
+function partition_size(cpd::CoNCPartitionData)
+    return length(cpd.odof)
+end
+
 end # module PartitionCoNCModule
