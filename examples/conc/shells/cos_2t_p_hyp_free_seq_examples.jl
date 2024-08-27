@@ -127,6 +127,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info("Transformation matrix: $(mib(Phi)) [MiB]")
     @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function make_matrix(fes)
@@ -138,8 +139,11 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     partition_list  = CoNCPartitionData[]
     cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
     for i in 1:npartitions(cpi)
-        push!(partition_list, CoNCPartitionData(cpi, i, fes, Phi, make_matrix, nothing))
+        push!(partition_list, CoNCPartitionData(cpi, i, fes, make_matrix, nothing))
     end    
+    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
+    @info "Mean partition allocations: $(mean([mib(_p) for _p in partition_list])) [MiB]" 
+    @info "Total partition allocations: $(sum([mib(_p) for _p in partition_list])) [MiB]" 
     @info "Create partitions time: $(time() - t1)"
 
     function peeksolution(iter, x, resnorm)
@@ -149,10 +153,11 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        Kr_ff += partition.reduced_K
+        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)        
     end
     Krfactor = lu(Kr_ff)
     @info "Create global factor: $(time() - t1)"
+    @info("Global reduced factor: $(mib(Krfactor)) [MiB]")
     
     t0 = time()
     M! = preconditioner!(Krfactor, Phi, partition_list)
