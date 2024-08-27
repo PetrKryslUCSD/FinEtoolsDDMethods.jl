@@ -148,7 +148,6 @@ end
 
 mutable struct CoNCPartitionData{T, IT, FACTOR}
     nonoverlapping_K::SparseMatrixCSC{T, IT}
-    # reduced_K::SparseMatrixCSC{T, IT}
     overlapping_K_factor::FACTOR
     rhs::Vector{T}
     ndof::Vector{IT}
@@ -163,7 +162,6 @@ function CoNCPartitionData(cpi::CPI) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
         spzeros(eltype(cpi.u.values), 0, 0),
-        # spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
         Int[],
@@ -178,7 +176,6 @@ end
 function CoNCPartitionData(cpi::CPI, 
     i, 
     fes, 
-    # Phi, 
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
@@ -186,7 +183,6 @@ function CoNCPartitionData(cpi::CPI,
     dof_lists = cpi.dof_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
-    # Phi = Phi[fr, :] # 
     # Compute the matrix for the non overlapping elements
     el = element_lists[i].nonoverlapping
     Kn = make_matrix(subset(fes, el))
@@ -202,8 +198,6 @@ function CoNCPartitionData(cpi::CPI,
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
     Kn = nothing
-    # Compute contribution to the reduced matrix
-    # Kr_ff = Phi' * Kn_ff * Phi
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
     Ke = make_matrix(subset(fes, el))
@@ -214,7 +208,6 @@ function CoNCPartitionData(cpi::CPI,
     Ko_ff = Ko_ff[odof, odof]
     # Reduce the matrix to adjust the degrees of freedom referenced
     ndof = dof_lists[i].nonoverlapping
-    # Kn_ff = Kn_ff[ndof, ndof]
     # Allocate some temporary vectors
     otempq = zeros(eltype(cpi.u.values), length(odof))
     otempp = zeros(eltype(cpi.u.values), length(odof))
