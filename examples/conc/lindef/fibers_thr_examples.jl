@@ -5,7 +5,7 @@ using FinEtools.MeshExportModule: CSV
 using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods: mib
+using FinEtoolsDDMethods: mebibytes
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, partition_size 
 using FinEtoolsDDMethods.DDCoNCThrModule: partition_multiply!, preconditioner!
@@ -240,6 +240,8 @@ function _execute(label, kind, Em, num, Ef, nuf,
     mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
     CTE = 0.0
     magn = 1.0
+
+    @info "Running with $(Threads.nthreads()) threads"
     
     function getfrcL!(forceout, XYZ, tangents, feid, qpid)
         copyto!(forceout, [0.0; magn; 0.0])
@@ -312,7 +314,7 @@ function _execute(label, kind, Em, num, Ef, nuf,
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, u)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info("Transformation matrix: $(mib(Phi)) [MiB]")
+    @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
     @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function make_matrix(fes)
@@ -332,8 +334,9 @@ function _execute(label, kind, Em, num, Ef, nuf,
         partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, nothing)
     end    
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
-    @info "Mean partition allocations: $(mean([mib(_p) for _p in partition_list])) [MiB]" 
-    @info "Total partition allocations: $(sum([mib(_p) for _p in partition_list])) [MiB]" 
+    _b = mean([mebibytes(_p) for _p in partition_list])
+    @info "Mean partition allocations: $(Int(round(_b, digits=0))) [MiB]" 
+    @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
     @info "Create partitions time: $(time() - t1)"
 
     t1 = time()
@@ -345,7 +348,7 @@ function _execute(label, kind, Em, num, Ef, nuf,
     Kr_ff = nothing
     GC.gc()
     @info "Create global factor: $(time() - t1)"
-    @info("Global reduced factor: $(mib(Krfactor)) [MiB]")
+    @info("Global reduced factor: $(mebibytes(Krfactor)) [MiB]")
 
     
     function peeksolution(iter, x, resnorm)

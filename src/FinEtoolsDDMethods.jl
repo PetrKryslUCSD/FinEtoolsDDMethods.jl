@@ -8,8 +8,7 @@ end
 using FinEtools
 
 include("utility.jl")
-
-export mib
+export mebibytes
 
 include("FENodeToPartitionMapModule.jl")
 using .FENodeToPartitionMapModule: FENodeToPartitionMap

@@ -25,9 +25,10 @@ function allbytes(a)
     end
 end
 
-function mib(a)
-    return round(float(allbytes(a))/2^20, digits=1)
-end
+function mebibytes(a)
+    b = allbytes(a)
+    Int(round(b/2^20, digits=0))
+end    
 
 # @show allbytes(1)
 # @show allbytes([1, 2, 3])
