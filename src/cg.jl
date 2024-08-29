@@ -246,8 +246,10 @@ function pcg_mpi_2level_Schwarz(
     itmax=0,
     atol=√eps(eltype(b)),
     rtol=√eps(eltype(b)),
+    normtype = KSP_NORM_NATURAL,
     peeksolution = (iter, x, resnorm) -> nothing
 )
+    (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
     itmax = (itmax > 0 ? itmax : length(b))
     tol = atol
     x = deepcopy(x0)
@@ -272,6 +274,11 @@ function pcg_mpi_2level_Schwarz(
         @. p = z
         rho = dot(z, r)
         tol += rtol * sqrt(rho)
+        if normtype == KSP_NORM_UNPRECONDITIONED
+            tol = atol + rtol * sqrt(dot(r, r))
+        else
+            tol = atol + rtol * sqrt(rho)
+        end
     end
     tol = MPI.Bcast(tol, 0, comm) # Broadcast the tolerance
     resnorm = Inf
@@ -295,7 +302,11 @@ function pcg_mpi_2level_Schwarz(
             @. z = zl + zg # Combine the local and global preconditioners
             beta = dot(z, r) / rho
             @. p = z + beta * p
-            resnorm = sqrt(rho)
+            if normtype == KSP_NORM_UNPRECONDITIONED
+                resnorm = sqrt(dot(r, r))
+            else
+                resnorm = sqrt(rho) 
+            end
         end
         resnorm = MPI.Bcast(resnorm, 0, comm) # Broadcast the residual norm
         rank == 0 && peeksolution(iter, x, resnorm)
