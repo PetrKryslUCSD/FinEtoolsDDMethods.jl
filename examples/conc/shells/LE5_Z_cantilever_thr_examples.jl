@@ -27,7 +27,6 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.CompatibilityModule
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
 using FinEtoolsDDMethods.DDCoNCThrModule: partition_multiply!, preconditioner!
 using SymRCM
