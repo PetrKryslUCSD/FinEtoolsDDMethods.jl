@@ -345,12 +345,6 @@ function _execute(label, kind, Em, num, Ef, nuf, nelperpart, nbf1max, nfpartitio
     GC.gc()
     meminfo_julia(@__LINE__)
 
-    # U_f = Phi * (Krfactor \ (PhiT * F_f))
-    # scattersysvec!(u, U_f)
-
-    # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
-    
-    # fpartitioning, nfpartitions = fine_grid_partitioning(fens, nfpartitions)
     nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
     @assert length(nodelists) == nfpartitions
     
