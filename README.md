@@ -4,6 +4,10 @@
 
 Domain decomposition methods: solvers and algorithms used with FinEtools applications. 
 
+## News
+
+- 08/29/2024: Cleanup of the interface. Sequential, MPI, threaded execution supported.
+
 ## Capabilities and limitations
 
 Only linear static problems are addressed at the moment. `FinEtools` discretization only.
