@@ -20,7 +20,7 @@ using SymRCM
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
-using FinEtoolsDDMethods.PartitionCoNCDDMPIModule
+using FinEtoolsDDMethods.DDCoNCMPIModule: partition_multiply!, precondition_global_solve!, precondition_local_solve!
 using Statistics
 using MPI
 
@@ -100,7 +100,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     partition = nothing
     if rank > 0
         cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
-        partition = CoNCPartitionData(cpi, rank, fes, Phi, make_matrix, make_interior_load)
+        partition = CoNCPartitionData(cpi, rank, fes, make_matrix, make_interior_load)
     end    
     MPI.Barrier(comm)
     rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
@@ -116,7 +116,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     if rank > 0
-        Kr_ff = partition.reduced_K
+        Kr_ff = (Phi' * partition.nonoverlapping_K * Phi)
     end
     ks = MPI.gather(Kr_ff, comm; root=0)
     if rank == 0
@@ -137,7 +137,7 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
         zeros(size(F_f)),
         (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
         (q, p) -> precondition_local_solve!(q, partition, p);
-        itmax=itmax, atol=relrestol * norm_F_f, rtol=0,
+        itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution=peeksolution)
 
     rank == 0 && @info("Number of iterations:  $(stats.niter)")
