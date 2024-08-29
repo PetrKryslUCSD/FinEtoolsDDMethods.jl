@@ -13,7 +13,8 @@ const KSP_NORM_NATURAL = 1
         itmax=0, 
         atol=√eps(eltype(b)), 
         rtol=√eps(eltype(b)), 
-        peeksolution = (iter, x, resnorm) -> nothing
+        peeksolution = (iter, x, resnorm) -> nothing,
+        normtype = KSP_NORM_NATURAL
     )
 
 Solves a linear system `Ax = b` using the Preconditioned Conjugate Gradient
@@ -34,13 +35,13 @@ This is a sequential version of the `pcg` function.
   will iterate until convergence.
 - `atol`: Absolute tolerance for convergence. Defaults to `√eps(eltype(b))`.
 - `rtol`: Relative tolerance for convergence. Defaults to `√eps(eltype(b))`.
+- `normtype`: Type of norm to use for convergence. Defaults to `KSP_NORM_NATURAL`.
 - `peeksolution`: Function that is called at each iteration. It receives the
   iteration number, the current solution vector and the residual norm. Defaults
   to `(iter, x, resnorm) -> nothing`.
 
 # Returns
 - (`x`, `stats`): Tuple of solution vector and solution statistics.
-
 """
 function pcg_seq(Aop!, b, x0; 
     M! =(q, p) -> (q .= p), 
@@ -49,7 +50,7 @@ function pcg_seq(Aop!, b, x0;
     rtol=√eps(eltype(b)), 
     peeksolution = (iter, x, resnorm) -> nothing,
     normtype = KSP_NORM_NATURAL
-)
+    )
     itmax = (itmax > 0 ? itmax : length(b))
     (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
     x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
@@ -95,13 +96,13 @@ end
 
 # Smith, Gropp  1996
 # There is something weird about this: it takes quite a few more iterations!
-function pcg_seq_sg(Aop!, b, x0; 
-    M! =(q, p) -> (q .= p), 
-    itmax=0, 
-    atol=√eps(eltype(b)), 
-    rtol=√eps(eltype(b)), 
-    peeksolution = (iter, x, resnorm) -> nothing
-)
+function pcg_seq_sg(Aop!, b, x0;
+    (M!)=(q, p) -> (q .= p),
+    itmax=0,
+    atol=√eps(eltype(b)),
+    rtol=√eps(eltype(b)),
+    peeksolution=(iter, x, resnorm) -> nothing
+    )
     itmax = (itmax > 0 ? itmax : length(b))
     x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
     Ap = z # Alias for legibility
@@ -138,59 +139,6 @@ function pcg_seq_sg(Aop!, b, x0;
     return (x, stats)
 end
 
-function pcg_mpi(Aop!, b, x0; 
-    M! =(q, p) -> (q .= p), 
-    itmax=0, 
-    atol=√eps(eltype(b)), 
-    rtol=√eps(eltype(b)))
-    itmax = (itmax > 0 ? itmax : length(b))
-    tol = atol
-    comm = MPI.COMM_WORLD
-    rank = MPI.Comm_rank(comm)
-    x = deepcopy(x0)
-    p = similar(x)
-    r = similar(x)
-    z = similar(x)
-    Ap = similar(x); Ap .= 0.0
-    MPI.Bcast!(x, comm; root=0)
-    Aop!(Ap, x)
-    MPI.Reduce!(Ap, MPI.SUM, comm; root=0)
-    if rank == 0
-        @. r = b - Ap
-        M!(z, r)
-        @. p = z
-        rho = dot(z, r)
-        tol += rtol * sqrt(rho)
-    end
-    tol = MPI.Bcast(tol, 0, comm)
-    resnorm = Inf
-    stats = (niter=itmax, resnorm=resnorm)
-    iter = 1
-    while iter < itmax
-        MPI.Bcast!(p, comm; root=0)
-        Aop!(Ap, p)
-        MPI.Reduce!(Ap, MPI.SUM, comm; root=0)
-        if rank == 0
-            rho = dot(z, r)
-            alpha = rho / dot(p, Ap)
-            @. x += alpha * p
-            @. r -= alpha * Ap
-            M!(z, r)
-            beta = dot(z, r) / rho
-            @. p = z + beta * p
-            resnorm = sqrt(rho)
-        end
-        resnorm = MPI.Bcast(resnorm, 0, comm)
-        if resnorm < tol
-            break
-        end
-        iter += 1
-    end
-    MPI.Bcast!(x, comm; root=0)
-    stats = (niter=iter, resnorm=resnorm)
-    return (x, stats)
-end
-
 """
     pcg_mpi_2level_Schwarz(
         comm, 
@@ -224,12 +172,13 @@ This is a MPI parallel version of the `pcg` function.
 - `b`: Right-hand side vector.
 - `x0`: Initial guess for the solution.
 - `ML!`, `MG!`: Preconditioner functions that apply the preconditioner to a
-  vector `p` and stores the result in `q`. Defaults to `(q, p) -> (q .= p)`
-  (identity).
+  vector `p` and store the result in `q`. Defaults to `(q, p) -> (q .= p)`
+  (identity). Local (level 1) and global (level 2) versions, respectively.
 - `itmax`: Maximum number of iterations. Defaults to `0`, which means the method
   will iterate until convergence.
 - `atol`: Absolute tolerance for convergence. Defaults to `√eps(eltype(b))`.
 - `rtol`: Relative tolerance for convergence. Defaults to `√eps(eltype(b))`.
+- `normtype`: Type of norm to use for convergence. Defaults to `KSP_NORM_NATURAL`.
 - `peeksolution`: Function that is called at each iteration. It receives the
   iteration number, the current solution vector and the residual norm. Defaults
   to `(iter, x, resnorm) -> nothing`.
@@ -248,17 +197,12 @@ function pcg_mpi_2level_Schwarz(
     rtol=√eps(eltype(b)),
     normtype = KSP_NORM_NATURAL,
     peeksolution = (iter, x, resnorm) -> nothing
-)
-    (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
+    )
     itmax = (itmax > 0 ? itmax : length(b))
-    tol = atol
-    x = deepcopy(x0)
-    p = similar(x)
-    r = similar(x)
-    zg = similar(x)
-    zl = similar(x)
-    z = similar(x)
-    Ap = similar(x); Ap .= 0.0
+    (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
+    x = deepcopy(x0); p = similar(x); r = similar(x); zg = similar(x); zl = similar(x)
+    z = zg # Alias for legibility
+    Ap = z # Alias for legibility
     MPI.Bcast!(x, comm; root=0) # Broadcast the initial guess
     Aop!(Ap, x) # If partition, compute contribution to the A*p
     MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
@@ -269,19 +213,20 @@ function pcg_mpi_2level_Schwarz(
     MPI.Bcast!(r, comm; root=0) # Broadcast the residual
     ML!(zl, r) # Apply the local preconditioner, if partition
     MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
+    tol = zero(typeof(atol))
     if rank == 0
         @. z = zl + zg # Combine the local and global preconditioners
         @. p = z
-        rho = dot(z, r)
-        tol += rtol * sqrt(rho)
+        rhoold = dot(z, r)
         if normtype == KSP_NORM_UNPRECONDITIONED
             tol = atol + rtol * sqrt(dot(r, r))
         else
-            tol = atol + rtol * sqrt(rho)
+            tol = atol + rtol * sqrt(rhoold)
         end
     end
     tol = MPI.Bcast(tol, 0, comm) # Broadcast the tolerance
     resnorm = Inf
+    residuals = typeof(tol)[]
     stats = (niter=itmax, resnorm=resnorm)
     iter = 1
     while iter < itmax
@@ -289,8 +234,7 @@ function pcg_mpi_2level_Schwarz(
         Aop!(Ap, p) # If partition, compute contribution to the A*p
         MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
         if rank == 0
-            rho = dot(z, r)
-            alpha = rho / dot(p, Ap)
+            alpha = rhoold / dot(p, Ap)
             @. x += alpha * p
             @. r -= alpha * Ap
             MG!(zg, r) # If root, apply the global preconditioner
@@ -300,7 +244,8 @@ function pcg_mpi_2level_Schwarz(
         MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
         if rank == 0
             @. z = zl + zg # Combine the local and global preconditioners
-            beta = dot(z, r) / rho
+            rho = dot(z, r)
+            beta = rho / rhoold;   rhoold = rho
             @. p = z + beta * p
             if normtype == KSP_NORM_UNPRECONDITIONED
                 resnorm = sqrt(dot(r, r))
@@ -309,6 +254,7 @@ function pcg_mpi_2level_Schwarz(
             end
         end
         resnorm = MPI.Bcast(resnorm, 0, comm) # Broadcast the residual norm
+        push!(residuals, resnorm)
         rank == 0 && peeksolution(iter, x, resnorm)
         if resnorm < tol
             break
