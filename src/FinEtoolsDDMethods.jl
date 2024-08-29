@@ -22,9 +22,6 @@ include("CoNCUtilitiesModule.jl")
 using .CoNCUtilitiesModule: cluster_partitioning, shell_cluster_partitioning
 export cluster_partitioning, shell_cluster_partitioning
 
-include("PartitionCoNCDDSEQModule.jl")
-include("PartitionCoNCDDMPIModule.jl")
-
 include("CompatibilityModule.jl")
 
 include("cg.jl")
@@ -36,9 +33,9 @@ using .PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
 export CoNCPartitioningInfo, CoNCPartitionData
 using .PartitionCoNCModule: partition_size
 export partition_size
+
 include("DDCoNCSeqModule.jl")
-using .DDCoNCSeqModule: preconditioner!
-export preconditioner!
 include("DDCoNCThrModule.jl")
+include("DDCoNCMPIModule.jl")
 
 end # module FinEtoolsDDMethods
