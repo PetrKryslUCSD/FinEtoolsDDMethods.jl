@@ -472,9 +472,9 @@ version = "5.1.2+0"
 
 [[deps.MPI]]
 deps = ["Distributed", "DocStringExtensions", "Libdl", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "PkgVersion", "PrecompileTools", "Requires", "Serialization", "Sockets"]
-git-tree-sha1 = "14cef41baf5b675b192b02a22c710f725ab333a7"
+git-tree-sha1 = "5465632f9dd11aea0d912cb64a6f80640092a33e"
 uuid = "da04e1cc-30fd-572f-bb4f-1f8673147195"
-version = "0.20.20"
+version = "0.20.21"
 
     [deps.MPI.extensions]
     AMDGPUExt = "AMDGPU"
@@ -756,9 +756,9 @@ version = "1.10.0"
 
 [[deps.StructTypes]]
 deps = ["Dates", "UUIDs"]
-git-tree-sha1 = "ca4bccb03acf9faaf4137a9abc1881ed1841aa70"
+git-tree-sha1 = "159331b30e94d7b11379037feeb9b690950cace8"
 uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
-version = "1.10.0"
+version = "1.11.0"
 
 [[deps.StyledStrings]]
 deps = ["PrecompileTools", "TOML"]
