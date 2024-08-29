@@ -28,6 +28,9 @@ function partition_multiply!(q, partition, p)
     q .= zero(eltype(q))
     if partition !== nothing
         d = partition.ndof
+        if size(partition.nonoverlapping_K,1) != length(d) # trim size
+            partition.nonoverlapping_K = partition.nonoverlapping_K[d, d]
+        end
         partition.ntempp .= p[d]
         mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
         q[d] .+= partition.ntempq
