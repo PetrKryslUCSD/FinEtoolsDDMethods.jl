@@ -11,7 +11,7 @@ using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.CompatibilityModule
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!
+using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
 using SymRCM
 using Metis
 using Test
@@ -136,11 +136,8 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     end
 
     t1 = time()
-    partition_list  = CoNCPartitionData[]
     cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
-    for i in 1:npartitions(cpi)
-        push!(partition_list, CoNCPartitionData(cpi, i, fes, make_matrix, nothing))
-    end    
+    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     @info "Mean partition allocations: $(mean([mebibytes(_p) for _p in partition_list])) [MiB]" 
     @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 

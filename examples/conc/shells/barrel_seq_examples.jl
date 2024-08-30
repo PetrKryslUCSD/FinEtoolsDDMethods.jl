@@ -7,7 +7,7 @@ creases in the surface, and junctions with more than two shell faces joined
 along a an intersection.
 
 """
-module barrel_examples
+module barrel_seq_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK, VTKWrite
 using FinEtoolsDeforLinear
@@ -18,7 +18,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.CompatibilityModule
+using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
 using SymRCM
 using Metis
 using Test
@@ -158,84 +158,53 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
-    K = stiffness(femm, geom0, u0, Rfield0, dchi);
-    K_ff = K[fr, fr]
-
-    # scattersysvec!(dchi, F, DOF_KIND_ALL)
-    # VTK.vtkexportmesh("forces.vtk", fens, fes; vectors=[("F", deepcopy(dchi.values[:, 1:3]),)])   
-    # VTK.vtkexportmesh("fibers-tet-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
-
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.shell_cluster_partitioning(fens, fes, nelperpart)
+    
+    t1 = time()
+    cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
     @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
         
-    if visualize
-        f = "barrel" *
-            "-rf=$(ref)" *
-            "-ne=$(nelperpart)" * "-partitioning"
-        partitionsfes = FESetP1(reshape(1:count(fens), count(fens), 1))
-        vtkexportmesh(f * ".vtk", fens, partitionsfes; scalars=[("partition", cpartitioning)])
-        # @async run(`"paraview.exe" $File`)
-    end
-       
-    
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
     Phi = Phi[fr, :]
-    transfm(m, t, tT) = (tT * m * t)
-    transfv(v, t, tT) = (tT * v)
-    PhiT = Phi'
-    Kr_ff = transfm(K_ff, Phi, PhiT)
-    @info("Size of the reduced problem: $(size(Kr_ff))")
+    @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
+    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+
+    function make_matrix(fes)
+        femm.integdomain.fes = fes
+        return stiffness(femm, geom0, u0, Rfield0, dchi);
+    end
+
+    t1 = time()
+    cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
+    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
+    @info "Mean partition allocations: $(mean([mebibytes(_p) for _p in partition_list])) [MiB]" 
+    @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
+    @info "Create partitions time: $(time() - t1)"
+
+    function peeksolution(iter, x, resnorm)
+        @info("it $(iter): residual norm =  $(resnorm)")
+    end
+    
+    t1 = time()
+    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
+    for partition in partition_list
+        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)        
+    end
     Krfactor = lu(Kr_ff)
-
-    # display(MatrixSpy.spy_matrix(sparse(Phi'), "Phi"))
-
-    # U_f = Phi * (Krfactor \ (PhiT * F_f))
-    # scattersysvec!(u, U_f)
-
-    # VTK.vtkexportmesh("fibers-tet-red-sol.vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])   
+    @info "Create global factor: $(time() - t1)"
+    @info("Global reduced factor: $(mebibytes(Krfactor)) [MiB]")
     
-    nodelists = CompatibilityModule.fine_grid_node_lists(fens, fes, nfpartitions, overlap)
-    @assert length(nodelists) == nfpartitions
-    
-    partitions = []
-    for nodelist in nodelists
-        doflist = Int[]
-        for n in nodelist
-            for d in axes(dchi.dofnums, 2)
-                if dchi.dofnums[n, d] in fr
-                    push!(doflist, dchi.dofnums[n, d])
-                end
-            end
-        end
-        pK = K[doflist, doflist]
-        pKfactor = lu(pK)
-        part = (nodelist = nodelist, factor = pKfactor, doflist = doflist)
-        push!(partitions, part)
-    end
-
-    meansize = mean([length(part.doflist) for part in partitions])
-    @info("Mean fine partition size: $(meansize)")
-
-    function M!(q, p)
-        q .= Phi * (Krfactor \ (PhiT * p))
-        for part in partitions
-            q[part.doflist] .+= (part.factor \ p[part.doflist])
-        end
-        q
-    end
-
-    peeksolution(iter, x, resnorm) = begin
-        @info("Iteration $(iter): residual norm $(resnorm)")
-    end
-
     t0 = time()
-    (u_f, stats) = pcg_seq((q, p) -> mul!(q, K_ff, p), F_f, zeros(size(F_f));
+    M! = preconditioner!(Krfactor, Phi, partition_list)
+    (u_f, stats) = pcg_seq(
+        (q, p) -> partition_multiply!(q, partition_list, p), 
+        F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
         # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
-        # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
