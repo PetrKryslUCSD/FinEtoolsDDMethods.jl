@@ -65,7 +65,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
+function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, peek, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -204,7 +204,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        peeksolution=peeksolution,
+        peeksolution=peek ? peeksolution : (iter, x, resnorm) -> nothing,
         itmax=itmax, 
         # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
@@ -254,8 +254,8 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     true
 end
 
-function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, visualize = false) 
-    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, visualize)
+function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, peek, visualize)
 end
 
 nothing
