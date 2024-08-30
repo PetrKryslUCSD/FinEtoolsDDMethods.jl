@@ -24,7 +24,15 @@ using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
 
-using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
+using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
+
+function make_partitions(cpi, fes, make_matrix, make_interior_load)
+    partition_list  = [CoNCPartitionData(cpi) for i in 1:npartitions(cpi)]
+    for i in eachindex(partition_list)
+        partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, make_interior_load)
+    end  
+    return partition_list
+end
 
 function partition_multiply!(q, partition_list, p)
     q .= zero(eltype(q))

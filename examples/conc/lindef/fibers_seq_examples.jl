@@ -8,7 +8,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods: mebibytes
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, partition_size 
-using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!
+using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
 using SymRCM
 using Metis
 using Test
@@ -316,21 +316,18 @@ function _execute(label, kind, Em, num, Ef, nuf,
     @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function make_matrix(fes)
-        matrixel = selectelem(fens, fes, label = 0)
-        fiberel = setdiff(1:count(fes), matrixel)
-        femmm = make_femm(MR, IntegDomain(subset(fes, matrixel), interior_rule), matm)
-        associategeometry!(femmm, geom)
-        femmf = make_femm(MR, IntegDomain(subset(fes, fiberel), interior_rule), matf)
-        associategeometry!(femmf, geom)
-        return stiffness(femmm, geom, u) + stiffness(femmf, geom, u)
+        _matrixel = selectelem(fens, fes, label = 0)
+        _fiberel = setdiff(1:count(fes), _matrixel)
+        _femmm = make_femm(MR, IntegDomain(subset(fes, _matrixel), interior_rule), matm)
+        associategeometry!(_femmm, geom)
+        _femmf = make_femm(MR, IntegDomain(subset(fes, _fiberel), interior_rule), matf)
+        associategeometry!(_femmf, geom)
+        return stiffness(_femmm, geom, u) + stiffness(_femmf, geom, u)
     end
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u) 
-    partition_list  = [CoNCPartitionData(cpi) for i in 1:nfpartitions]
-    for i in 1:npartitions(cpi)
-        partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, nothing)
-    end    
+    partition_list = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     _b = mean([mebibytes(_p) for _p in partition_list])
     @info "Mean partition allocations: $(Int(round(_b, digits=0))) [MiB]" 

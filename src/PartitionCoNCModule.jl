@@ -220,4 +220,12 @@ function partition_size(cpd::CoNCPartitionData)
     return length(cpd.odof)
 end
 
+function rhs(partition_list)
+    rhs = deepcopy(partition_list[1].rhs)
+    for i in eachindex(partition_list)
+        rhs .+= partition_list[i].rhs
+    end  
+    return rhs
+end
+
 end # module PartitionCoNCModule

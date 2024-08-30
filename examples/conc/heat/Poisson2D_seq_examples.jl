@@ -20,7 +20,8 @@ using SymRCM
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
-using FinEtoolsDDMethods.PartitionCoNCDDSEQModule
+using FinEtoolsDDMethods.PartitionCoNCModule: rhs
+using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
 using Statistics
 
 function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap, itmax, relrestol, visualize)
@@ -58,42 +59,60 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, nfpartitions, overlap
     @info("Number of free degrees of freedom: $(nfreedofs(Temp)) ($(round(time() - t0, digits=3)) [s])")
     t0 = time()
     material = MatHeatDiff(thermal_conductivity)
-    femm = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
-    K = conductivity(femm, geom, Temp)
-    @info("Conductivity ($(round(time() - t0, digits=3)) [s])")
-    K_ff = K[fr, fr]
-    t0 = time()
-    fi = ForceIntensity(Float64[Q])
-    F1 = distribloads(femm, geom, Temp, fi, 3)
-    @info("Internal heat generation ($(round(time() - t0, digits=3)) [s])")
-    t0 = time()
-    T_d = gathersysvec(Temp, DOF_KIND_DATA)
-    F_f = (F1 .- K[:, dr] * T_d)[fr]
-    @info("Right hand side ($(round(time() - t0, digits=3)) [s])")
     
-    t0 = time()
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
+    t1 = time()
+    cpartitioning, ncpartitions = cluster_partitioning(fens, fes, fes.label, nelperpart)
     @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
+        
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, nbf1max, Temp)
-    Phi_f = Phi[fr, :]
-    @info("Size of the reduced problem: $(size(Phi_f, 2))")
-    @info "Clustering ($(round(time() - t0, digits=3)) [s])"
-
+    Phi = Phi[fr, :]
+    @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
+    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
     
     t0 = time()
     function make_matrix(fes)
         femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
         return conductivity(femm2, geom, Temp)
     end
-    cp = PartitionCoNCDDSEQModule.CoNCPartitioning(fens, fes, nfpartitions, overlap, make_matrix, Temp, Phi) 
-    @info("Create partitioning ($(round(time() - t0, digits=3)) [s])")
+    function make_interior_load(fes)
+        femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
+        fi = ForceIntensity(Float64[Q])
+        return distribloads(femm2, geom, Temp, fi, 3)
+    end
+    cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
+    partition_list = make_partitions(cpi, fes, make_matrix, make_interior_load)
+    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
+    _b = mean([mebibytes(_p) for _p in partition_list])
+    @info "Mean partition allocations: $(Int(round(_b, digits=0))) [MiB]" 
+    @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
+    @info "Create partitions time: $(time() - t1)"
+
+    t1 = time()
+    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
+    for partition in partition_list
+        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
+    end
+    Krfactor = lu(Kr_ff)
+    Kr_ff = nothing
+    GC.gc()
+    @info "Create global factor: $(time() - t1)"
+    @info("Global reduced factor: $(mebibytes(Krfactor)) [MiB]")
 
     t0 = time()
+    F_f = rhs(partition_list)
     norm_F_f = norm(F_f)
-    (u_f, stats) = pcg_seq((q, p) -> PartitionCoNCDDSEQModule.partition_multiply!(q, cp, p), F_f, zeros(size(F_f));
-        (M!)=(q, p) -> PartitionCoNCDDSEQModule.precondition_solve!(q, cp, p),
-        itmax=itmax, atol=relrestol * norm_F_f, rtol=0)
+    M! = preconditioner!(Krfactor, Phi, partition_list)
+    (u_f, stats) = pcg_seq(
+        (q, p) -> partition_multiply!(q, partition_list, p), 
+        F_f, zeros(size(F_f));
+        (M!)=(q, p) -> M!(q, p),
+        # peeksolution=peeksolution,
+        itmax=itmax, 
+        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
+        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+        )
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm_F_f)
     scattersysvec!(Temp, u_f, DOF_KIND_FREE)
