@@ -10,7 +10,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCThrModule: partition_multiply!, preconditioner!
+using FinEtoolsDDMethods.DDCoNCThrModule: partition_multiply!, preconditioner!, make_partitions
 using SymRCM
 using Metis
 using Test
@@ -129,19 +129,15 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     @info("Size of the reduced problem: $(size(Phi, 2))")
     @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
-    function make_matrix(femm, fes)
-        femm.integdomain.fes = fes
-        return stiffness(femm, geom0, u0, Rfield0, dchi);
+    function make_matrix(fes)
+        femm1 = deepcopy(femm) # for thread safety
+        femm1.integdomain.fes = fes
+        return stiffness(femm1, geom0, u0, Rfield0, dchi);
     end
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
-    partition_list = fill(CoNCPartitionData(cpi), npartitions(cpi))
-    Threads.@threads for i in 1:npartitions(cpi)
-        partition_list[i] = # Need to make a copy of the femm for thread safety
-            CoNCPartitionData(cpi, i, fes, Phi,
-                (fes) -> make_matrix(deepcopy(femm), fes), nothing)
-    end    
+    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Create partitions time: $(time() - t1)"
 
     function peeksolution(iter, x, resnorm)
@@ -151,7 +147,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        Kr_ff += partition.reduced_K
+        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
     end
     Krfactor = lu(Kr_ff)
     @info "Create global factor: $(time() - t1)"
