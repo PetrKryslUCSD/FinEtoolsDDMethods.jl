@@ -211,6 +211,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
+    @info "Iteration: $(time() - t0)"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs_dchi" => nfreedofs(dchi),
