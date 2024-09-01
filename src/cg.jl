@@ -61,13 +61,14 @@ function pcg_seq(Aop!, b, x0;
     @. p = z
     rhoold = dot(z, r)
     if normtype == KSP_NORM_UNPRECONDITIONED
-        tol = atol + rtol * sqrt(dot(r, r))
+        resnorm = sqrt(dot(r, r))
+        tol = atol + rtol * resnorm
     else
-        tol = atol + rtol * sqrt(rhoold)
+        resnorm = sqrt(rhoold)
+        tol = atol + rtol * resnorm
     end
-    resnorm = Inf
     residuals = typeof(tol)[]
-    stats = (niter=itmax, resnorm=resnorm, residuals=residuals)
+    peeksolution(0, x, resnorm)
     iter = 1
     while iter < itmax
         Aop!(Ap, p)
@@ -169,20 +170,22 @@ function pcg_mpi_2level_Schwarz(
     ML!(zl, r) # Apply the local preconditioner, if partition
     MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
     tol = zero(typeof(atol))
+    resnorm = Inf
     if rank == 0
         @. z = zl + zg # Combine the local and global preconditioners
         @. p = z
         rhoold = dot(z, r)
         if normtype == KSP_NORM_UNPRECONDITIONED
-            tol = atol + rtol * sqrt(dot(r, r))
+            resnorm = sqrt(dot(r, r))
+            tol = atol + rtol * resnorm
         else
-            tol = atol + rtol * sqrt(rhoold)
+            resnorm = sqrt(rhoold)
+            tol = atol + rtol * resnorm
         end
     end
     tol = MPI.Bcast(tol, 0, comm) # Broadcast the tolerance
-    resnorm = Inf
     residuals = typeof(tol)[]
-    stats = (niter=itmax, resnorm=resnorm)
+    rank == 0 && peeksolution(0, x, resnorm)
     iter = 1
     while iter < itmax
         MPI.Bcast!(p, comm; root=0) # Broadcast the search direction
@@ -219,7 +222,7 @@ function pcg_mpi_2level_Schwarz(
     MPI.Bcast!(x, comm; root=0) # Broadcast the solution
     iter = MPI.Bcast(iter, 0, comm) # Broadcast the number of iterations
     resnorm = MPI.Bcast(resnorm, 0, comm) # Broadcast the residual norm
-    stats = (niter=iter, resnorm=resnorm)
+    stats = (niter=iter, resnorm=resnorm, residuals=residuals)
     return (x, stats)
 end
 
