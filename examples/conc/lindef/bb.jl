@@ -11,24 +11,24 @@ function parse_commandline()
     s = ArgParseSettings()
     s = ArgParseSettings()
     @add_arg_table! s begin
-        "--Nepc"
-        help = "Number of elements per partition"
+        "--Nc"
+        help = "Number of clusters"
         arg_type = Int
-        default = 200
-        "--nbf1max"
+        default = 2
+        "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
         default = 5
-        "--nfpartitions"
+        "--Np"
         help = "Number fine grid partitions"
         arg_type = Int
         default = 2
-        "--overlap"
-        help = "Overlap"
+        "--No"
+        help = "Number of overlaps"
         arg_type = Int
         default = 1
-        "--ref"
-        help = "Refinement factor"
+        "--N"
+        help = "Number of element edges in one direction"
         arg_type = Int
         default = 2
         "--itmax"
@@ -43,11 +43,11 @@ function parse_commandline()
         help = "hex or tet"
         arg_type = String
         default = "hex"
-        "--Ef"
+        "--E"
         help = "Young's modulus of the material"
         arg_type = Float64
         default = 1.00e5
-        "--nuf"
+        "--nu"
         help = "Poisson ratio of the material"
         arg_type = Float64
         default = 0.3
@@ -64,11 +64,11 @@ p = parse_commandline()
 include(raw"body_block_seq_examples.jl")
 using .body_block_seq_examples; 
 
-body_block_seq_examples.test("bb";
-    kind=p["kind"], 
-    Ef=p["Ef"], nuf=p["nuf"],
-    Nepc=p["Nepc"], nbf1max=p["nbf1max"], 
-    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"], 
+body_block_seq_examples.test(;
+    N=p["N"], kind=p["kind"],
+    E=p["E"], nu=p["nu"],
+    Nc=p["Nc"], n1=p["n1"], 
+    Np=p["Np"], No=p["No"], 
     itmax=p["itmax"], relrestol=p["relrestol"],
     visualize = p["visualize"])
 

@@ -24,23 +24,25 @@ using Targe2
 using DataDrop
 using Statistics
 
-function _execute(label, kind, Ef, nuf, 
-    Nepc, nbf1max, nfpartitions, overlap, ref, 
-    mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
+function _execute(kind, N, E, nu, 
+    Nc, n1, Np, No, 
+    mesh, boundary_rule, interior_rule, make_femm,
+    itmax, relrestol, 
+    visualize)
     CTE = 0.0
-    magn = 1.0
+    L = 1.0
     
-    fens, fes = mesh(1.0, 1.0, 1.0, 10*ref, 10*ref, 10*ref)
+    fens, fes = mesh(L, L, L, 5*N, 9*N, 19*N)
 
     if visualize
-        f = "block-$(label)-$(string(kind))" *
-                "-rf=$(ref)" *
+        f = "block-$(string(kind))" *
+                "-N=$(N)" *
                 "-mesh"
         vtkexportmesh(f * ".vtk", fens, fes; scalars=[("label", fes.label)])
     end
     
     MR = DeforModelRed3D
-    matf = MatDeforElastIso(MR, 0.0, Ef, nuf, CTE)
+    matf = MatDeforElastIso(MR, 0.0, E, nu, CTE)
     
     geom = NodalField(fens.xyz)
     u = NodalField(zeros(size(fens.xyz, 1), 3)) # displacement field
@@ -61,27 +63,30 @@ function _execute(label, kind, Ef, nuf,
     dr = dofrange(u, DOF_KIND_DATA)
     
     @info("Kind: $(string(kind))")
-    @info("Materials: $(Ef), $(nuf)")
+    @info("Materials: $(E), $(nu)")
     @info("Refinement factor: $(ref)")
-    @info("Number of elements per cluster: $(Nepc)")
-    @info("Number of 1D basis functions: $(nbf1max)")
-    @info("Number of fine grid partitions: $(nfpartitions)")
-    @info("Overlap: $(overlap)")
+    @info("Number of clusters: $(Nc)")
+    @info("Number of 1D basis functions: $(n1)")
+    Nepc = count(fes) % Nc
+    (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
+    @info("Number of elements per cluster: $(count(fes) % Nc)")
+    @info("Number of fine grid partitions: $(Np)")
+    @info("Number of overlaps: $(No)")
     @info("Number of elements: $(count(fes))")
     @info("Number of free dofs = $(nfreedofs(u))")
 
-    getforce!(forceout, XYZ, tangents, feid, qpid) = (forceout .= [sin(2*pi*XYZ[1]), cos(6*pi*XYZ[2]), -sin(5*pi*XYZ[3])])
+    getforce!(forceout, XYZ, tangents, feid, qpid) = (forceout .= [sin(3*pi*XYZ[1]/L), cos(7*pi*XYZ[2]/L), -sin(5*pi*XYZ[3]/L)])
     fi = ForceIntensity(Float64, 3, getforce!)
     femm = FEMMBase(IntegDomain(fes, interior_rule))
     F = distribloads(femm, geom, u, fi, 3)
     F_f = F[fr]
 
     t1 = time()
-    cpartitioning, ncpartitions = cluster_partitioning(fens, fes, fes.label, Nepc)
-    @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
+    cpartitioning, nclusters = cluster_partitioning(fens, fes, fes.label, count(fes)/Nc)
+    @info("Number of clusters (coarse grid partitions): $(nclusters)")
         
     mor = CoNCData(fens, cpartitioning)
-    Phi = transfmatrix(mor, LegendreBasis, nbf1max, u)
+    Phi = transfmatrix(mor, LegendreBasis, n1, u)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
     @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
@@ -94,7 +99,7 @@ function _execute(label, kind, Ef, nuf,
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u) 
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
     partition_list = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     _b = mean([mebibytes(_p) for _p in partition_list])
@@ -135,28 +140,28 @@ function _execute(label, kind, Ef, nuf,
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs_u" => nfreedofs(u),
-        "ncpartitions" => ncpartitions,
-        "nfpartitions" => nfpartitions,
-        "overlap" => overlap,
+        "nclusters" => nclusters,
+        "Np" => Np,
+        "No" => No,
         "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "block-$(label)-$(string(kind))" *
-        "-rf=$(ref)" *
-        "-ne=$(Nepc)" *
-        "-n1=$(nbf1max)"  * 
-        "-nf=$(nfpartitions)"  * 
-        "-ov=$(overlap)"  
+    f = "block-$(string(kind))" *
+        "-N=$(N)" *
+        "-Nc=$(Nc)" *
+        "-n1=$(n1)"  * 
+        "-Np=$(Np)"  * 
+        "-No=$(No)"  
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
 
     if visualize
-        f = "block-$(label)-$(string(kind))" *
-            "-rf=$(ref)" *
-            "-ne=$(Nepc)" *
-            "-n1=$(nbf1max)" *
-            "-nf=$(nfpartitions)" *
+        f = "block-$(string(kind))" *
+            "-N=$(N)" *
+            "-Nc=$(Nc)" *
+            "-n1=$(n1)" *
+            "-Np=$(Np)" *
             "-cg-sol"
         VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
         
@@ -166,7 +171,7 @@ function _execute(label, kind, Ef, nuf,
 end
 # test(ref = 1)
 
-function test(label = "soft_hard"; kind = "hex", Ef = 1.0e5, nuf = 0.3, Nepc = 200, nbf1max = 5, nfpartitions = 2, overlap = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
+function test(; kind = "hex", N = 4, E = 1.0e5, nu = 0.3, Nc = 2, n1 = 5, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
     
     mesh, boundary_rule, interior_rule, make_femm = if kind == "hex"
         mesh = H8block
@@ -181,7 +186,11 @@ function test(label = "soft_hard"; kind = "hex", Ef = 1.0e5, nuf = 0.3, Nepc = 2
         make_femm = FEMMDeforLinearMST10
         (mesh, boundary_rule, interior_rule, make_femm)
     end
-    _execute(label, kind, Ef, nuf, Nepc, nbf1max, nfpartitions, overlap, ref, mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
+    _execute(kind, N, E, nu,
+        Nc, n1, Np, No,
+        mesh, boundary_rule, interior_rule, make_femm,
+        itmax, relrestol,
+        visualize)
 end
 
 nothing
