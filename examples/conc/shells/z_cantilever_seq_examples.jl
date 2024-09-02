@@ -150,12 +150,14 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
-    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
-    @info "Create partitions time: $(time() - t1)"
+    meanps = mean([partition_size(_p) for _p in partition_list])
+    @info "Mean fine partition size: $(meanps)"
+    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
     t1 = time()
     @info("Number of clusters (requested): $(Nc)")
     @info("Number of 1D basis functions: $(n1)")
+    (Nc == 0) && (Nc = Int(floor(meanps / (n1*(n1+1)/2) / ndofs(dchi))))
     Nepc = count(fes) ÷ Nc
     (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
     @info("Number of elements per cluster: $(Nepc)")
@@ -179,7 +181,7 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
         Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
     end
     Krfactor = lu(Kr_ff)
-    @info "Create global factor: $(time() - t1)"
+    @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
     
     t0 = time()
     M! = preconditioner!(Krfactor, Phi, partition_list)
@@ -195,6 +197,7 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
+    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs" => nfreedofs(dchi),

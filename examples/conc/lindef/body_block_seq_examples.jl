@@ -96,8 +96,7 @@ function _execute(kind, N, E, nu,
     t1 = time()
     @info("Number of 1D basis functions: $(n1)")
     @info("Number of clusters (requested): $(Nc)")
-    @show meanps / (n1*(n1-1)*(n1-2)/6)
-    (Nc == 0) && (Nc = Int(ceil(meanps / (n1*(n1+1)*(n1+2)/6))))
+    (Nc == 0) && (Nc = Int(floor(meanps / (n1*(n1+1)*(n1+2)/6) / ndofs(u))))
     @show Nepc = count(fes) ÷ Nc
     (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
     cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
