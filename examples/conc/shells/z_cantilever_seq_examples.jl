@@ -195,7 +195,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
-        "nfreedofs_dchi" => nfreedofs(dchi),
+        "nfreedofs" => nfreedofs(dchi),
         "Nc" => Nc,
         "Np" => Np,
         "No" => No,

@@ -65,7 +65,7 @@ function _execute(kind, N, E, nu,
     @info("Kind: $(string(kind))")
     @info("Number of edges: $(N)")
     @info("Materials: $(E), $(nu)")
-    @info("Number of clusters: $(Nc)")
+    @info("Number of clusters (requested): $(Nc)")
     @info("Number of 1D basis functions: $(n1)")
     Nepc = count(fes) ÷ Nc
     (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
@@ -82,10 +82,11 @@ function _execute(kind, N, E, nu,
     F_f = F[fr]
 
     t1 = time()
-    cpartitioning, nclusters = cluster_partitioning(fens, fes, fes.label, Nepc)
+    cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, u)
     Phi = Phi[fr, :]
+    @info("Number of clusters (actual): $(Nc)")
     @info("Size of the reduced problem: $(size(Phi, 2))")
     @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
     @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
@@ -137,15 +138,15 @@ function _execute(kind, N, E, nu,
     @info("Number of iterations:  $(stats.niter)")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
-        "nfreedofs_u" => nfreedofs(u),
-        "nclusters" => nclusters,
+        "nfreedofs" => nfreedofs(u),
+        "Nc" => Nc,
         "Np" => Np,
         "No" => No,
-        "size_Kr_ff" => size(Krfactor),
+        "size_Kr_ff" => size(Kr_ff),
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "block-$(string(kind))" *
+    f = "block" *
         "-N=$(N)" *
         "-Nc=$(Nc)" *
         "-n1=$(n1)"  * 
