@@ -122,11 +122,6 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
     dr = dofrange(dchi, DOF_KIND_DATA)
     
     @info("Refinement factor: $(ref)")
-    @info("Number of clusters (requested): $(Nc)")
-    @info("Number of 1D basis functions: $(n1)")
-    Nepc = count(fes) ÷ Nc
-    (n1 > Nepc^(1/2)) && @error "Not enough elements per cluster"
-    @info("Number of elements per cluster: $(Nepc)")
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
     @info("Number of elements: $(count(fes))")
@@ -146,16 +141,6 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
     associategeometry!(femm, geom0)
     
     
-    t1 = time()
-    cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
-    @info("Number of clusters (actual): $(Nc)")
-        
-    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
-    Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
-    Phi = Phi[fr, :]
-    @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
         femm1.integdomain.fes = fes
@@ -167,6 +152,22 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     @info "Create partitions time: $(time() - t1)"
+
+    t1 = time()
+    @info("Number of clusters (requested): $(Nc)")
+    @info("Number of 1D basis functions: $(n1)")
+    Nepc = count(fes) ÷ Nc
+    (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
+    @info("Number of elements per cluster: $(Nepc)")
+    
+    cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
+    @info("Number of clusters (actual): $(Nc)")
+        @show unique(cpartitioning)
+    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
+    Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
+    Phi = Phi[fr, :]
+    @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))

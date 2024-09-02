@@ -8,10 +8,12 @@ for No in 1 3 5 ; do
         for Np in 4 8 16  ; do
             # echo "ref = $ref"
             N=$(((192*4**(ref-1))))
+            # echo "N = $N"
             Nep=$((N/Np))
             # echo "Nep = $Nep"
             meanNsub=$((Nep/2*6))
-            Nc=$((meanNsub/Nt))
+            # echo "meanNsub = $meanNsub"
+            Nc=$((meanNsub/(6*Nt)))
             echo "Np = $Np, Nc = $Nc"
             julia conc/shells/zc.jl --prefix "$prefix" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No; 
         done
