@@ -75,7 +75,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     CTE = 0.0
     thickness = 0.1
     
@@ -165,6 +165,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     @info "Create partitions time: $(time() - t1)"
 
     function peeksolution(iter, x, resnorm)
@@ -203,7 +204,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "z_cantilever" *
+    f = (prefix != "" ? "$(prefix)-" : "") * "z_cantilever" *
         "-rf=$(ref)" *
         "-Nc=$(Nc)" *
         "-n1=$(n1)"  * 
@@ -213,7 +214,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     scattersysvec!(dchi, u_f)
     
     if visualize
-        f = "z_cantilever" *
+        f = (prefix != "" ? "$(prefix)-" : "") * "z_cantilever" *
             "-rf=$(ref)" *
             "-ne=$(nelperpart)" *
             "-n1=$(n1)" * 
@@ -225,8 +226,8 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     true
 end
 
-function test(;Nc = 2, n1 = 6, Np = 2, No = 1, ref = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
-    _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function test(;prefix = "z", ref = 2, Nc = 2, n1 = 6, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+    _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
 end
 
 nothing
