@@ -147,8 +147,8 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     
     
     t1 = time()
-    cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, Nepc)
-    @info("Number of clusters (actual): $(ncpartitions)")
+    cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
+    @info("Number of clusters (actual): $(Nc)")
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
@@ -196,14 +196,14 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs_dchi" => nfreedofs(dchi),
-        "ncpartitions" => ncpartitions,
+        "Nc" => Nc,
         "Np" => Np,
         "No" => No,
         "size_Kr_ff" => size(Kr_ff),
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "LE5_Z_cantilever" *
+    f = "z_cantilever" *
         "-rf=$(ref)" *
         "-Nc=$(Nc)" *
         "-n1=$(n1)"  * 
@@ -213,16 +213,14 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     scattersysvec!(dchi, u_f)
     
     if visualize
-        # f = "LE5_Z_cantilever" *
-        #     "-rf=$(ref)" *
-        #     "-ne=$(nelperpart)" *
-        #     "-n1=$(n1)" * 
-        #     "-nf=$(Np)"  * 
-        #     "-cg-sol"
-        # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        VTK.vtkexportmesh("LE5_Z_cantilever-sol.vtk", fens, fes;
-            vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
-    end
+        f = "z_cantilever" *
+            "-rf=$(ref)" *
+            "-ne=$(nelperpart)" *
+            "-n1=$(n1)" * 
+            "-nf=$(Np)"  * 
+            "-cg-sol"
+        VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+     end
 
     true
 end
