@@ -10,6 +10,10 @@ using ArgParse
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table! s begin
+        "--prefix"
+        help = "Prepend a prefix to the output file names"
+        arg_type = String
+        default = ""
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
@@ -57,8 +61,10 @@ using .z_cantilever_seq_examples;
 
 
 z_cantilever_seq_examples.test(;
+    prefix=p["prefix"],
+    ref=p["ref"],
     Nc=p["Nc"], n1=p["n1"],
-    Np=p["Np"], No=p["No"], ref=p["ref"],
+    Np=p["Np"], No=p["No"], 
     itmax=p["itmax"], relrestol=p["relrestol"],
     peek=p["peek"],
     visualize=p["visualize"])
