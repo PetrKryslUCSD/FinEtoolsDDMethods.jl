@@ -122,7 +122,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
     @info("Refinement factor: $(ref)")
-    @info("Number of clusters: $(Nc)")
+    @info("Number of clusters (requested): $(Nc)")
     @info("Number of 1D basis functions: $(n1)")
     Nepc = count(fes) ÷ Nc
     (n1 > Nepc^(1/2)) && @error "Not enough elements per cluster"
@@ -148,7 +148,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     
     t1 = time()
     cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, Nepc)
-    @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
+    @info("Number of clusters (actual): $(ncpartitions)")
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
