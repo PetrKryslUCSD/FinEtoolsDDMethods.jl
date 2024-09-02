@@ -65,11 +65,7 @@ function _execute(kind, N, E, nu,
     @info("Kind: $(string(kind))")
     @info("Number of edges: $(N)")
     @info("Materials: $(E), $(nu)")
-    @info("Number of clusters (requested): $(Nc)")
-    @info("Number of 1D basis functions: $(n1)")
-    Nepc = count(fes) ÷ Nc
-    (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
-    @info("Number of elements per cluster: $(Nepc)")
+    
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
     @info("Number of elements: $(count(fes))")
@@ -81,16 +77,6 @@ function _execute(kind, N, E, nu,
     F = distribloads(femm, geom, u, fi, 3)
     F_f = F[fr]
 
-    t1 = time()
-    cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
-    mor = CoNCData(fens, cpartitioning)
-    Phi = transfmatrix(mor, LegendreBasis, n1, u)
-    Phi = Phi[fr, :]
-    @info("Number of clusters (actual): $(Nc)")
-    @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-
     function make_matrix(_fes)
         _femmf = make_femm(MR, IntegDomain(_fes, interior_rule), matf)
         associategeometry!(_femmf, geom)
@@ -100,11 +86,28 @@ function _execute(kind, N, E, nu,
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
     partition_list = make_partitions(cpi, fes, make_matrix, nothing)
-    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
+    meanps = mean([partition_size(_p) for _p in partition_list])
+    @info "Mean fine partition size = $(meanps)"
     _b = mean([mebibytes(_p) for _p in partition_list])
     @info "Mean partition allocations: $(Int(round(_b, digits=0))) [MiB]" 
     @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
     @info "Create partitions time: $(time() - t1)"
+
+    t1 = time()
+    @info("Number of 1D basis functions: $(n1)")
+    @info("Number of clusters (requested): $(Nc)")
+    @show meanps / (n1*(n1-1)*(n1-2)/6)
+    (Nc == 0) && (Nc = Int(ceil(meanps / (n1*(n1+1)*(n1+2)/6))))
+    @show Nepc = count(fes) ÷ Nc
+    (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
+    cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
+    mor = CoNCData(fens, cpartitioning)
+    Phi = transfmatrix(mor, LegendreBasis, n1, u)
+    Phi = Phi[fr, :]
+    @info("Number of clusters (actual): $(Nc)")
+    @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
+    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
@@ -142,7 +145,7 @@ function _execute(kind, N, E, nu,
         "Nc" => Nc,
         "Np" => Np,
         "No" => No,
-        "size_Kr_ff" => size(Kr_ff),
+        "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
         "time" => t1 - t0,
     )
@@ -170,8 +173,7 @@ function _execute(kind, N, E, nu,
 end
 # test(ref = 1)
 
-function test(; kind = "hex", N = 4, E = 1.0e5, nu = 0.3, Nc = 2, n1 = 5, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
-    
+function test(; kind = "hex", N = 4, E = 1.0e5, nu = 0.3, Nc = 2, n1 = 5, Np = 8, No = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
     mesh, boundary_rule, interior_rule, make_femm = if kind == "hex"
         mesh = H8block
         boundary_rule = GaussRule(2, 2)
