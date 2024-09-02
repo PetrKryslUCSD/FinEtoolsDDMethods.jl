@@ -1,6 +1,8 @@
 prefix="zc-weak-grow"
 n1=6
-Nt=$((n1*(n1+1)*(n1+2)/6))
+Nt=$((n1*(n1+1)*(n1+2)/6)) # three dimensional body
+Nt=$((n1*(n1+1)/2)) # shell
+
 for No in 1 3 5 ; do
     for ref in 3 4 5 6  ; do
         for Np in 4 8 16  ; do
@@ -9,7 +11,7 @@ for No in 1 3 5 ; do
             Nep=$((N/Np))
             # echo "Nep = $Nep"
             meanNsub=$((Nep/2*6))
-            Nc=$((meanNsub/6/Nt))
+            Nc=$((meanNsub/Nt))
             echo "Np = $Np, Nc = $Nc"
             julia conc/shells/zc.jl --prefix "$prefix" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No; 
         done
