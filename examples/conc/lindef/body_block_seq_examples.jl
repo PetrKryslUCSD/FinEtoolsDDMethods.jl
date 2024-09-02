@@ -82,7 +82,7 @@ function _execute(kind, N, E, nu,
     F_f = F[fr]
 
     t1 = time()
-    cpartitioning, nclusters = cluster_partitioning(fens, fes, fes.label, count(fes)/Nc)
+    cpartitioning, nclusters = cluster_partitioning(fens, fes, fes.label, Nepc)
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, u)
     Phi = Phi[fr, :]
