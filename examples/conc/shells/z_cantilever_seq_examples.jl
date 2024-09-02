@@ -162,7 +162,7 @@ function _execute(prefix, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize
     
     cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
     @info("Number of clusters (actual): $(Nc)")
-        @show unique(cpartitioning)
+        
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
     Phi = Phi[fr, :]
