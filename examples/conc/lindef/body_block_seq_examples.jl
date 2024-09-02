@@ -63,8 +63,8 @@ function _execute(kind, N, E, nu,
     dr = dofrange(u, DOF_KIND_DATA)
     
     @info("Kind: $(string(kind))")
+    @info("Number of edges: $(N)")
     @info("Materials: $(E), $(nu)")
-    @info("Refinement factor: $(ref)")
     @info("Number of clusters: $(Nc)")
     @info("Number of 1D basis functions: $(n1)")
     Nepc = count(fes) % Nc
