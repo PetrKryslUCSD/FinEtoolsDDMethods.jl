@@ -67,9 +67,9 @@ function _execute(kind, N, E, nu,
     @info("Materials: $(E), $(nu)")
     @info("Number of clusters: $(Nc)")
     @info("Number of 1D basis functions: $(n1)")
-    Nepc = count(fes) % Nc
+    Nepc = count(fes) ÷ Nc
     (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
-    @info("Number of elements per cluster: $(count(fes) % Nc)")
+    @info("Number of elements per cluster: $(Nepc)")
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
     @info("Number of elements: $(count(fes))")
@@ -83,8 +83,6 @@ function _execute(kind, N, E, nu,
 
     t1 = time()
     cpartitioning, nclusters = cluster_partitioning(fens, fes, fes.label, count(fes)/Nc)
-    @info("Number of clusters (coarse grid partitions): $(nclusters)")
-        
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, u)
     Phi = Phi[fr, :]
