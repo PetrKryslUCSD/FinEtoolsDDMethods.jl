@@ -38,6 +38,10 @@ function parse_commandline()
         help = "Relative residual tolerance"
         arg_type = Float64
         default = 1.0e-6
+        "--peek"
+        help = "Peek at the iterations?"
+        arg_type = Bool
+        default = false
         "--visualize"
         help = "Write out visualization files?"
         arg_type = Bool
@@ -56,5 +60,6 @@ z_cantilever_seq_examples.test(;
     Nc=p["Nc"], n1=p["n1"],
     Np=p["Np"], No=p["No"], ref=p["ref"],
     itmax=p["itmax"], relrestol=p["relrestol"],
+    peek=p["peek"],
     visualize=p["visualize"])
 

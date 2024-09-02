@@ -75,7 +75,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ref, Nc, n1, Np, No, itmax, relrestol, visualize)
+function _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     CTE = 0.0
     thickness = 0.1
     
@@ -168,7 +168,7 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, visualize)
     @info "Create partitions time: $(time() - t1)"
 
     function peeksolution(iter, x, resnorm)
-        @info("it $(iter): residual norm =  $(resnorm)")
+        peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
     t1 = time()
@@ -227,8 +227,8 @@ function _execute(ref, Nc, n1, Np, No, itmax, relrestol, visualize)
     true
 end
 
-function test(;Nc = 2, n1 = 6, Np = 2, No = 1, ref = 1, itmax = 2000, relrestol = 1e-6, visualize = false) 
-    _execute(ref, Nc, n1, Np, No, itmax, relrestol, visualize)
+function test(;Nc = 2, n1 = 6, Np = 2, No = 1, ref = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+    _execute(ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
 end
 
 nothing
