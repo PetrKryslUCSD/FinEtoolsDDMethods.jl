@@ -86,18 +86,20 @@ function _execute(kind, N, E, nu,
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
     partition_list = make_partitions(cpi, fes, make_matrix, nothing)
-    meanps = mean([partition_size(_p) for _p in partition_list])
+    partition_sizes = [partition_size(_p) for _p in partition_list]
+    meanps = mean(partition_sizes)
     @info "Mean fine partition size = $(meanps)"
     _b = mean([mebibytes(_p) for _p in partition_list])
     @info "Mean partition allocations: $(Int(round(_b, digits=0))) [MiB]" 
     @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
-    @info "Create partitions time: $(time() - t1)"
+    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
     t1 = time()
     @info("Number of 1D basis functions: $(n1)")
     @info("Number of clusters (requested): $(Nc)")
-    (Nc == 0) && (Nc = Int(floor(meanps / (n1*(n1+1)*(n1+2)/6) / ndofs(u))))
-    @show Nepc = count(fes) ÷ Nc
+    n1adj = n1 + 1 # adjust for a safety margin
+    (Nc == 0) && (Nc = Int(floor(minimum(partition_sizes) / (n1adj*(n1adj+1)*(n1adj+2)/6) / ndofs(u))))
+    Nepc = count(fes) ÷ Nc
     (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
     cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
     mor = CoNCData(fens, cpartitioning)
@@ -116,7 +118,7 @@ function _execute(kind, N, E, nu,
     Krfactor = lu(Kr_ff)
     Kr_ff = nothing
     GC.gc()
-    @info "Create global factor: $(time() - t1)"
+    @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
     @info("Global reduced factor: $(mebibytes(Krfactor)) [MiB]")
 
     
@@ -138,6 +140,7 @@ function _execute(kind, N, E, nu,
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
+    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs" => nfreedofs(u),
