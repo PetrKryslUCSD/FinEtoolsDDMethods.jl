@@ -24,7 +24,7 @@ using Targe2
 using DataDrop
 using Statistics
 
-function _execute(kind, N, E, nu, 
+function _execute(prefix, kind, N, E, nu, 
     Nc, n1, Np, No, 
     mesh, boundary_rule, interior_rule, make_femm,
     itmax, relrestol, 
@@ -151,7 +151,7 @@ function _execute(kind, N, E, nu,
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "block" *
+    f = (prefix != "" ? "$(prefix)-" : "") * "body_block" *
         "-N=$(N)" *
         "-Nc=$(Nc)" *
         "-n1=$(n1)"  * 
@@ -175,7 +175,7 @@ function _execute(kind, N, E, nu,
 end
 # test(ref = 1)
 
-function test(; kind = "hex", N = 4, E = 1.0e5, nu = 0.3, Nc = 2, n1 = 5, Np = 8, No = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
+function test(; prefix = "", kind = "hex", N = 4, E = 1.0e5, nu = 0.3, Nc = 2, n1 = 5, Np = 8, No = 1, itmax = 2000, relrestol = 1e-6, visualize = false)
     mesh, boundary_rule, interior_rule, make_femm = if kind == "hex"
         mesh = H8block
         boundary_rule = GaussRule(2, 2)
@@ -189,7 +189,7 @@ function test(; kind = "hex", N = 4, E = 1.0e5, nu = 0.3, Nc = 2, n1 = 5, Np = 8
         make_femm = FEMMDeforLinearMST10
         (mesh, boundary_rule, interior_rule, make_femm)
     end
-    _execute(kind, N, E, nu,
+    _execute(prefix, kind, N, E, nu,
         Nc, n1, Np, No,
         mesh, boundary_rule, interior_rule, make_femm,
         itmax, relrestol,

@@ -11,6 +11,10 @@ function parse_commandline()
     s = ArgParseSettings()
     s = ArgParseSettings()
     @add_arg_table! s begin
+        "--prefix"
+        help = "Prepend a prefix to the output file names"
+        arg_type = String
+        default = ""
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
@@ -65,6 +69,7 @@ include(raw"body_block_seq_examples.jl")
 using .body_block_seq_examples; 
 
 body_block_seq_examples.test(;
+    prefix=p["prefix"],
     N=p["N"], kind=p["kind"],
     E=p["E"], nu=p["nu"],
     Nc=p["Nc"], n1=p["n1"], 
