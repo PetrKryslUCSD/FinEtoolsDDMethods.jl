@@ -236,7 +236,7 @@ function fibers_mesh_tet(ref = 1)
     return fens, fes
 end # fibers_mesh
 
-function _execute(prefix, kind, ref, Em, num, Ef, nuf,
+function _execute(filename, kind, ref, Em, num, Ef, nuf,
     Nc, n1, Np, No,
     mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
     CTE = 0.0
@@ -248,9 +248,10 @@ function _execute(prefix, kind, ref, Em, num, Ef, nuf,
     fens, fes = mesh(ref)
 
     if visualize
-        f = "fib-$(prefix)-$(string(kind))" *
-                "-rf=$(ref)" *
-                "-mesh"
+        f = (filename == "" ? 
+            "fib-$(string(kind))" *
+            "-ref=$(ref)" : 
+            filename) * "-mesh"
         vtkexportmesh(f * ".vtk", fens, fes; scalars=[("label", fes.label)])
     end
     
@@ -384,32 +385,36 @@ function _execute(prefix, kind, ref, Em, num, Ef, nuf,
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = (prefix != "" ? "$(prefix)-" : "") * "fib-" *
-        "-rf=$(ref)" *
-        "-Nc=$(Nc)" *
-        "-n1=$(n1)"  * 
-        "-Np=$(Np)"  * 
-        "-No=$(No)"  
+    f = (filename == "" ?
+         "fib-$(string(kind))" *
+         "-ref=$(ref)" *
+         "-Nc=$(Nc)" *
+         "-n1=$(n1)" *
+         "-Np=$(Np)" *
+         "-No=$(No)" :
+         filename)
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
 
     if visualize
-        f = "fib-$(string(kind))" *
-            "-ref=$(ref)" *
-            "-Nc=$(Nc)" *
-            "-n1=$(n1)" *
-            "-Np=$(Np)" *
-            "-cg-sol"
+        f = (filename == "" ?
+         "fib-$(string(kind))" *
+         "-ref=$(ref)" *
+         "-Nc=$(Nc)" *
+         "-n1=$(n1)" *
+         "-Np=$(Np)" *
+         "-No=$(No)" :
+         filename) * "-cg-sol"
         VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
     end
     
     true
 end
 
-function test(; prefix = "soft_hard",
+function test(; filename = "",
     kind = "hex", ref = 1, 
     Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, 
-    Nc = 0, n1 = 6, Np = 4, No = 1, 
+    Nc = 0, n1 = 6, Np = 8, No = 1, 
     itmax = 2000, relrestol = 1e-6, visualize = false)
     mesh, boundary_rule, interior_rule, make_femm = if kind == "hex"
         mesh = fibers_mesh_hex
@@ -424,7 +429,7 @@ function test(; prefix = "soft_hard",
         make_femm = FEMMDeforLinearMST10
         (mesh, boundary_rule, interior_rule, make_femm)
     end
-    _execute(prefix, kind, ref, Em, num, Ef, nuf,
+    _execute(filename, kind, ref, Em, num, Ef, nuf,
         Nc, n1, Np, No,
         mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
 end

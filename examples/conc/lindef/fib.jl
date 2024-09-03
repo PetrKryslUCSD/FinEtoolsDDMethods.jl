@@ -10,8 +10,8 @@ using ArgParse
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table! s begin
-        "--prefix"
-        help = "Prepend a prefix to the output file names"
+        "--filename"
+        help = "Use filename to name the output files"
         arg_type = String
         default = ""
         "--Nc"
@@ -80,7 +80,7 @@ include(raw"fib_seq_examples.jl")
 using .fib_seq_examples; 
 
 fib_seq_examples.test(;
-    prefix=p["prefix"],
+    filename=p["filename"],
     kind=p["kind"], 
     ref=p["ref"], 
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
