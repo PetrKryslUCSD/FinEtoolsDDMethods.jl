@@ -1,9 +1,9 @@
-prefix="fib-strong"
+prefix="fib-strong-cni"
 kind="hex"
 n1=6
 # Nt=$((n1*(n1+1)*(n1+2)/6)) # three dimensional body
 # Nt=$((n1*(n1+1)/2)) # shell
-ref=2
+ref=6
 Nc=0
 Ef=100000.0
 nuf=0.3
