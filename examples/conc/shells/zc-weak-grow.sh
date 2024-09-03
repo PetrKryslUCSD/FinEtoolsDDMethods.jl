@@ -1,6 +1,6 @@
 prefix="zc-weak-grow"
 n1=6
-Nt=$((n1*(n1+1)*(n1+2)/6)) # three dimensional body
+# Nt=$((n1*(n1+1)*(n1+2)/6)) # three dimensional body
 Nt=$((n1*(n1+1)/2)) # shell
 
 for No in 1 3 5 ; do
