@@ -145,6 +145,7 @@ function _execute(prefix, kind, N, E, nu,
     data = Dict(
         "nfreedofs" => nfreedofs(u),
         "Nc" => Nc,
+        "n1" => n1,
         "Np" => Np,
         "No" => No,
         "size_Kr_ff" => size(Krfactor),
@@ -168,7 +169,6 @@ function _execute(prefix, kind, N, E, nu,
             "-Np=$(Np)" *
             "-cg-sol"
         VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        
     end
     
     true
