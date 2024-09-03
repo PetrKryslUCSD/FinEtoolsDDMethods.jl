@@ -105,6 +105,7 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
+    @info "Aspect ratio: $(aspect)"
     @info("Refinement factor: $(ref)")
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
