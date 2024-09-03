@@ -1,7 +1,7 @@
 prefix="hyp-strong-grow"
 n1=6
 Nc=0
-ref=6
+ref=7
 
 for as in 10 100 1000 10000; do
     for No in 1 3 5; do
