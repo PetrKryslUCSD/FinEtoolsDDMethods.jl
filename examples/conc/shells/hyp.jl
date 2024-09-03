@@ -10,30 +10,34 @@ using ArgParse
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table! s begin
-        "--nelperpart"
-        help = "Number of elements per partition"
+        "--filename"
+        help = "Use filename to name the output files"
+        arg_type = String
+        default = ""
+        "--aspect"
+        help = "Aspect ratio, length divided by thickness"
+        arg_type = Float64
+        default = 100
+        "--Nc"
+        help = "Number of clusters"
         arg_type = Int
-        default = 200
-        "--nbf1max"
+        default = 2
+        "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
         default = 5
-        "--nfpartitions"
+        "--Np"
         help = "Number fine grid partitions"
         arg_type = Int
         default = 2
-        "--overlap"
-        help = "Overlap"
+        "--No"
+        help = "Number of overlaps"
         arg_type = Int
         default = 1
         "--ref"
         help = "Refinement factor"
         arg_type = Int
         default = 2
-        "--aspect"
-        help = "Aspect ratio, length divided by thickness"
-        arg_type = Float64
-        default = 100
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
@@ -42,6 +46,10 @@ function parse_commandline()
         help = "Relative residual tolerance"
         arg_type = Float64
         default = 1.0e-6
+        "--peek"
+        help = "Peek at the iterations?"
+        arg_type = Bool
+        default = false
         "--visualize"
         help = "Write out visualization files?"
         arg_type = Bool
@@ -52,13 +60,17 @@ end
 
 p = parse_commandline()
 
-include(raw"cos_2t_p_hyp_free_examples.jl")
-using .cos_2t_p_hyp_free_examples; 
+include(raw"hyp_free_seq_examples.jl")
+using .hyp_free_seq_examples; 
 
 
-cos_2t_p_hyp_free_examples.test(;
-    aspect=p["aspect"], nelperpart=p["nelperpart"], nbf1max=p["nbf1max"],
-    nfpartitions=p["nfpartitions"], overlap=p["overlap"], ref=p["ref"],
+hyp_free_seq_examples.test(;
+    filename=p["filename"],
+    ref=p["ref"],
+    aspect=p["aspect"],
+    Nc=p["Nc"], n1=p["n1"],
+    Np=p["Np"], No=p["No"],
     itmax=p["itmax"], relrestol=p["relrestol"],
+    peek=p["peek"],
     visualize=p["visualize"])
 
