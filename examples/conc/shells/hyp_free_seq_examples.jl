@@ -1,22 +1,4 @@
-"""
-MODEL DESCRIPTION
-
-Z-section cantilever under torsional loading.
-
-Linear elastic analysis, Young's modulus = 210 GPa, Poisson's ratio = 0.3.
-
-All displacements are fixed at X=0.
-
-Torque of 1.2 MN-m applied at X=10. The torque is applied by two 
-uniformly distributed shear loads of 0.6 MN at each flange surface.
-
-Objective of the analysis is to compute the axial stress at X = 2.5 from fixed end.
-
-NAFEMS REFERENCE SOLUTION
-
-Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
-"""
-module z_cantilever_seq_examples
+module hyp_free_seq_examples
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -28,6 +10,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
+using FinEtoolsDDMethods.CompatibilityModule
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
 using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
 using SymRCM
@@ -44,24 +27,13 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-using ShellStructureTopo: create_partitions
-
 # using MatrixSpy
 
-function zcant!(csmatout, XYZ, tangents, feid, qpid)
-    r = vec(XYZ); 
-    cross3!(r, view(tangents, :, 1), view(tangents, :, 2))
-    csmatout[:, 3] .= vec(r)/norm(vec(r))
-    csmatout[:, 1] .= (1.0, 0.0, 0.0)
-    cross3!(view(csmatout, :, 2), view(csmatout, :, 3), view(csmatout, :, 1))
-    return csmatout
-end
-
 # Parameters:
-E = 210e9
-nu = 0.3
-L = 10.0
-input = "nle5xf3c.inp"
+E = 2.0e11
+nu = 1/3;
+pressure = 1.0e3;
+Length = 2.0;
 
 function computetrac!(forceout, XYZ, tangents, feid, qpid)
     r = vec(XYZ); r[2] = 0.0
@@ -75,26 +47,23 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     CTE = 0.0
-    thickness = 0.1
+    distortion = 0.0
+    n = ncoarse  * ref    # number of elements along the edge of the block
+    tolerance = Length / n/ 100
+    thickness = Length/2/aspect
     
-    tolerance = thickness/1000
-    output = import_ABAQUS(joinpath(dirname(@__FILE__()), input))
-    fens = output["fens"]
-    fes = output["fesets"][1]
-
-    connected = findunconnnodes(fens, fes);
-    fens, new_numbering = compactnodes(fens, connected);
-    fes = renumberconn!(fes, new_numbering);
-
-    for r in 1:ref
-        fens, fes = T3refine(fens, fes)
+    fens, fes = distortblock(T3block, 90/360*2*pi, Length/2, n, n, distortion, distortion);
+    fens.xyz = xyz3(fens)
+    for i in 1:count(fens)
+        a=fens.xyz[i, 1]; y=fens.xyz[i, 2];
+        R = sqrt(1 + y^2)
+        fens.xyz[i, :] .= (R*sin(a), y, R*cos(a))
     end
     
     MR = DeforModelRed3D
     mater = MatDeforElastIso(MR, 0.0, E, nu, CTE)
-    ocsys = CSys(3, 3, zcant!)
 
     sfes = FESetShellT3()
     accepttodelegate(fes, sfes)
@@ -111,10 +80,25 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
 
     # Apply EBC's
     # plane of symmetry perpendicular to Z
-    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf -Inf Inf], inflate = tolerance)
-    for i in [1,2,3,]
+    l1 = selectnode(fens; box = Float64[-Inf Inf -Inf Inf 0 0], inflate = tolerance)
+    for i in [3,4,5]
         setebc!(dchi, l1, true, i)
     end
+    # plane of symmetry perpendicular to Y
+    l1 = selectnode(fens; box = Float64[-Inf Inf 0 0 -Inf Inf], inflate = tolerance)
+    for i in [2,4,6]
+        setebc!(dchi, l1, true, i)
+    end
+    # plane of symmetry perpendicular to X
+    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf -Inf Inf], inflate = tolerance)
+    for i in [1,5,6]
+        setebc!(dchi, l1, true, i)
+    end
+    # clamped edge perpendicular to Y
+    # l1 = selectnode(fens; box = Float64[-Inf Inf L/2 L/2 -Inf Inf], inflate = tolerance)
+    # for i in [1,2,3,4,5,6]
+    #     setebc!(dchi, l1, true, i)
+    # end
     applyebc!(dchi)
     numberdofs!(dchi);
 
@@ -127,23 +111,16 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     @info("Number of elements: $(count(fes))")
     @info("Number of free dofs = $(nfreedofs(dchi))")
 
-    nl = selectnode(fens; box = Float64[10.0 10.0 1.0 1.0 0 0], tolerance = tolerance)
-    loadbdry1 = FESetP1(reshape(nl, 1, 1))
-    lfemm1 = FEMMBase(IntegDomain(loadbdry1, PointRule()))
-    fi1 = ForceIntensity(Float64[0, 0, +0.6e6, 0, 0, 0]);
-    nl = selectnode(fens; box = Float64[10.0 10.0 -1.0 -1.0 0 0], tolerance = tolerance)
-    loadbdry2 = FESetP1(reshape(nl, 1, 1))
-    lfemm2 = FEMMBase(IntegDomain(loadbdry2, PointRule()))
-    fi2 = ForceIntensity(Float64[0, 0, -0.6e6, 0, 0, 0]);
-    F = distribloads(lfemm1, geom0, dchi, fi1, 3) + distribloads(lfemm2, geom0, dchi, fi2, 3);
+    lfemm = FEMMBase(IntegDomain(fes, TriRule(3)))
+    fi = ForceIntensity(Float64, 6, computetrac!);
+    F = distribloads(lfemm, geom0, dchi, fi, 2);
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
     
     function make_matrix(fes)
-        femm1 = deepcopy(femm) # for thread safety
-        femm1.integdomain.fes = fes
-        return stiffness(femm1, geom0, u0, Rfield0, dchi);
+        femm.integdomain.fes = fes
+        return stiffness(femm, geom0, u0, Rfield0, dchi);
     end
 
     t1 = time()
@@ -175,7 +152,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
-    
+
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
@@ -210,7 +187,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
         "time" => t1 - t0,
     )
     f = (filename == "" ?
-         "z_cantilever-" *
+         "hyp_free" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -223,7 +200,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     
     if visualize
         f = (filename == "" ?
-         "z_cantilever-" *
+         "hyp_free-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -237,8 +214,9 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     true
 end
 
-function test(;filename = "", ref = 2, Nc = 2, n1 = 6, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
-    _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function test(;filename = "", ref = 2, aspect = 10.0, Nc = 2, n1 = 6, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+    ncoarse = 32
+    _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
 end
 
 nothing

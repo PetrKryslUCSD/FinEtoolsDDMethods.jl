@@ -9,7 +9,8 @@ for No in 1 3 5 ; do
             Nc=0
             filename="${prefix}-N=$N-Np=$Np-No=$No.json"
             echo $filename
-            julia conc/lindef/bb.jl --filename "$filename" --N $N --Nc $Nc --n1 $n1 --Np $Np --No $No; 
+            julia conc/lindef/bb.jl --filename "$filename" \
+                --N $N --Nc $Nc --n1 $n1 --Np $Np --No $No; 
         done
     done
 done

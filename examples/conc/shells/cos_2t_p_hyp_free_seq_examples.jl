@@ -1,4 +1,5 @@
 module cos_2t_p_hyp_free_seq_examples
+
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
@@ -136,7 +137,7 @@ function _execute(ncoarse, aspect, nelperpart, nbf1max, nfpartitions, overlap, r
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
+    
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
     @info "Mean partition allocations: $(mean([mebibytes(_p) for _p in partition_list])) [MiB]" 
