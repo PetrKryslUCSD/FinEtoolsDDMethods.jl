@@ -9,10 +9,9 @@ using ArgParse
 
 function parse_commandline()
     s = ArgParseSettings()
-    s = ArgParseSettings()
     @add_arg_table! s begin
-        "--prefix"
-        help = "Prepend a prefix to the output file names"
+        "--filename"
+        help = "Use filename to name the output files"
         arg_type = String
         default = ""
         "--Nc"
@@ -69,7 +68,7 @@ include(raw"body_block_seq_examples.jl")
 using .body_block_seq_examples; 
 
 body_block_seq_examples.test(;
-    prefix=p["prefix"],
+    filename=p["filename"],
     N=p["N"], kind=p["kind"],
     E=p["E"], nu=p["nu"],
     Nc=p["Nc"], n1=p["n1"], 
