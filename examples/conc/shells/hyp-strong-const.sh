@@ -1,4 +1,4 @@
-prefix="hyp-strong-grow"
+prefix="hyp-strong-const"
 n1=6
 Nc=500
 ref=7
