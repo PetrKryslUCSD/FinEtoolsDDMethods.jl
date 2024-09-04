@@ -138,13 +138,14 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     # n1adj = n1 + 1 # adjust for a safety margin
     # ntadj = 0.8 * n1*(n1+1)/2 + 0.2 * n1adj*(n1adj+1)/2
     ntadj = n1*(n1+1)/2 
-    (Nc == 0) && (Nc = Int(floor(minimum(partition_sizes) / ntadj / ndofs(dchi))))
+    (Nc == 0) && (Nc = Int(floor(meanps / ntadj / ndofs(dchi))))
     Nepc = count(fes) ÷ Nc
     (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
     @info("Number of elements per cluster: $(Nepc)")
     
     cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
     @info("Number of clusters (actual): $(Nc)")
+    return
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
