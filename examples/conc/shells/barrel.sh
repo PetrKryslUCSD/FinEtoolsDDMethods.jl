@@ -1,15 +1,10 @@
 script=barrel
 for rf in 1; do
-    for nf in 8 16 32; do
-        for n1 in 4 5 6; do
-            for ne in $(seq 200 400 1000); do
-                for ov in 1 3 5; do
-                    jsonfile=barrel-rf=$rf-ne=$ne-n1=$n1-nf=$nf-ov=$ov.json
-                    if [ -f ${jsonfile} ]; then
-                        echo "${jsonfile} exists" 
-                    else
-                        julia conc/shells/${script}.jl --nelperpart $ne --nbf1max $n1 --ref $rf --nfpartitions $nf --overlap $ov  --stabilize false; 
-                    fi
+    for Np in 8 16 32; do
+        for n1 in 6; do
+            for Nc in 400; do
+                for No in 1 3 5; do
+                   julia conc/shells/${script}.jl --nelperpart $ne --nbf1max $n1 --ref $rf --nfpartitions $nf --overlap $ov  --stabilize false; 
                 done
             done 
         done

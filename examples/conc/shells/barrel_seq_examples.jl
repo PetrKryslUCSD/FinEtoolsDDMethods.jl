@@ -8,6 +8,7 @@ along a an intersection.
 
 """
 module barrel_seq_examples
+
 using FinEtools
 using FinEtools.MeshExportModule: VTK, VTKWrite
 using FinEtoolsDeforLinear
@@ -65,7 +66,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, peek, visualize)
+function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, peek, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -145,10 +146,8 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     dr = dofrange(dchi, DOF_KIND_DATA)
     
     @info("Refinement factor: $(ref)")
-    @info("Number of elements per partition: $(nelperpart)")
-    @info("Number of 1D basis functions: $(nbf1max)")
-    @info("Number of fine grid partitions: $(nfpartitions)")
-    @info("Overlap: $(overlap)")
+    @info("Number of fine grid partitions: $(Np)")
+    @info("Number of overlaps: $(No)")
     @info("Number of elements: $(count(fes))")
     @info("Number of free dofs = $(nfreedofs(dchi))")
 
@@ -159,32 +158,41 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
 
     associategeometry!(femm, geom0)
     
-    t1 = time()
-    cpartitioning, ncpartitions = shell_cluster_partitioning(fens, fes, nelperpart)
-    @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
-        
-    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
-    Phi = transfmatrix(mor, LegendreBasis, nbf1max, dchi)
-    Phi = Phi[fr, :]
-    @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-
     function make_matrix(fes)
         femm.integdomain.fes = fes
         return stiffness(femm, geom0, u0, Rfield0, dchi);
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, dchi) 
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
-    @info "Mean fine partition size = $(mean([partition_size(_p) for _p in partition_list]))"
-    @info "Mean partition allocations: $(mean([mebibytes(_p) for _p in partition_list])) [MiB]" 
-    @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
-    @info "Create partitions time: $(time() - t1)"
+    partition_sizes = [partition_size(_p) for _p in partition_list]
+    meanps = mean(partition_sizes)
+    @info "Mean fine partition size: $(meanps)"
+    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+
+    t1 = time()
+    @info("Number of clusters (requested): $(Nc)")
+    @info("Number of 1D basis functions: $(n1)")
+    # n1adj = n1 + 1 # adjust for a safety margin
+    # ntadj = 0.8 * n1*(n1+1)/2 + 0.2 * n1adj*(n1adj+1)/2
+    ntadj = n1*(n1+1)/2 
+    (Nc == 0) && (Nc = Int(floor(meanps / ntadj / ndofs(dchi))))
+    Nepc = count(fes) ÷ Nc
+    (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
+    @info("Number of elements per cluster: $(Nepc)")
+    
+    cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
+    @info("Number of clusters (actual): $(Nc)")
+        
+    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
+    Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
+    Phi = Phi[fr, :]
+    @info("Size of the reduced problem: $(size(Phi, 2))")
+    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function peeksolution(iter, x, resnorm)
-        @info("it $(iter): residual norm =  $(resnorm)")
+        peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
     t1 = time()
@@ -202,7 +210,7 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        peeksolution=peek ? peeksolution : (iter, x, resnorm) -> nothing,
+        peeksolution=peeksolution,
         itmax=itmax, 
         # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
@@ -212,49 +220,43 @@ function _execute(ncoarse, nelperpart, nbf1max, nfpartitions, overlap, ref, itma
     @info "Iteration: $(time() - t0)"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
-        "nfreedofs_dchi" => nfreedofs(dchi),
-        "ncpartitions" => ncpartitions,
-        "nfpartitions" => nfpartitions,
-        "overlap" => overlap,
-        "size_Kr_ff" => size(Kr_ff),
+        "nfreedofs" => nfreedofs(dchi),
+        "Nc" => Nc,
+        "Np" => Np,
+        "No" => No,
+        "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
         "time" => t1 - t0,
     )
-    f = "barrel" *
-        "-rf=$(ref)" *
-        "-ne=$(nelperpart)" *
-        "-n1=$(nbf1max)"  * 
-        "-nf=$(nfpartitions)"  * 
-        "-ov=$(overlap)"  
+    f = (filename == "" ?
+         "barrel" *
+         "-ref=$(ref)" *
+         "-Nc=$(Nc)" *
+         "-n1=$(n1)" *
+         "-Np=$(Np)" *
+         "-No=$(No)" :
+         filename)
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(dchi, u_f)
     
     if visualize
-        # f = "barrel" *
-        #     "-rf=$(ref)" *
-        #     "-ne=$(nelperpart)" *
-        #     "-n1=$(nbf1max)" * 
-        #     "-nf=$(nfpartitions)"  * 
-        #     "-cg-sol"
-        # VTK.vtkexportmesh(f * ".vtk", fens, fes; vectors=[("u", deepcopy(u.values),)])
-        VTK.vtkexportmesh("barrel-sol.vtk", fens, fes;
+        f = (filename == "" ?
+         "barrel-" *
+         "-ref=$(ref)" *
+         "-Nc=$(Nc)" *
+         "-n1=$(n1)" *
+         "-Np=$(Np)" *
+         "-No=$(No)" :
+         filename) * "-cg-sol"
+        VTK.vtkexportmesh(f * ".vtk", fens, fes;
             vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
-
-        p = 1
-        for nodelist in nodelists
-            cel = connectedelems(fes, nodelist, count(fens))
-            vtkexportmesh("barrel-patch$(p).vtk", fens, subset(fes, cel))
-            sfes = FESetP1(reshape(nodelist, length(nodelist), 1))
-            vtkexportmesh("barrel-nodes$(p).vtk", fens, sfes)
-            p += 1
-        end
     end
 
     true
 end
 
-function test(;nelperpart = 200, nbf1max = 3, nfpartitions = 8, overlap = 3, ref = 1, stabilize = false, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
-    _execute(32, nelperpart, nbf1max, nfpartitions, overlap, ref, itmax, relrestol, stabilize, peek, visualize)
+function test(;filename = "", ref = 1,  Nc = 0, n1 = 6, Np = 4, No = 1, itmax = 2000, relrestol = 1e-6, stabilize = false, peek = false, visualize = false) 
+    _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, peek, visualize)
 end
 
 nothing
