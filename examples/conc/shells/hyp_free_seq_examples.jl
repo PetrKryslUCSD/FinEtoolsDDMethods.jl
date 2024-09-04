@@ -145,7 +145,6 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     
     cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
     @info("Number of clusters (actual): $(Nc)")
-    return
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
