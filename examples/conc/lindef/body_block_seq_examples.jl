@@ -107,8 +107,8 @@ function _execute(filename, kind, N, E, nu,
     t1 = time()
     @info("Number of 1D basis functions: $(n1)")
     @info("Number of clusters (requested): $(Nc)")
-    n1adj = n1 + 1 # adjust for a safety margin
-    (Nc == 0) && (Nc = Int(floor(minimum(partition_sizes) / (n1adj*(n1adj+1)*(n1adj+2)/6) / ndofs(u))))
+    nt = (n1*(n1+1)*(n1+2)/6)
+    (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(u))))
     Nepc = count(fes) ÷ Nc
     (n1 > Nepc^(1/3)) && @error "Not enough elements per cluster"
     cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
