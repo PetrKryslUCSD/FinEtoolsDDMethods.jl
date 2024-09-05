@@ -9,7 +9,7 @@ Ef=100000.0
 nuf=0.3
 Em=1.0
 num=0.3
-for No in 1 3 5 ; do
+for No in 5 3 1 ; do
     for Np in 4 8 16 32 64 128 256 ; do
         filename="${prefix}-${kind}-ref=$ref-Np=$Np-No=$No.json"
         julia --project=. conc/lindef/fib.jl --filename "$filename" --ref $ref --kind $kind \
