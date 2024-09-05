@@ -12,6 +12,6 @@ for N in $(seq 2 9) ; do
     Nc=$((Ne/Np*3/nt/3)) # (6840/2)
     filename="${prefix}-N=$N.json"
     echo "N=$N Nc=$Nc Np=$Np $filename "
-    # julia conc/lindef/bb.jl --filename "$filename" \
-    #                 --N $N --Nc $Nc --n1 $n1 --Np $Np --No $No; 
+    julia conc/lindef/bb.jl --filename "$filename" \
+                    --N $N --Nc $Nc --n1 $n1 --Np $Np --No $No; 
 done
