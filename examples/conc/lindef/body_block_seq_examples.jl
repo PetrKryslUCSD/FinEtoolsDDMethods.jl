@@ -32,7 +32,7 @@ function _execute(filename, kind, N, E, nu,
     CTE = 0.0
     L = 1.0
     
-    fens, fes = mesh(L, L, L, 5*N, 9*N, 19*N)
+    fens, fes = mesh(L, L, L, 7*N, 12*N, 21*N)
 
     if visualize
         f = (filename == "" ? 

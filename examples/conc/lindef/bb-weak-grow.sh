@@ -13,7 +13,7 @@ No=5
 #     done
 # done
 for N in $(seq 2 9) ; do
-    Np=$((5*9*19*N**3/3420)) # (6840/2)
+    Np=$((7*12*21*N**3/(14112/2))) # (6840/2)
     filename="${prefix}-N=$N.json"
     echo "$N $Np $filename "
     julia conc/lindef/bb.jl --filename "$filename" \
