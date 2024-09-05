@@ -157,8 +157,8 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     t1 = time()
     @info("Number of clusters (requested): $(Nc)")
     @info("Number of 1D basis functions: $(n1)")
-    n1adj = n1 + 1 # adjust for a safety margin
-    (Nc == 0) && (Nc = Int(floor(minimum(partition_sizes) / (n1adj*(n1adj+1)/2) / ndofs(dchi))))
+    nt = n1*(n1+1)/2 
+    (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
     Nepc = count(fes) ÷ Nc
     (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
     @info("Number of elements per cluster: $(Nepc)")
