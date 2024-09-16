@@ -128,10 +128,10 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     partition_sizes = [partition_size(_p) for _p in partition_list]
-    meanps = mean(partition_sizes)
+    meanps = Int(round(mean(partition_sizes)))
     minps = minimum(partition_sizes)
     maxps = maximum(partition_sizes)
-    @info "Min, Mean, Max fine partition size: $(minps), $(meanps) $(maxps)"
+    @info "Min, Mean, Max fine partition size: $(minps), $(meanps), $(maxps)"
     # @info "Element list lengths (noneoverlapping): $([length(_el.nonoverlapping) for _el in cpi.element_lists])"
     # @info "Element list lengths (overlapping): $([length(_el.overlapping) for _el in cpi.element_lists])"
     # @info "Element list lengths (all connected): $([length(_el.all_connected) for _el in cpi.element_lists])"
