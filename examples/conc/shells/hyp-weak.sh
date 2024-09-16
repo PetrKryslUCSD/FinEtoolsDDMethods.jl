@@ -5,7 +5,7 @@ No=5
 as=10
 
 for ref in 4 8 16 ; do
-    Np=$((16*ref))
+    Np=$((2*ref**2))
     filename="${prefix}-ref=$ref-as=$as-Np=$Np-No=$No.json"
     julia conc/shells/hyp.jl --filename "$filename" \
     --aspect $as \
