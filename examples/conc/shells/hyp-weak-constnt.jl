@@ -1,4 +1,4 @@
-prefix="hyp-weak-const"
+prefix="hyp-weak-constnt"
 n1=6
 No=5
 
