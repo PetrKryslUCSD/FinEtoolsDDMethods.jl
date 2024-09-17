@@ -31,7 +31,7 @@ function parse_commandline()
         arg_type = Int
         default = 1
         "--ref"
-        help = "Refinement factor"
+        help = "Refinement factor (increment by 1 increases the number of triangles by a factor of 4)"
         arg_type = Int
         default = 2
         "--itmax"
