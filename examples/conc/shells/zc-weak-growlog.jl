@@ -9,5 +9,4 @@ for ref in 4:8
     run(`
     julia --project=. conc/shells/zc.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
     `)
-    @info "$ref: $(Np), $Nc"
 end
