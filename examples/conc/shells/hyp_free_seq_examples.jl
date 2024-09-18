@@ -184,13 +184,16 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
+        "number_nodes" => count(fens),
+        "number_elements" => count(fes),
         "nfreedofs" => nfreedofs(dchi),
         "Nc" => Nc,
         "Np" => Np,
         "No" => No,
+        "meanps" => meanps,
         "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
-        "time" => t1 - t0,
+        "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
          "hyp_free" *
