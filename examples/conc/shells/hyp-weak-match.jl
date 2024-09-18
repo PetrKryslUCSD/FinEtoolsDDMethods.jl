@@ -3,7 +3,7 @@ n1=6
 No=5
 
 for as in [10 100]
-    for ref in 4:20
+    for ref in 4:25
         Np = Int(round(ref^2 / 2))
         Nc = 0
         filename="$(prefix)-ref=$ref-as=$as-Np=$Np-No=$No.json"

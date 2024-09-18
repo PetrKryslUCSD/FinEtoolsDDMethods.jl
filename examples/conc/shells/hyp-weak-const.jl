@@ -5,7 +5,7 @@ nt = n1 * (n1 + 1) / 2
 Nc = 18000 / nt
 
 for as in [10 100]
-    for ref in 4:20
+    for ref in 4:25
         Np = Int(round(ref^2 / 2))
         filename="$(prefix)-ref=$ref-as=$as-Np=$Np-No=$No.json"
         run(`
