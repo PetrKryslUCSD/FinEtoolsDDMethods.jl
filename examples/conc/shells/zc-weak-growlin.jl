@@ -13,7 +13,7 @@ for ref in 20:10:100
     @show Np = Int(round(Ne / Nepp))
     @show Nc = number_of_clusters(Np)
     filename = "$(prefix)-ref=$ref-Np=$Np-No=$No.json"
-    # run(`
-    # julia --project=. conc/shells/zc.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
-    # `)
+    run(`
+    julia --project=. conc/shells/zc.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
+    `)
 end
