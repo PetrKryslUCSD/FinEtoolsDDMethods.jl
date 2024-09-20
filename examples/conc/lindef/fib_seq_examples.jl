@@ -395,6 +395,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
          "-Np=$(Np)" *
          "-No=$(No)" :
          filename)
+    @info "Storing data in $(f * ".json")"
     DataDrop.store_json(f * ".json", data)
     scattersysvec!(u, u_f)
 
