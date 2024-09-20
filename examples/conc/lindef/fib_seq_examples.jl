@@ -374,15 +374,18 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
-        "nfreedofs" => nfreedofs(u),
-        "rf" => ref, 
+        "number_nodes" => count(fens),
+        "number_elements" => count(fes),
+        "nfreedofs" => nfreedofs(dchi),
+        "ref" => ref, 
         "Nc" => Nc,
         "n1" => n1,
         "Np" => Np,
         "No" => No,
+        "meanps" => meanps,
         "size_Kr_ff" => size(Krfactor),
         "stats" => stats,
-        "time" => t1 - t0,
+        "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
          "fib-$(string(kind))" *
