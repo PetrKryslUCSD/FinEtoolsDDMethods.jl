@@ -1,14 +1,14 @@
-kind="hex"
-prefix="fib-strong-$(kind)-cni-match"
+kind = "hex"
+prefix = "fib-strong-$(kind)-cni-match"
 n1 = 6
 No = 5
 nt = n1 * (n1 + 1) * (n1 + 2) / 6 * 3
 ref = 6
 Nc = 0
-Ef=100000.0
-nuf=0.3
-Em=1000.0
-num=0.4999
+Ef = 100000.0
+nuf = 0.3
+Em = 1000.0
+num = 0.4999
 
 for Np in 8:8:64
     filename = "$(prefix)-ref=$ref-Np=$Np-No=$No-Nc=$Nc.json"

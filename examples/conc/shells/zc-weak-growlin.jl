@@ -2,7 +2,6 @@ prefix="zc-weak-growlin"
 n1 = 6
 No = 5
 nt = n1 * (n1 + 1) / 2 * 6
-Nepp = 5000
 number_of_clusters(Np) = Int(ceil(Np / 2))
 
 for Nepp in [5000, 1000, 200]

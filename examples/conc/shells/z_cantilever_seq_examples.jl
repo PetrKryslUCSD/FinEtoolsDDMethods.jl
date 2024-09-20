@@ -398,6 +398,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         "number_elements" => count(fes),
         "nfreedofs" => nfreedofs(dchi),
         "Nc" => Nc,
+        "n1" => n1,
         "Np" => Np,
         "No" => No,
         "meanps" => meanps,
