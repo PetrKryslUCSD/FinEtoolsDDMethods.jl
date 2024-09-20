@@ -179,6 +179,7 @@ function CoNCPartitionData(cpi::CPI,
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
+    t0 = time()
     element_lists = cpi.element_lists
     dof_lists = cpi.dof_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
@@ -213,7 +214,12 @@ function CoNCPartitionData(cpi::CPI,
     otempp = zeros(eltype(cpi.u.values), length(odof))
     ntempq = zeros(eltype(cpi.u.values), length(ndof))
     ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    return CoNCPartitionData(Kn_ff, lu(Ko_ff), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
+    println("Size of Ko_ff: $(size(Ko_ff))")
+    t1 = time()
+    fact = lu(Ko_ff)
+    println("Factorize: $(time() - t1) seconds")
+    println("Partition $i: $(time() - t0) seconds")
+    return CoNCPartitionData(Kn_ff, fact, rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
 end
 
 function partition_size(cpd::CoNCPartitionData)

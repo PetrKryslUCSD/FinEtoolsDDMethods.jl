@@ -27,10 +27,12 @@ using ShellStructureTopo
 using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
 
 function make_partitions(cpi, fes, make_matrix, make_interior_load)
+    t0 = time()
     partition_list  = [CoNCPartitionData(cpi) for i in 1:npartitions(cpi)]
     for i in eachindex(partition_list)
         partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, make_interior_load)
     end  
+    println("Time to make partitions: ", time() - t0)
     return partition_list
 end
 

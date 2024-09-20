@@ -1,7 +1,7 @@
 kind = "tet"
 prefix = "fib-strong-$(kind)-cni-match"
 n1 = 6
-No = 5
+No = 2
 nt = n1 * (n1 + 1) * (n1 + 2) / 6 * 3
 ref = 4
 Nc = 0
