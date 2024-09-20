@@ -376,7 +376,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     data = Dict(
         "number_nodes" => count(fens),
         "number_elements" => count(fes),
-        "nfreedofs" => nfreedofs(dchi),
+        "nfreedofs" => nfreedofs(u),
         "ref" => ref, 
         "Nc" => Nc,
         "n1" => n1,
