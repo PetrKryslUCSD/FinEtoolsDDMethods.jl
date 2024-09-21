@@ -1,9 +1,9 @@
-kind = "hex"
+kind = "tet"
 prefix = "fib-strong-$(kind)-cc-grow"
 n1 = 6
-No = 5
+No = 2
 nt = n1 * (n1 + 1) * (n1 + 2) / 6 * 3
-ref = 6
+ref = 4
 Ef = 100000.0
 nuf = 0.3
 Em = 1000.0
