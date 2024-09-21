@@ -1,5 +1,5 @@
 kind = "hex"
-prefix = "fib-strong-$(kind)-cni-grogrowminn1"
+prefix = "fib-strong-$(kind)-cni-growminn1"
 n1 = 2
 No = 5
 nt = n1 * (n1 + 1) * (n1 + 2) / 6 * 3
