@@ -56,11 +56,11 @@ end
 
 p = parse_commandline()
 
-include(raw"z_cantilever_seq_examples.jl")
-using .z_cantilever_seq_examples; 
+include(raw"zc_seq_examples.jl")
+using .zc_seq_examples; 
 
 
-z_cantilever_seq_examples.test(;
+zc_seq_examples.test(;
     filename=p["filename"],
     ref=p["ref"],
     Nc=p["Nc"], n1=p["n1"],

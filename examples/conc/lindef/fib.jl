@@ -66,6 +66,10 @@ function parse_commandline()
         help = "Poisson ratio of the matrix"
         arg_type = Float64
         default = 0.4999
+        "--peek"
+        help = "Peek at the iterations?"
+        arg_type = Bool
+        default = false
         "--visualize"
         help = "Write out visualization files?"
         arg_type = Bool
@@ -86,5 +90,6 @@ fib_seq_examples.test(;
     Em=p["Em"], num=p["num"], Ef=p["Ef"], nuf=p["nuf"],
     Nc=p["Nc"], n1=p["n1"], Np=p["Np"], No=p["No"], 
     itmax=p["itmax"], relrestol=p["relrestol"],
+    peek=p["peek"],
     visualize = p["visualize"])
 

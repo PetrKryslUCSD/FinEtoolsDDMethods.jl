@@ -16,7 +16,7 @@ NAFEMS REFERENCE SOLUTION
 
 Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 """
-module z_cantilever_seq_examples
+module zc_seq_examples
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -213,7 +213,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
         "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
-         "z_cantilever-" *
+         "zc-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -226,7 +226,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     
     if visualize
         f = (filename == "" ?
-         "z_cantilever-" *
+         "zc-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -407,7 +407,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
-         "z_cantilever-" *
+         "zc-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -420,7 +420,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     if visualize
         f = (filename == "" ?
-         "z_cantilever-" *
+         "zc-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *

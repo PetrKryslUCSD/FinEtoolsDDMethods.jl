@@ -238,7 +238,7 @@ end # fibers_mesh
 
 function _execute(filename, kind, ref, Em, num, Ef, nuf,
     Nc, n1, Np, No,
-    mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
+    mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, peek, visualize)
     CTE = 0.0
     magn = 1.0
     
@@ -354,7 +354,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     @info("Global reduced factor: $(mebibytes(Krfactor)) [MiB]")
     
     function peeksolution(iter, x, resnorm)
-        @info("it $(iter): residual norm =  $(resnorm)")
+        peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
     t0 = time()
@@ -363,7 +363,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
-        # peeksolution=peeksolution,
+        peeksolution=peeksolution,
         itmax=itmax, 
         # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
         # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
@@ -418,7 +418,7 @@ function test(; filename = "",
     kind = "hex", ref = 1, 
     Em = 1.0e3, num = 0.4999, Ef = 1.0e5, nuf = 0.3, 
     Nc = 0, n1 = 6, Np = 8, No = 1, 
-    itmax = 2000, relrestol = 1e-6, visualize = false)
+    itmax = 2000, relrestol = 1e-6, peek = false, visualize = false)
     mesh, boundary_rule, interior_rule, make_femm = if kind == "hex"
         mesh = fibers_mesh_hex
         boundary_rule = GaussRule(2, 2)
@@ -434,7 +434,7 @@ function test(; filename = "",
     end
     _execute(filename, kind, ref, Em, num, Ef, nuf,
         Nc, n1, Np, No,
-        mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, visualize)
+        mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, peek, visualize)
 end
 
 nothing
