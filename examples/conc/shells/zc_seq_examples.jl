@@ -328,8 +328,8 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    @time cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    @time partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     partition_sizes = [partition_size(_p) for _p in partition_list]
     meanps = mean(partition_sizes)
     @info "Mean fine partition size: $(meanps)"
