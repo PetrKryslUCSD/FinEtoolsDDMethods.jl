@@ -4,7 +4,7 @@ Free vibration of steel barrel
 The structure represents a barrel container with spherical caps, two T
 stiffeners, and edge stiffener. This example tests the ability to represent
 creases in the surface, and junctions with more than two shell faces joined
-along a an intersection.
+along an intersection.
 
 Parallel simulation with MPI.
 """
