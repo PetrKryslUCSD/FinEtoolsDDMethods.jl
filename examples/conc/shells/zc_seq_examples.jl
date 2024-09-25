@@ -63,18 +63,6 @@ nu = 0.3
 L = 10.0
 input = "nle5xf3c.inp"
 
-function computetrac!(forceout, XYZ, tangents, feid, qpid)
-    r = vec(XYZ); r[2] = 0.0
-    r .= vec(r)/norm(vec(r))
-    theta = atan(r[3], r[1])
-    n = cross(tangents[:, 1], tangents[:, 2]) 
-    n = n/norm(n)
-    forceout[1:3] = n*pressure*cos(2*theta)
-    forceout[4:6] .= 0.0
-    # @show dot(n, forceout[1:3])
-    return forceout
-end
-
 function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     CTE = 0.0
     thickness = 0.1
