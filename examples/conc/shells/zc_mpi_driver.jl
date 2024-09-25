@@ -238,12 +238,11 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         (q, p) -> precondition_local_solve!(q, partition, p);
         itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution=peeksolution)
-
-    rank == 0 && @info("Number of iterations:  $(stats.niter)")
+    rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
+    rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
     stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
     scattersysvec!(dchi, u_f, DOF_KIND_FREE)
-    rank == 0 && @info("Solution ($(round(time() - t1, digits=3)) [s])")
-
+    
     MPI.Finalize()
     
     true
