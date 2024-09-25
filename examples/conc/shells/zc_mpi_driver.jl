@@ -278,7 +278,7 @@ function parse_commandline()
         "--ref"
         help = "Refinement factor (increment by 1 increases the number of triangles by a factor of 4)"
         arg_type = Int
-        default = 2
+        default = 5
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
@@ -301,14 +301,17 @@ end
 
 p = parse_commandline()
 
-test(;
-    filename=p["filename"],
-    ref=p["ref"],
-    Nc=p["Nc"], n1=p["n1"],
-    No=p["No"], 
-    itmax=p["itmax"], relrestol=p["relrestol"],
-    peek=p["peek"],
-    visualize=p["visualize"])
+_execute(
+    p["filename"],
+    p["ref"],
+    p["Nc"], 
+    p["n1"],
+    p["No"], 
+    p["itmax"], 
+    p["relrestol"],
+    p["peek"],
+    p["visualize"]
+    )
 
 
 nothing
