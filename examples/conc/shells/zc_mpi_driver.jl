@@ -178,14 +178,14 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
 
     t1 = time()
-    @time cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    @time "partition info" cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     partition = nothing
     if rank > 0
-        @time partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
-        # @info "DEBUG rank=$rank, $(length(partition.odof)) ($(round(time() - t1, digits=3)) [s])"
+        @time "rank > 0 partition " partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
+        @info "DEBUG rank=$rank, $(length(partition.odof)) ($(round(time() - t1, digits=3)) [s])"
     end    
     MPI.Barrier(comm)
-    rank == 0 && (@info "Create partition $rank ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info "Create partition ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
