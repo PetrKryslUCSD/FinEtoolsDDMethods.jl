@@ -1,4 +1,4 @@
-module body_block_seq_examples
+module bb_seq_examples
 using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtools.MeshExportModule: CSV
