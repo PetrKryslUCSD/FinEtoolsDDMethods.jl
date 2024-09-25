@@ -181,7 +181,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     @time "partition $rank info" cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     partition = nothing
     if rank > 0
-        @time "rank $rank partition " partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
+        @time "rank $rank partition $(length(partition.odof))" partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
     end    
     MPI.Barrier(comm)
     rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
