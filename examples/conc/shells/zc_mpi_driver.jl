@@ -185,7 +185,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         # @info "DEBUG rank=$rank, $(length(partition.odof)) ($(round(time() - t1, digits=3)) [s])"
     end    
     MPI.Barrier(comm)
-    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info "Create partition $rank ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
