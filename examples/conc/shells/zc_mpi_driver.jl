@@ -183,7 +183,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     if rank > 0
         cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
         partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
-        @info "DEBUG rank=$rank, $(length(partition.odof)) ($(round(time() - t1, digits=3)) [s])"
+        # @info "DEBUG rank=$rank, $(length(partition.odof)) ($(round(time() - t1, digits=3)) [s])"
     end    
     MPI.Barrier(comm)
     rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
