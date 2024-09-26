@@ -145,34 +145,30 @@ function pcg_mpi_2level_Schwarz(
     rank,
     Aop!,
     b,
-    x0,
-    (MG!)=(q, p) -> (q .= p),
-    (ML!)=(q, p) -> (q .= p);
-    itmax=0,
-    atol=√eps(eltype(b)),
-    rtol=√eps(eltype(b)),
+    x0;
+    (M!) = (q, p) -> (q .= p),
+    itmax = 0,
+    atol = √eps(eltype(b)),
+    rtol = √eps(eltype(b)),
     normtype = KSP_NORM_NATURAL,
     peeksolution = (iter, x, resnorm) -> nothing
     )
     itmax = (itmax > 0 ? itmax : length(b))
     (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
-    x = deepcopy(x0); p = similar(x); r = similar(x); zg = similar(x); zl = similar(x)
-    z = zg # Alias for legibility
+    x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
     Ap = z # Alias for legibility
     MPI.Bcast!(x, comm; root=0) # Broadcast the initial guess
     Aop!(Ap, x) # If partition, compute contribution to the A*p
     MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
     if rank == 0
         @. r = b - Ap # Compute the residual
-        MG!(zg, r) # If root, apply the global preconditioner
     end
     MPI.Bcast!(r, comm; root=0) # Broadcast the residual
-    ML!(zl, r) # Apply the local preconditioner, if partition
-    MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
+    M!(z, r) # Apply the preconditioner
+    MPI.Reduce!(z, MPI.SUM, comm; root=0) # Reduce the preconditioner
     tol = zero(typeof(atol))
     resnorm = Inf
     if rank == 0
-        @. z = zl + zg # Combine the local and global preconditioners
         @. p = z
         rhoold = dot(z, r)
         if normtype == KSP_NORM_UNPRECONDITIONED
@@ -195,13 +191,11 @@ function pcg_mpi_2level_Schwarz(
             alpha = rhoold / dot(p, Ap)
             @. x += alpha * p
             @. r -= alpha * Ap
-            MG!(zg, r) # If root, apply the global preconditioner
         end
         MPI.Bcast!(r, comm; root=0) # Broadcast the residual
-        ML!(zl, r) # Apply the local preconditioner, if partition
-        MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
+        M!(z, r) # Apply the preconditioner, if partition
+        MPI.Reduce!(z, MPI.SUM, comm; root=0) # Reduce the local preconditioner
         if rank == 0
-            @. z = zl + zg # Combine the local and global preconditioners
             rho = dot(z, r)
             beta = rho / rhoold;   rhoold = rho
             @. p = z + beta * p
