@@ -7,7 +7,10 @@ on the complement matrix. Some of the examples are parallelized with MPI.
 - `conc`: coherent node cluster (CoNC) model reduction is used as a global solver in a preconditioned conjugate gradient based on the decomposition at two levels:
 local (classical additive Schwarz based on overlapping subdomains), and global (reduced model based on coherent clusters). The examples do not run in parallel yet.
 
-## How to run a Schur-complement CG parallel example
+## Setting up the MPI environment
+
+For parallel execution, the Julia environment first needs to be set up.
+This needs to be done for the architecture on which the code will execute.
 
 Please do:
 
@@ -38,29 +41,40 @@ mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
 
 
+## How to run a Schur-complement CG parallel example
+
+
 ## How to run a CoNC-preconditioned CG (sequential) example
 
 Two classes of problems solved here:
-- Three dimensional elasticity (composite of matrix with embedded fibers).
-- General three dimensional shells.
+- Three-dimensional elasticity (composite of matrix with embedded fibers).
+- General three-dimensional shells.
 
 There are shell scripts to run the studies reported in the paper.
 
-The three examples for the elasticity problem are:
-- Moderately compressible matrix. Driver `cc.jl` (shell script `cc.sh`).
-- Strongly compressible matrix. Driver `css.jl` (shell script `css.sh`).
-- Nearly incompressible matrix. Driver `cni.jl` (shell script `cni.sh`).
+For a strong scaling simulation of an elasticity problem, there are:
+- Moderately compressible matrix. Driver `fib-strong-***T***-cc-***X***.jl`.
+- Nearly incompressible matrix. Driver `fib-strong-***T***-cni-***X***.jl`.
 
-The three examples for the shell problems are:
-- Single-sheet hyperboloid with cosine pressure loading and free edge. Driver `hyp.jl` (shell script `hyp.sh`).
-- Z-section cantilever under torsional loading. Driver `z.jl` (shell script `z.sh`).
-- Barrel with stiffeners.  Driver `barrel.jl` (shell script `barrel.sh`).
+
+Here `***T***` stands for the type of the mesh (`hex` or `tet`), and `***X***`
+stands for the coarse-grid evolution strategy: `const`, `grow`, `match`.
+
+For the shells, there are scripts for strong and weak scaling:
+
+- Z-section cantilever under torsional loading. Driver `zc-***S***-***X***.jl`
+
+Here `***S***` stands for the scaling type (`strong` or `weak`), 
+and `***X***`
+stands for the coarse-grid evolution strategy: `const`, `growlin`, `growlin2`, `growlog`, `growsqr`, `match`.
+
 
 For instance, when in the folder `FinEtoolsDDMethods.jl/examples`, execute
 ```
-$ bash conc/shells/hyp.sh
+$ julia --project=. conc/shells/zc-weak-growlin.jl
 ```
-Warning: Running the examples may require a beefy machine,
+
+*Warning*: Running the examples may require a beefy machine,
 and it may take a long time to finish the simulations: some of the scripts run through many
 combinations of the parameters.
 
@@ -120,7 +134,7 @@ mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
 ```
 or
 ```
-mpiexec -n 5 julia --project=. .\conc\shells\barrel_mpi_driver.jl
+mpiexec -n 5 julia --project=. .\conc\shells\zc_mpi_driver.jl
 ```
 
 Batch execution on the Ookami A64FX nodes is described with the following `sbatch` script
