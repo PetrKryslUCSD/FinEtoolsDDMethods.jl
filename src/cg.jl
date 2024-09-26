@@ -188,18 +188,18 @@ function pcg_mpi_2level_Schwarz(
     rank == 0 && peeksolution(0, x, resnorm)
     iter = 1
     while iter < itmax
-        @time "191" MPI.Bcast!(p, comm; root=0) # Broadcast the search direction
+        MPI.Bcast!(p, comm; root=0) # Broadcast the search direction
         Aop!(Ap, p) # If partition, compute contribution to the A*p
-        @time "193" MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
+        MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. x += alpha * p
             @. r -= alpha * Ap
             MG!(zg, r) # If root, apply the global preconditioner
         end
-        @time "200" MPI.Bcast!(r, comm; root=0) # Broadcast the residual
+        MPI.Bcast!(r, comm; root=0) # Broadcast the residual
         ML!(zl, r) # Apply the local preconditioner, if partition
-        @time "202" MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
+        MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
         if rank == 0
             @. z = zl + zg # Combine the local and global preconditioners
             rho = dot(z, r)
