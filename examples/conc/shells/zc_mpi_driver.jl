@@ -208,9 +208,9 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         Phi = Phi[fr, :]
         @info("Size of the reduced problem: $(size(Phi, 2))")
         @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-        Phi = MPI.bcast(Phi, 0, comm)
     end    
     MPI.Barrier(comm)
+    Phi = MPI.bcast(Phi, 0, comm)
     rank == 0 && (@info "Create partitions and clusters ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
