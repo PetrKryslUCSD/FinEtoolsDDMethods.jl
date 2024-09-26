@@ -29,7 +29,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using MPI
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
-using FinEtoolsDDMethods.DDCoNCMPIModule: partition_multiply!, precondition_global_solve!, precondition_local_solve!
+using FinEtoolsDDMethods.DDCoNCMPIModule: partition_multiply!, preconditioner_solve!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using SymRCM
 using Metis
@@ -219,12 +219,14 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         Kr_ff = (Phi' * partition.nonoverlapping_K * Phi)
     end
     ks = MPI.gather(Kr_ff, comm; root=0)
+    Krfactor = nothing
     if rank == 0
         for k in ks
             Kr_ff += k
         end
         Krfactor = lu(Kr_ff)
     end
+    Krfactor = MPI.bcast(Krfactor, 0, comm)
     rank == 0 && (@info "Create global factor ($(round(time() - t1, digits=3)) [s])")
     
     function peeksolution(iter, x, resnorm)
@@ -238,14 +240,37 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         rank,
         (q, p) -> partition_multiply!(q, partition, p),
         F_f,
-        zeros(size(F_f)),
-        (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
-        (q, p) -> precondition_local_solve!(q, partition, p);
-        itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
-        peeksolution=peeksolution)
+        zeros(size(F_f));
+        M! = (q, p) -> preconditioner_solve!(q, Krfactor, Phi, partition, p),
+        itmax = itmax, atol = 0.0, rtol = relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
+        peeksolution = peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
     stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
+    if rank == 0
+        data = Dict(
+            "number_nodes" => count(fens),
+            "number_elements" => count(fes),
+            "nfreedofs" => nfreedofs(dchi),
+            "Nc" => Nc,
+            "n1" => n1,
+            "Np" => Np,
+            "No" => No,
+            "size_Kr_ff" => size(Krfactor),
+            "stats" => stats,
+            "iteration_time" => time() - t1,
+        )
+        f = (filename == "" ?
+             "zc-" *
+             "-ref=$(ref)" *
+             "-Nc=$(Nc)" *
+             "-n1=$(n1)" *
+             "-Np=$(Np)" *
+             "-No=$(No)" :
+             filename)
+        @info "Storing data in $(f * ".json")"
+        DataDrop.store_json(f * ".json", data)
+    end
     scattersysvec!(dchi, u_f, DOF_KIND_FREE)
     
     MPI.Finalize()
