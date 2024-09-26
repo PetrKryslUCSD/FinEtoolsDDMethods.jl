@@ -178,10 +178,16 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
 
     t1 = time()
-    @time "partition $rank info" cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    cpi = nothing
+    if rank == 0
+        cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    end
+    cpi = MPI.bcast(cpi, 0, comm)
+    rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
+    
     partition = nothing
     if rank > 0
-        @time "rank $rank partition $(length(partition.odof))" partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
+        partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
     end    
     MPI.Barrier(comm)
     rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
