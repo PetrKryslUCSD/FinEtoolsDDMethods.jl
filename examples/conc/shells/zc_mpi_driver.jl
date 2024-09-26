@@ -82,6 +82,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     10 1 1;
     ]
 
+    to = time()
     MPI.Init()
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
@@ -248,6 +249,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     scattersysvec!(dchi, u_f, DOF_KIND_FREE)
     
     MPI.Finalize()
+    rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))
     
     true
 end
