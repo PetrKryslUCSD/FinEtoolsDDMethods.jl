@@ -245,7 +245,31 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         peeksolution=peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
-    stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
+    if rank == 0
+        data = Dict(
+            "number_nodes" => count(fens),
+            "number_elements" => count(fes),
+            "nfreedofs" => nfreedofs(dchi),
+            "Nc" => Nc,
+            "n1" => n1,
+            "Np" => Np,
+            "No" => No,
+            "size_Kr_ff" => size(Krfactor),
+            "stats" => stats,
+            "iteration_time" => time() - t1,
+        )
+        f = (filename == "" ?
+             "zc-" *
+             "-ref=$(ref)" *
+             "-Nc=$(Nc)" *
+             "-n1=$(n1)" *
+             "-Np=$(Np)" *
+             "-No=$(No)" :
+             filename)
+        @info "Storing data in $(f * ".json")"
+        DataDrop.store_json(f * ".json", data)
+    end
     scattersysvec!(dchi, u_f, DOF_KIND_FREE)
     
     MPI.Finalize()
