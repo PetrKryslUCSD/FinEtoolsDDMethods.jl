@@ -95,6 +95,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
 
     Np = nprocs - 1
 
+    rank == 0 && (@info "Branch: develop")
     rank == 0 && (@info "Number of processes: $nprocs")
     rank == 0 && (@info "Number of partitions: $Np")
 
