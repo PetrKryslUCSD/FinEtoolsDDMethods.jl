@@ -186,32 +186,32 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     cpi = MPI.bcast(cpi, 0, comm)
     rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     
+    t1 = time()
     partition = nothing
+    Phi = nothing
     if rank > 0
         partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
-    end    
-    MPI.Barrier(comm)
-    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
-
-    t1 = time()
-    rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
-    rank == 0 && (@info("Number of 1D basis functions: $(n1)"))
-    nt = n1*(n1+1)/2 
-    (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
-    Nepc = count(fes) ÷ Nc
-    (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
-    rank == 0 && (@info("Number of elements per cluster: $(Nepc)"))
-
-    cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
-    rank == 0 && (@info("Number of clusters (actual): $(Nc)"))
+    else
+        @info("Number of clusters (requested): $(Nc)")
+        @info("Number of 1D basis functions: $(n1)")
+        nt = n1*(n1+1)/2 
+        (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
+        Nepc = count(fes) ÷ Nc
+        (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
+        @info("Number of elements per cluster: $(Nepc)")
     
-    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
-    Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
-    Phi = Phi[fr, :]
-    if rank == 0
+        cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
+        @info("Number of clusters (actual): $(Nc)")
+        
+        mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
+        Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
+        Phi = Phi[fr, :]
         @info("Size of the reduced problem: $(size(Phi, 2))")
         @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-    end
+        Phi = MPI.bcast(Phi, 0, comm)
+    end    
+    MPI.Barrier(comm)
+    rank == 0 && (@info "Create partitions and clusters ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
