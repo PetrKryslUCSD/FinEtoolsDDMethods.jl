@@ -105,14 +105,16 @@ function subdomain_dof_lists(node_lists, dofnums, fr)
     dof_lists = []
     for n in node_lists
         nonoverlapping_dof_list = Int[]
+        sizehint!(nonoverlapping_dof_list, prod(size(dofnums))) 
         for n in n.nonoverlapping
             for d in axes(dofnums, 2)
                 if dofnums[n, d] in fr
-                    push!(nonoverlapping_dof_list, dofnums[n, d])
+                    push!(nonoverlapping_dof_list, dofnums[n, d]) # TO DO get rid of pushing
                 end
             end
         end
         overlapping_dof_list = Int[]
+        sizehint!(overlapping_dof_list, prod(size(dofnums))) 
         for n in n.overlapping
             for d in axes(dofnums, 2)
                 if dofnums[n, d] in fr
