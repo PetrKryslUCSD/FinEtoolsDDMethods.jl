@@ -133,11 +133,11 @@ struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL, DL}
     dof_lists::DL
 end
 
-function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T, IT}) where {T, IT}
-    element_lists = subdomain_element_lists(fens, fes, nfpartitions, overlap)
-    node_lists = subdomain_node_lists(element_lists, fes)
+function CoNCPartitioningInfo(fens, .fes, nfpartitions, overlap, u::NodalField{T, IT}) where {T, IT}
+    @time "subdomain_element_lists" element_lists = subdomain_element_lists(fens, fes, nfpartitions, overlap)
+    @time "subdomain_node_lists" node_lists = subdomain_node_lists(element_lists, fes)
     fr = dofrange(u, DOF_KIND_FREE)
-    dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr)
+    @time "subdomain_dof_lists" dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr)
     return CoNCPartitioningInfo(u, element_lists, dof_lists)
 end
 
