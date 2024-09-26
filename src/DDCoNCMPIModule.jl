@@ -38,9 +38,10 @@ function partition_multiply!(q, partition, p)
     q
 end
 
-function preconditioner_solve!(q, Krfactor, Phi, partition, p) 
+function preconditioner_solve!(q, Krfactor, Phi, Np, partition, p) 
     if partition !== nothing
         q .= Phi * (Krfactor \ (Phi' * p))
+        q ./= Np
         d = partition.odof
         partition.otempp .= p[d]
         ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)

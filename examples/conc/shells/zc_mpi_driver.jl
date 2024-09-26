@@ -241,12 +241,12 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         (q, p) -> partition_multiply!(q, partition, p),
         F_f,
         zeros(size(F_f));
-        M! = (q, p) -> preconditioner_solve!(q, Krfactor, Phi, partition, p),
+        M! = (q, p) -> preconditioner_solve!(q, Krfactor, Phi, Np, partition, p),
         itmax = itmax, atol = 0.0, rtol = relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution = peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
-    stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     if rank == 0
         data = Dict(
             "number_nodes" => count(fens),
