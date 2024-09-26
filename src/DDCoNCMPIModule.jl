@@ -39,13 +39,13 @@ function partition_multiply!(q, partition, p)
 end
 
 function precondition_global_solve!(q, Krfactor, Phi, p) 
-    @time "global" q .= Phi * (Krfactor \ (Phi' * p))
+    q .= Phi * (Krfactor \ (Phi' * p))
     q
 end
 
 function precondition_local_solve!(q, partition, p) 
     q .= zero(eltype(q))
-    @time "local" if partition !== nothing
+    if partition !== nothing
         d = partition.odof
         partition.otempp .= p[d]
         ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
