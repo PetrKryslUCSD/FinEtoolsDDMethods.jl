@@ -185,7 +185,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
     cpi = MPI.bcast(cpi, 0, comm)
     rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
-    rank == 0 && (@info "Mean partition size ($(mean_partition_size(cpi)))")
+    rank == 0 && (@info "Mean partition size: $(mean_partition_size(cpi))")
     
     t1 = time()
     partition = nothing

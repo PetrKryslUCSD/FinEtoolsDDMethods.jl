@@ -204,34 +204,27 @@ function pcg_mpi_2level_Schwarz(
     while iter < itmax
         tstart = MPI.Wtime()
         MPI.Bcast!(p, comm; root=0) # Broadcast the search direction
-        t198 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t198 += tend - tstart; tstart = tend
         Aop!(Ap, p) # If partition, compute contribution to the A*p
-        t201 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t201 += tend - tstart; tstart = tend
         MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
-        t204 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t204 += tend - tstart; tstart = tend
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. r -= alpha * Ap # Update the residual
         end
-        t209 += MPI.Wtime() - tstart
+        tend = MPI.Wtime(); t209 += tend - tstart; tstart = tend
         req = MPI.Ibcast!(r, comm; root=0) # Broadcast the residual
-        tstart = MPI.Wtime()
         if rank == 0
             MG!(zg, r) # If root, apply the global preconditioner
             @. x += alpha * p # Update the solution
         end
         MPI.Wait(req) # Wait for the broadcast to finish
-        t215 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t215 += tend - tstart; tstart = tend
         ML!(zl, r) # Apply the local preconditioner, if partition
-        t221 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t221 += tend - tstart; tstart = tend
         MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
-        t224 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t224 += tend - tstart; tstart = tend
         if rank == 0
             @. z = zl + zg # Combine the local and global preconditioners
             rho = dot(z, r)
@@ -242,14 +235,13 @@ function pcg_mpi_2level_Schwarz(
                 resnorm[] = sqrt(rho) 
             end
         end
-        t227 += MPI.Wtime() - tstart
-        tstart = MPI.Wtime()
+        tend = MPI.Wtime(); t227 += tend - tstart; tstart = tend
         req = MPI.Ibcast!(resnorm, comm; root=0) # Broadcast the residual norm 
         if rank == 0
             @. p = z + beta * p # Update the search direction
         end
         MPI.Wait(req) # Wait for the broadcast to finish
-        t239 += MPI.Wtime() - tstart
+        tend = MPI.Wtime(); t239 += tend - tstart; tstart = tend
         push!(residuals, resnorm[])
         rank == 0 && peeksolution(iter, x, resnorm[])
         if resnorm[] < tol
