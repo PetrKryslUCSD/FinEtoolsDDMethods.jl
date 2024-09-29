@@ -143,6 +143,10 @@ function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T,
     return CoNCPartitioningInfo(u, element_lists, dof_lists)
 end
 
+function mean_partition_size(cpi::CoNCPartitioningInfo)
+    return Int(round(mean([length(cpi.dof_lists[i].overlapping) for i in eachindex(cpi.dof_lists)])))
+end
+
 function npartitions(cpi::CoNCPartitioningInfo)
     @assert length(cpi.element_lists) == length(cpi.dof_lists)
     return length(cpi.element_lists)

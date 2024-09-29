@@ -31,8 +31,8 @@ export KSP_NORM_UNPRECONDITIONED, KSP_NORM_NATURAL
 include("PartitionCoNCModule.jl")
 using .PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
 export CoNCPartitioningInfo, CoNCPartitionData
-using .PartitionCoNCModule: partition_size
-export partition_size
+using .PartitionCoNCModule: partition_size, mean_partition_size
+export partition_size, mean_partition_size
 
 include("DDCoNCSeqModule.jl")
 include("DDCoNCThrModule.jl")
