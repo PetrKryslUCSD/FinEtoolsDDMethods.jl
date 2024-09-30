@@ -279,7 +279,7 @@ function gather_ovector(q, cpi, comm, rank, partition)
             if i === nothing
                 break
             end
-            d = cpi.dof_lists[i].overlapping
+            d = cpi.dof_lists[i].overlapping.
             q[d] .+= cpi.obuffs[i]
         end
     else
@@ -291,3 +291,4 @@ I would need to change cpi.dof_lists[i].overlapping to cpi.overlapping[i].dof_li
 
 -- Combined local and global pre conditioners into a single routine so that communication and computation can be overlapped
 
+-- The resolved vector needs always to be zeroed out. Even for rank != 0. Why?
