@@ -29,7 +29,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using MPI
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz_alt
-using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precondition_global_solve!, precondition_local_solve!
+using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precondition_global_solve!, precond_local!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using SymRCM
 using Metis
@@ -241,7 +241,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         F_f,
         zeros(size(F_f)),
         (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
-        (q, p) -> precondition_local_solve!(q, partition, p);
+        (q, p) -> precond_local!(q, cpi, comm, rank, partition, p);
         itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution=peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))

@@ -334,17 +334,13 @@ function pcg_mpi_2level_Schwarz_alt(
             @. r -= alpha * Ap # Update the residual
         end
         tend = MPI.Wtime(); t209 += tend - tstart; tstart = tend
-        req = MPI.Ibcast!(r, comm; root=0) # Broadcast the residual
         if rank == 0
             MG!(zg, r) # If root, apply the global preconditioner
             @. x += alpha * p # Update the solution
         end
-        MPI.Wait(req) # Wait for the broadcast to finish
         tend = MPI.Wtime(); t215 += tend - tstart; tstart = tend
         ML!(zl, r) # Apply the local preconditioner, if partition
         tend = MPI.Wtime(); t221 += tend - tstart; tstart = tend
-        MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
-        tend = MPI.Wtime(); t224 += tend - tstart; tstart = tend
         if rank == 0
             @. z = zl + zg # Combine the local and global preconditioners
             rho = dot(z, r)
@@ -370,7 +366,6 @@ function pcg_mpi_2level_Schwarz_alt(
                     update r             : $(t209) 
                     compute zg + update x: $(t215) 
                     compute zl           : $(t221) 
-                    reduce zl            : $(t224) 
                     update z, z*r        : $(t227) 
                     bcast resnorm, upda p: $(t239) 
                     """

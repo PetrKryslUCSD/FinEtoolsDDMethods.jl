@@ -94,4 +94,39 @@ function partition_mult!(q, cpi, comm, rank, partition, p)
     q
 end
 
+function scatter_ovector(v, cpi, comm, rank, partition)
+    if rank == 0
+        for i in 1:length(cpi.dof_lists)
+            d = cpi.dof_lists[i].overlapping
+            cpi.obuffs[i] .= v[d]
+            MPI.Send(cpi.obuffs[i], comm; dest = i)
+        end
+    else
+        MPI.Recv!(partition.otempp, comm; source = 0)
+    end
+end
+
+function gather_ovector(v, cpi, comm, rank, partition)
+    if rank == 0
+        for i in 1:length(cpi.dof_lists)
+            MPI.Recv!(cpi.obuffs[i], comm; source = i)
+            d = cpi.dof_lists[i].overlapping
+            v[d] .+= cpi.obuffs[i]
+        end
+    else
+        MPI.Send(partition.otempq, comm; dest = 0)
+    end
+end
+
+function precond_local!(q, cpi, comm, rank, partition, p) 
+    scatter_ovector(p, cpi, comm, rank, partition)
+    if rank == 0
+        q .= zero(eltype(q))
+    else
+        ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
+    end
+    gather_ovector(q, cpi, comm, rank, partition)
+    q
+end
+
 end # module DDCoNCMPIModule
