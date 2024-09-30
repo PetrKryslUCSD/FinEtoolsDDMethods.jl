@@ -89,9 +89,9 @@ function gather_nvector(q, cpi, comm, rank, partition)
 end
 
 function partition_mult!(q, cpi, comm, rank, partition, p)
+    q .= zero(eltype(q))
     scatter_nvector(p, cpi, comm, rank, partition)
     if rank == 0
-        q .= zero(eltype(q))
     else
         d = partition.ndof
         if size(partition.nonoverlapping_K,1) != length(d) # trim size
@@ -137,9 +137,9 @@ function gather_ovector(q, cpi, comm, rank, partition)
 end
 
 function precond_local!(q, cpi, comm, rank, partition, p) 
+    q .= zero(eltype(q))
     scatter_ovector(p, cpi, comm, rank, partition)
     if rank == 0
-        q .= zero(eltype(q))
     else
         ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
     end
