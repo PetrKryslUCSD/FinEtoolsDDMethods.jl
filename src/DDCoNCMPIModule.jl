@@ -90,8 +90,8 @@ end
 
 function partition_mult!(q, cpi, comm, rank, partition, p)
     # scatter_nvector(p, cpi, comm, rank, partition)
+    q .= zero(eltype(q))
     if rank == 0
-        q .= zero(eltype(q))
         requests = MPI.Request[]
         for i in 1:length(cpi.dof_lists)
             d = cpi.dof_lists[i].nonoverlapping
@@ -157,8 +157,8 @@ end
 
 function precond_local!(q, cpi, comm, rank, partition, p) 
     # scatter_ovector(p, cpi, comm, rank, partition)
+    q .= zero(eltype(q))
     if rank == 0
-        q .= zero(eltype(q))
         requests = MPI.Request[]
         for i in 1:length(cpi.dof_lists)
             d = cpi.dof_lists[i].overlapping
