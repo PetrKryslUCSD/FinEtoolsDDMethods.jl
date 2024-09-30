@@ -21,6 +21,7 @@ import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
+using MPI
 
 using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
 
@@ -55,27 +56,26 @@ function precondition_local_solve!(q, partition, p)
 end
 
 function scatter_nvector(v, cpi, comm, rank, partition)
-    @show "scatter_nvector"
     if rank == 0
         for i in 1:length(cpi.dof_lists)
             d = cpi.dof_lists[i].nonoverlapping
-            MPI.Send(v[d], comm; dest = i)
+            cpi.nbuffs[i] .= v[d]
+            MPI.Send(cpi.nbuffs[i], comm; dest = i)
         end
     else
-        d = cpi.dof_lists[rank].nonoverlapping
         MPI.Recv!(partition.ntempp, comm; source = 0)
     end
 end
 
 function gather_nvector(v, cpi, comm, rank, partition)
-    @show "gather_nvector"
     if rank == 0
         for i in 1:length(cpi.dof_lists)
             MPI.Recv!(cpi.nbuffs[i], comm; source = i)
+            d = cpi.dof_lists[i].nonoverlapping
             v[d] .+= cpi.nbuffs[i]
         end
     else
-        MPI.Send(partition.ntempq, comm; dest = i)
+        MPI.Send(partition.ntempq, comm; dest = 0)
     end
 end
 

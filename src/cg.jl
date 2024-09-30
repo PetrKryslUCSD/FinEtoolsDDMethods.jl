@@ -330,7 +330,7 @@ function pcg_mpi_2level_Schwarz_alt(
     while iter < itmax
         tstart = MPI.Wtime()
         Aop!(Ap, p) # Compute A*p
-        tend = MPI.Wtime(); t204 += tend - tstart; tstart = tend
+        tend = MPI.Wtime(); t201 += tend - tstart; tstart = tend
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. r -= alpha * Ap # Update the residual
