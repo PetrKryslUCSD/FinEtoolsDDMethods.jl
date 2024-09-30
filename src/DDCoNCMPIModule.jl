@@ -56,6 +56,7 @@ function precondition_local_solve!(q, partition, p)
 end
 
 function scatter_nvector(p, cpi, comm, rank, partition)
+    println("scatter_nvector $rank")
     if rank == 0
         requests = MPI.Request[]
         for i in 1:length(cpi.dof_lists)
@@ -71,6 +72,7 @@ function scatter_nvector(p, cpi, comm, rank, partition)
 end
 
 function gather_nvector(q, cpi, comm, rank, partition)
+    println("scatter_nvector $rank")
     if rank == 0
         requests = [MPI.Irecv!(cpi.nbuffs[i], comm; source = i) for i in 1:length(cpi.dof_lists)]
         while true
@@ -102,6 +104,7 @@ function partition_mult!(q, cpi, comm, rank, partition, p)
 end
 
 function scatter_ovector(p, cpi, comm, rank, partition)
+    println("scatter_ovector $rank")
     if rank == 0
         requests = MPI.Request[]
         for i in 1:length(cpi.dof_lists)
@@ -117,6 +120,7 @@ function scatter_ovector(p, cpi, comm, rank, partition)
 end
 
 function gather_ovector(q, cpi, comm, rank, partition)
+    println("gather_ovector $rank")
     if rank == 0
         requests = [MPI.Irecv!(cpi.obuffs[i], comm; source = i) for i in 1:length(cpi.dof_lists)]
         while true
