@@ -318,9 +318,7 @@ function pcg_mpi_2level_Schwarz_alt(
     residuals = typeof(tol)[]
     rank == 0 && peeksolution(0, x, resnorm[])
     iter = 1
-    t198 = 0.0
     t201 = 0.0
-    t204 = 0.0
     t209 = 0.0
     t215 = 0.0
     t221 = 0.0
@@ -368,9 +366,7 @@ function pcg_mpi_2level_Schwarz_alt(
         rank == 0 && peeksolution(iter, x, resnorm[])
         if resnorm[] < tol
             @info """Rank $rank 
-                    broadcast p          : $(t198) 
                     A op                 : $(t201) 
-                    reduce Ap            : $(t204) 
                     update r             : $(t209) 
                     compute zg + update x: $(t215) 
                     compute zl           : $(t221) 
