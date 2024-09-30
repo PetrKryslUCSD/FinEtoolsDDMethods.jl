@@ -54,4 +54,44 @@ function precondition_local_solve!(q, partition, p)
     q
 end
 
+function scatter_nvector(v, cpi, comm, rank, partition)
+    @show "scatter_nvector"
+    if rank == 0
+        for i in 1:length(cpi.dof_lists)
+            d = cpi.dof_lists[i].nonoverlapping
+            MPI.Send(v[d], comm; dest = i)
+        end
+    else
+        d = cpi.dof_lists[rank].nonoverlapping
+        MPI.Recv!(partition.ntempp, comm; source = 0)
+    end
+end
+
+function gather_nvector(v, cpi, comm, rank, partition)
+    @show "gather_nvector"
+    if rank == 0
+        for i in 1:length(cpi.dof_lists)
+            MPI.Recv!(cpi.nbuffs[i], comm; source = i)
+            v[d] .+= cpi.nbuffs[i]
+        end
+    else
+        MPI.Send(partition.ntempq, comm; dest = i)
+    end
+end
+
+function partition_mult!(q, cpi, comm, rank, partition, p)
+    scatter_nvector(p, cpi, comm, rank, partition)
+    if rank == 0
+        q .= zero(eltype(q))
+    else
+        d = partition.ndof
+        if size(partition.nonoverlapping_K,1) != length(d) # trim size
+            partition.nonoverlapping_K = partition.nonoverlapping_K[d, d]
+        end
+        mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
+    end
+    gather_nvector(q, cpi, comm, rank, partition)
+    q
+end
+
 end # module DDCoNCMPIModule
