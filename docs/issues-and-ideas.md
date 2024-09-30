@@ -252,3 +252,42 @@ end
 [ Info: Iterations (78.8 [s])
 [ Info: Storing data in zc--ref=100-Nc=102-n1=6-Np=16-No=1.json
 [ Info: Total time: 277.922 [s]
+
+-- These functions could be rewritten
+
+
+function scatter_ovector(p, cpi, comm, rank, partition)
+    if rank == 0
+        requests = MPI.Request[]
+        for i in 1:length(cpi.dof_lists)
+            d = cpi.dof_lists[i].overlapping
+            cpi.obuffs[i] .= p[d]
+            req = MPI.Isend(cpi.obuffs[i], comm; dest = i)
+            push!(requests, req)
+        end
+        MPI.Waitall!(requests)
+    else
+        MPI.Recv!(partition.otempp, comm; source = 0)
+    end
+end
+
+function gather_ovector(q, cpi, comm, rank, partition)
+    if rank == 0
+        requests = [MPI.Irecv!(cpi.obuffs[i], comm; source = i) for i in 1:length(cpi.dof_lists)]
+        while true
+            i = MPI.Waitany(requests)
+            if i === nothing
+                break
+            end
+            d = cpi.dof_lists[i].overlapping
+            q[d] .+= cpi.obuffs[i]
+        end
+    else
+        MPI.Send(partition.otempq, comm; dest = 0)
+    end
+end
+
+I would need to change cpi.dof_lists[i].overlapping to cpi.overlapping[i].dof_list
+
+-- Combined local and global pre conditioners into a single routine so that communication and computation can be overlapped
+
