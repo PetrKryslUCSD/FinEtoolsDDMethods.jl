@@ -129,10 +129,12 @@ function subdomain_dof_lists(node_lists, dofnums, fr)
     return dof_lists
 end
 
-struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL, DL} 
+struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL, DL, BV} 
     u::NF
     element_lists::EL
     dof_lists::DL
+    nbuffs::BV
+    obuffs::BV
 end
 
 function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T, IT}) where {T, IT}
@@ -140,7 +142,9 @@ function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T,
     node_lists = subdomain_node_lists(element_lists, fes) # cheap
     fr = dofrange(u, DOF_KIND_FREE)
     dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr) # intermediate
-    return CoNCPartitioningInfo(u, element_lists, dof_lists)
+    nbuffs = [zeros(eltype(u.values), length(dof_lists[i].nonoverlapping)) for i in eachindex(dof_lists)]
+    obuffs = [zeros(eltype(u.values), length(dof_lists[i].overlapping)) for i in eachindex(dof_lists)]
+    return CoNCPartitioningInfo(u, element_lists, dof_lists, nbuffs, obuffs)
 end
 
 function mean_partition_size(cpi::CoNCPartitioningInfo)

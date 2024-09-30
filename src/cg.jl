@@ -267,22 +267,6 @@ function pcg_mpi_2level_Schwarz(
     return (x, stats)
 end
 
-function scatter_vector(v, cpi, comm, rank)
-    if rank == 0
-        for i in 1:length(cpi.dof_lists)
-            d = cpi.dof_lists[i].nonoverlapping
-            MPI.Send(v[d], i, 0, comm)
-        end
-    else
-        d = cpi.dof_lists[rank].nonoverlapping
-        status = MPI.Status()
-        MPI.Probe(0, 0, comm, status)
-        count = MPI.Get_count(status, MPI.INT)
-        vlocal = zeros(eltype(v), count)
-        MPI.Recv!(vlocal, 0, 0, comm, status)
-        return vlocal
-    end
-end
 
 function pcg_mpi_2level_Schwarz_alt(
     comm, 
@@ -305,9 +289,7 @@ function pcg_mpi_2level_Schwarz_alt(
     beta = zero(typeof(atol))
     z = zg # Alias for legibility
     Ap = z # Alias for legibility
-    MPI.Bcast!(x, comm; root=0) # Broadcast the initial guess
     Aop!(Ap, x) # If partition, compute contribution to the A*p
-    MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
     if rank == 0
         @. r = b - Ap # Compute the residual
     end
@@ -336,9 +318,7 @@ function pcg_mpi_2level_Schwarz_alt(
     residuals = typeof(tol)[]
     rank == 0 && peeksolution(0, x, resnorm[])
     iter = 1
-    t198 = 0.0
     t201 = 0.0
-    t204 = 0.0
     t209 = 0.0
     t215 = 0.0
     t221 = 0.0
@@ -347,28 +327,20 @@ function pcg_mpi_2level_Schwarz_alt(
     t239 = 0.0
     while iter < itmax
         tstart = MPI.Wtime()
-        MPI.Bcast!(p, comm; root=0) # Broadcast the search direction
-        tend = MPI.Wtime(); t198 += tend - tstart; tstart = tend
-        Aop!(Ap, p) # If partition, compute contribution to the A*p
+        Aop!(Ap, p) # Compute A*p
         tend = MPI.Wtime(); t201 += tend - tstart; tstart = tend
-        MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
-        tend = MPI.Wtime(); t204 += tend - tstart; tstart = tend
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. r -= alpha * Ap # Update the residual
         end
         tend = MPI.Wtime(); t209 += tend - tstart; tstart = tend
-        req = MPI.Ibcast!(r, comm; root=0) # Broadcast the residual
         if rank == 0
             MG!(zg, r) # If root, apply the global preconditioner
             @. x += alpha * p # Update the solution
         end
-        MPI.Wait(req) # Wait for the broadcast to finish
         tend = MPI.Wtime(); t215 += tend - tstart; tstart = tend
         ML!(zl, r) # Apply the local preconditioner, if partition
         tend = MPI.Wtime(); t221 += tend - tstart; tstart = tend
-        MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
-        tend = MPI.Wtime(); t224 += tend - tstart; tstart = tend
         if rank == 0
             @. z = zl + zg # Combine the local and global preconditioners
             rho = dot(z, r)
@@ -390,13 +362,10 @@ function pcg_mpi_2level_Schwarz_alt(
         rank == 0 && peeksolution(iter, x, resnorm[])
         if resnorm[] < tol
             @info """Rank $rank 
-                    broadcast p          : $(t198) 
                     A op                 : $(t201) 
-                    reduce Ap            : $(t204) 
                     update r             : $(t209) 
                     compute zg + update x: $(t215) 
                     compute zl           : $(t221) 
-                    reduce zl            : $(t224) 
                     update z, z*r        : $(t227) 
                     bcast resnorm, upda p: $(t239) 
                     """
