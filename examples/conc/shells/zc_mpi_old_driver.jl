@@ -28,7 +28,7 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using MPI
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
+using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz_old
 using FinEtoolsDDMethods.DDCoNCMPIModule: partition_multiply!, precondition_global_solve!, precondition_local_solve!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using SymRCM
@@ -234,7 +234,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     
     t1 = time()
     norm_F_f = norm(F_f) 
-    (u_f, stats) = pcg_mpi_2level_Schwarz(
+    (u_f, stats) = pcg_mpi_2level_Schwarz_old(
         comm, 
         rank,
         (q, p) -> partition_multiply!(q, partition, p),
