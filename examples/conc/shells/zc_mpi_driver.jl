@@ -30,7 +30,7 @@ using MPI
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
 using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precond_2level!
-using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
+using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates, conc_cache
 using SymRCM
 using Metis
 using Test
@@ -227,6 +227,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         end
         Krfactor = lu(Kr_ff)
     end
+    ccache = conc_cache(Krfactor, Phi)
     rank == 0 && (@info "Create global factor ($(round(time() - t1, digits=3)) [s])")
     
     function peeksolution(iter, x, resnorm)
@@ -241,7 +242,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         (q, p) -> partition_mult!(q, cpi, comm, rank, partition, p),
         F_f,
         zeros(size(F_f)),
-        (q, p) -> precond_2level!(q, Krfactor, Phi, cpi, comm, rank, partition, p);
+        (q, p) -> precond_2level!(q, ccache, cpi, comm, rank, partition, p);
         itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution=peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))

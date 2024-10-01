@@ -195,4 +195,18 @@ function preconditioner(fpartitions, Phi, K)
     M!
 end
 
+function conc_cache(Krfactor, Phi)
+    # q .= Phi * (Krfactor \ (Phi' * p))
+    # mul!(cache.PhiTp, cache.Phi', p)
+    # ldiv!(cache.KrfactorPhiTp, cache.Krfactor, cache.PhiTp)
+    # q .= mul!(cache.q, cache.Phi, cache.KrfactorPhiTp)
+    return (
+        Krfactor = Krfactor,
+        Phi = Phi,
+        PhiTp = zeros(eltype(Phi), size(Phi, 2)), 
+        q = zeros(eltype(Phi), size(Phi, 1)), 
+        KrfactorPhiTp = zeros(eltype(Phi), size(Phi, 2))
+    )
+end
+
 end # module PartitionCoNCDDModule
