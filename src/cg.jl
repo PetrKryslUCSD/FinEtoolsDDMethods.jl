@@ -288,8 +288,9 @@ function pcg_mpi_2level_Schwarz_alt(
     x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x);
     alpha = zero(typeof(atol))
     beta = zero(typeof(atol))
+    rhoold = zero(typeof(atol))
     Ap = z # Alias for legibility
-    Aop!(Ap, x) # If partition, compute contribution to the A*p
+    Aop!(Ap, x) # Compute A*p
     if rank == 0
         @. r = b - Ap # Compute the residual
     end
@@ -352,8 +353,8 @@ function pcg_mpi_2level_Schwarz_alt(
             @info """Rank $rank 
                     A op                 : $(t201) 
                     update r             : $(t209) 
-                    compute Z + update x: $(t215) 
-                    update z, z*r        : $(t227) 
+                    compute Z + update x : $(t215) 
+                    update z*r           : $(t227) 
                     bcast resnorm, upda p: $(t239) 
                     """
             break
