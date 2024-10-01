@@ -96,18 +96,19 @@ function pcg_seq(Aop!, b, x0;
 end
 
 """
-    pcg_mpi_2level_Schwarz(
+    pcg_mpi_2level_Schwarz_alt(
         comm, 
         rank,
         Aop!,
         b,
         x0,
-        (MG!)=(q, p) -> (q .= p),
-        (ML!)=(q, p) -> (q .= p),
+        (M!)=(q, p) -> (q .= p);
         itmax=0,
         atol=√eps(eltype(b)),
-        rtol=√eps(eltype(b))
-    )
+        rtol=√eps(eltype(b)),
+        normtype = KSP_NORM_NATURAL,
+        peeksolution = (iter, x, resnorm) -> nothing
+        )
 
 Solves a linear system `Ax = b` using the Preconditioned Conjugate Gradient
 method on MPI.
@@ -117,8 +118,8 @@ The communicator and the rank of the process are passed as arguments `comm` and
 `Aop!`. 
 
 The preconditioning on level 1 (using local solves on each subdomain partition)
-is accomplished with an operator `ML!`. The preconditioning on level 2 (using
-global solve based on CoNC clustering) is accomplished with an operator `MG!`. 
+and the  preconditioning on level 2 (using global solve based on CoNC
+clustering) is accomplished with an operator `M!`. 
 
 This is a MPI parallel version of the `pcg` function.
 
@@ -127,14 +128,15 @@ This is a MPI parallel version of the `pcg` function.
   stores the result in `y`. Example: `(q, p) -> mul!(q, S, p)`.
 - `b`: Right-hand side vector.
 - `x0`: Initial guess for the solution.
-- `ML!`, `MG!`: Preconditioner functions that apply the preconditioner to a
-  vector `p` and store the result in `q`. Defaults to `(q, p) -> (q .= p)`
-  (identity). Local (level 1) and global (level 2) versions, respectively.
+- `M!`: Preconditioner function that applies the 2-level preconditioner to a
+  vector `p` and stores the result in `q`. Defaults to `(q, p) -> (q .= p)`
+  (identity). 
 - `itmax`: Maximum number of iterations. Defaults to `0`, which means the method
   will iterate until convergence.
 - `atol`: Absolute tolerance for convergence. Defaults to `√eps(eltype(b))`.
 - `rtol`: Relative tolerance for convergence. Defaults to `√eps(eltype(b))`.
-- `normtype`: Type of norm to use for convergence. Defaults to `KSP_NORM_NATURAL`.
+- `normtype`: Type of norm to use for convergence. Defaults to
+  `KSP_NORM_NATURAL`.
 - `peeksolution`: Function that is called at each iteration. It receives the
   iteration number, the current solution vector and the residual norm. Defaults
   to `(iter, x, resnorm) -> nothing`.
@@ -274,8 +276,7 @@ function pcg_mpi_2level_Schwarz_alt(
     Aop!,
     b,
     x0,
-    (MG!)=(q, p) -> (q .= p),
-    (ML!)=(q, p) -> (q .= p);
+    (M!)=(q, p) -> (q .= p);
     itmax=0,
     atol=√eps(eltype(b)),
     rtol=√eps(eltype(b)),
@@ -284,26 +285,18 @@ function pcg_mpi_2level_Schwarz_alt(
     )
     itmax = (itmax > 0 ? itmax : length(b))
     (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
-    x = deepcopy(x0); p = similar(x); r = similar(x); zg = similar(x); zl = similar(x)
+    x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x);
     alpha = zero(typeof(atol))
     beta = zero(typeof(atol))
-    z = zg # Alias for legibility
     Ap = z # Alias for legibility
     Aop!(Ap, x) # If partition, compute contribution to the A*p
     if rank == 0
         @. r = b - Ap # Compute the residual
     end
-    req = MPI.Ibcast!(r, comm; root=0) # Broadcast the residual
-    if rank == 0
-        MG!(zg, r) # If root, apply the global preconditioner
-    end
-    MPI.Wait(req) # Wait for the residual to be broadcasted
-    ML!(zl, r) # Apply the local preconditioner, if partition
-    MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
+    M!(z, r) # Apply the 2-level preconditioner
     tol = zero(typeof(atol))
     resnorm = Ref(Inf)
     if rank == 0
-        @. z = zl + zg # Combine the local and global preconditioners
         @. p = z
         rhoold = dot(z, r)
         if normtype == KSP_NORM_UNPRECONDITIONED
@@ -321,8 +314,6 @@ function pcg_mpi_2level_Schwarz_alt(
     t201 = 0.0
     t209 = 0.0
     t215 = 0.0
-    t221 = 0.0
-    t224 = 0.0
     t227 = 0.0
     t239 = 0.0
     while iter < itmax
@@ -334,15 +325,12 @@ function pcg_mpi_2level_Schwarz_alt(
             @. r -= alpha * Ap # Update the residual
         end
         tend = MPI.Wtime(); t209 += tend - tstart; tstart = tend
+        M!(z, r) # Apply the 2-level preconditioner
         if rank == 0
-            MG!(zg, r) # If root, apply the global preconditioner
             @. x += alpha * p # Update the solution
         end
         tend = MPI.Wtime(); t215 += tend - tstart; tstart = tend
-        ML!(zl, r) # Apply the local preconditioner, if partition
-        tend = MPI.Wtime(); t221 += tend - tstart; tstart = tend
         if rank == 0
-            @. z = zl + zg # Combine the local and global preconditioners
             rho = dot(z, r)
             beta = rho / rhoold;   rhoold = rho
             if normtype == KSP_NORM_UNPRECONDITIONED
@@ -364,8 +352,7 @@ function pcg_mpi_2level_Schwarz_alt(
             @info """Rank $rank 
                     A op                 : $(t201) 
                     update r             : $(t209) 
-                    compute zg + update x: $(t215) 
-                    compute zl           : $(t221) 
+                    compute Z + update x: $(t215) 
                     update z, z*r        : $(t227) 
                     bcast resnorm, upda p: $(t239) 
                     """
