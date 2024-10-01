@@ -95,54 +95,7 @@ function pcg_seq(Aop!, b, x0;
     return (x, stats)
 end
 
-"""
-    pcg_mpi_2level_Schwarz_alt(
-        comm, 
-        rank,
-        Aop!,
-        b,
-        x0,
-        (M!)=(q, p) -> (q .= p);
-        itmax=0,
-        atol=√eps(eltype(b)),
-        rtol=√eps(eltype(b)),
-        normtype = KSP_NORM_NATURAL,
-        peeksolution = (iter, x, resnorm) -> nothing
-        )
-
-Solves a linear system `Ax = b` using the Preconditioned Conjugate Gradient
-method on MPI.
-
-The communicator and the rank of the process are passed as arguments `comm` and
-`rank`. The multiplication with the matrix `A` is accomplished with an operator
-`Aop!`. 
-
-The preconditioning on level 1 (using local solves on each subdomain partition)
-and the  preconditioning on level 2 (using global solve based on CoNC
-clustering) is accomplished with an operator `M!`. 
-
-This is a MPI parallel version of the `pcg` function.
-
-# Arguments
-- `Aop!`: Function that applies the linear operator `A` to a vector `x` and
-  stores the result in `y`. Example: `(q, p) -> mul!(q, S, p)`.
-- `b`: Right-hand side vector.
-- `x0`: Initial guess for the solution.
-- `M!`: Preconditioner function that applies the 2-level preconditioner to a
-  vector `p` and stores the result in `q`. Defaults to `(q, p) -> (q .= p)`
-  (identity). 
-- `itmax`: Maximum number of iterations. Defaults to `0`, which means the method
-  will iterate until convergence.
-- `atol`: Absolute tolerance for convergence. Defaults to `√eps(eltype(b))`.
-- `rtol`: Relative tolerance for convergence. Defaults to `√eps(eltype(b))`.
-- `normtype`: Type of norm to use for convergence. Defaults to
-  `KSP_NORM_NATURAL`.
-- `peeksolution`: Function that is called at each iteration. It receives the
-  iteration number, the current solution vector and the residual norm. Defaults
-  to `(iter, x, resnorm) -> nothing`.
-
-"""
-function pcg_mpi_2level_Schwarz(
+function pcg_mpi_2level_Schwarz_old(
     comm, 
     rank,
     Aop!,
@@ -270,7 +223,54 @@ function pcg_mpi_2level_Schwarz(
 end
 
 
-function pcg_mpi_2level_Schwarz_alt(
+"""
+    pcg_mpi_2level_Schwarz(
+        comm, 
+        rank,
+        Aop!,
+        b,
+        x0,
+        (M!)=(q, p) -> (q .= p);
+        itmax=0,
+        atol=√eps(eltype(b)),
+        rtol=√eps(eltype(b)),
+        normtype = KSP_NORM_NATURAL,
+        peeksolution = (iter, x, resnorm) -> nothing
+        )
+
+Solves a linear system `Ax = b` using the Preconditioned Conjugate Gradient
+method on MPI.
+
+The communicator and the rank of the process are passed as arguments `comm` and
+`rank`. The multiplication with the matrix `A` is accomplished with an operator
+`Aop!`. 
+
+The preconditioning on level 1 (using local solves on each subdomain partition)
+and the  preconditioning on level 2 (using global solve based on CoNC
+clustering) is accomplished with an operator `M!`. 
+
+This is an MPI parallel version of the `pcg` function.
+
+# Arguments
+- `Aop!`: Function that applies the linear operator `A` to a vector `x` and
+  stores the result in `y`. Example: `(q, p) -> mul!(q, S, p)`.
+- `b`: Right-hand side vector.
+- `x0`: Initial guess for the solution.
+- `M!`: Preconditioner function that applies the 2-level preconditioner to a
+  vector `p` and stores the result in `q`. Defaults to `(q, p) -> (q .= p)`
+  (identity). 
+- `itmax`: Maximum number of iterations. Defaults to `0`, which means the method
+  will iterate until convergence.
+- `atol`: Absolute tolerance for convergence. Defaults to `√eps(eltype(b))`.
+- `rtol`: Relative tolerance for convergence. Defaults to `√eps(eltype(b))`.
+- `normtype`: Type of norm to use for convergence. Defaults to
+  `KSP_NORM_NATURAL`.
+- `peeksolution`: Function that is called at each iteration. It receives the
+  iteration number, the current solution vector and the residual norm. Defaults
+  to `(iter, x, resnorm) -> nothing`.
+
+"""
+function pcg_mpi_2level_Schwarz(
     comm, 
     rank,
     Aop!,

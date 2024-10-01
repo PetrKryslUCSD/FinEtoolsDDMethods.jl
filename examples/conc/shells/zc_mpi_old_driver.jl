@@ -18,7 +18,7 @@ Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 
 Parallel simulation with MPI.
 """
-module zc_mpi_alt_driver
+module zc_mpi_driver
 using FinEtools
 using FinEtools.MeshExportModule: VTK, VTKWrite
 using FinEtoolsDeforLinear
@@ -28,8 +28,8 @@ using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using MPI
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz_alt
-using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precond_2level!
+using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
+using FinEtoolsDDMethods.DDCoNCMPIModule: partition_multiply!, precondition_global_solve!, precondition_local_solve!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using SymRCM
 using Metis
@@ -219,7 +219,6 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     if rank > 0
         Kr_ff = (Phi' * partition.nonoverlapping_K * Phi)
     end
-    Krfactor = nothing
     ks = MPI.gather(Kr_ff, comm; root=0)
     if rank == 0
         for k in ks
@@ -235,13 +234,14 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     
     t1 = time()
     norm_F_f = norm(F_f) 
-    (u_f, stats) = pcg_mpi_2level_Schwarz_alt(
+    (u_f, stats) = pcg_mpi_2level_Schwarz(
         comm, 
         rank,
-        (q, p) -> partition_mult!(q, cpi, comm, rank, partition, p),
+        (q, p) -> partition_multiply!(q, partition, p),
         F_f,
         zeros(size(F_f)),
-        (q, p) -> precond_2level!(q, Krfactor, Phi, cpi, comm, rank, partition, p);
+        (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
+        (q, p) -> precondition_local_solve!(q, partition, p);
         itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution=peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
