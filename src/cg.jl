@@ -353,7 +353,7 @@ function pcg_mpi_2level_Schwarz(
             @info """Rank $rank 
                     A op                 : $(t201) 
                     update r             : $(t209) 
-                    compute Z + update x : $(t215) 
+                    precond + update x   : $(t215) 
                     update z*r           : $(t227) 
                     bcast resnorm, upda p: $(t239) 
                     """
