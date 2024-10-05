@@ -257,4 +257,182 @@ end
 
 -- The resolved vector needs always to be zeroed out. Even for rank != 0. Why?
 
--- The global pre conditioner should use in-place matrix multiplications.
+-- The global pre conditioner should use in-place matrix multiplications. Done.
+
+-- Extrae MPI tracing on Ookami.
+
+Use spack to install   `extrae`.
+
+Set up the environment.
+```
+. /lustre/home/pkrysl/a64fx/spack/share/spack/setup-env.sh
+spack load extrae
+```
+
+
+Find `libmpitrace.so`.
+
+Install Extrae.jl
+```
+using Extrae
+Extrae.use_system_binary(library_names=["/lustre/home/pkrysl/a64fx/spack/opt/spack/linux-rocky8-thunderx2/gcc-13.1.0/extrae-4.1.2-evpjedfg336em5at377f2g64yzrfc6np/lib/libmpitrace"], export_prefs=true)
+using Pkg; Pkg.build("Extrae");  
+```
+
+Augment LocalPreferences.toml with a preload of the MPI tracing library:
+```
+[MPIPreferences]
+__clear__ = ["libmpi", "abi", "mpiexec", "cclibs", "preloads_env_switch"]
+_format = "1.0"
+binary = "MPItrampoline_jll"
+preloads = ["/lustre/home/pkrysl/a64fx/spack/opt/spack/linux-rocky8-thunderx2/gcc-13.1.0/extrae-4.1.2-evpjedfg336em5at377f2g64yzrfc6np/lib/libmpitrace"]
+```
+
+Set up `extrae.xml`:
+```
+<?xml version='1.0'?>
+
+<trace enabled="yes"
+  home="@sed_MYPREFIXDIR@"
+  initial-mode="detail"
+  type="paraver"
+>
+  <mpi enabled="yes">
+    <counters enabled="yes" />
+  </mpi>
+
+  <pthread enabled="no">
+    <locks enabled="no" />
+    <counters enabled="yes" />
+  </pthread>
+
+  <openmp enabled="no"></openmp>
+
+  <callers enabled="yes">
+    <mpi enabled="no">1-3</mpi>
+    <sampling enabled="no">1-5</sampling>
+  </callers>
+
+  <user-functions enabled="no"
+    list="/home/bsc41/bsc41273/user-functions.dat"
+    exclude-automatic-functions="no">
+    <counters enabled="yes" />
+  </user-functions>
+
+  <counters enabled="yes">
+    <cpu enabled="yes" starting-set-distribution="1">
+      <set enabled="yes" domain="all" changeat-globalops="5">
+        PAPI_TOT_INS,PAPI_TOT_CYC,PAPI_L1_DCM,PAPI_BR_CN,PAPI_BR_MSP,PAPI_VEC_INS
+        <sampling enabled="no" period="100000000">PAPI_TOT_CYC</sampling>
+      </set>
+      <set enabled="no" domain="user" changeat-globalops="5">
+        PAPI_TOT_INS,PAPI_FP_INS,PAPI_TOT_CYC
+      </set>
+    </cpu>
+    <network enabled="no" />
+    <resource-usage enabled="no" />
+  </counters>
+
+  <storage enabled="no">
+    <trace-prefix enabled="yes">TRACE</trace-prefix>
+    <size enabled="no">5</size>
+    <temporal-directory enabled="yes">/scratch</temporal-directory>
+    <final-directory enabled="yes">/gpfs/scratch/bsc41/bsc41273</final-directory>
+  </storage>
+
+  <buffer enabled="yes">
+    <size enabled="yes">150000</size>
+    <circular enabled="no" />
+  </buffer>
+
+  <trace-control enabled="no">
+    <file enabled="no" frequency="5M">/gpfs/scratch/bsc41/bsc41273/control</file>
+    <global-ops enabled="no">10</global-ops>
+    <remote-control enabled="yes">
+      <mrnet enabled="yes" target="150" analysis="spectral" start-after="30">
+        <clustering max_tasks="26" max_points="8000"/>
+        <spectral min_seen="1" max_periods="0" num_iters="3" signals="DurBurst,InMPI"/>
+      </mrnet>
+    </remote-control>
+  </trace-control> 
+
+  <others enabled="no">
+    <minimum-time enabled="no">10M</minimum-time>
+    <finalize-on-signal enabled="yes" 
+      SIGUSR1="no" SIGUSR2="no" SIGINT="yes"
+      SIGQUIT="yes" SIGTERM="yes" SIGXCPU="yes"
+      SIGFPE="yes" SIGSEGV="yes" SIGABRT="yes"
+    />
+    <flush-sampling-buffer-at-instrumentation-point enabled="yes" />
+  </others>
+
+  <bursts enabled="no">
+    <threshold enabled="yes">500u</threshold>
+    <mpi-statistics enabled="yes" />
+  </bursts>
+
+  <sampling enabled="yes" type="default" period="1m" variability="200u"/>
+
+  <opencl enabled="no" />
+
+  <openacc enabled="no" />
+
+  <cuda enabled="no" />
+
+  <!-- Beware: High overhead! -->
+  <cpu-events enabled="no" frequency="0" emit-always="no" poi="openmp"/>
+
+  <merge enabled="yes" 
+    synchronization="default"
+    binary="julia"
+    tree-fan-out="16"
+    max-memory="512"
+    joint-states="yes"
+    keep-mpits="yes"
+    sort-addresses="yes"
+    overwrite="yes"
+  >
+    julia-trace.prv 
+  </merge>
+
+</trace>
+
+```
+
+Augment the batch file:
+```
+#!/usr/bin/env bash
+
+#SBATCH --job-name=job_zc
+#SBATCH --output=job_zc_Np=3.log
+#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks=3
+#SBATCH --time=00:15:00
+#SBATCH -p short
+
+# specify message size threshold for using the UCX Rendevous Protocol
+#export UCX_RNDV_THRESH=65536
+
+# use high-performance rc transports where possible
+#export UCX_TLS=rc
+
+# Load OpenMPI and Julia
+export JULIA_DEPOT_PATH="~/a64fx/depot"
+export JULIA_DEBUG=Extrae
+module load julia
+module load gcc/13.1.0
+module load slurm
+module load openmpi/gcc8/4.1.2
+
+# Automatically set the number of Julia threads depending on number of Slurm threads
+export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
+export BLAS_THREADS=2
+export EXTRAE_ON=1
+export EXTRAE_SKIP_AUTO_LIBRARY_INITIALIZE=1
+export EXTRAE_CONFIG_FILE=/lustre/home/pkrysl/a64fx/extrae.xml
+
+cd FinEtoolsDDMethods.jl/examples
+/lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl julia --project=. conc/shells/zc_mpi_driver.jl --n1 6 --Nc 100 --ref 100
+```
+
+
