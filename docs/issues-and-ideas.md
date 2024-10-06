@@ -284,7 +284,7 @@ Augment LocalPreferences.toml with a preload of the MPI tracing library:
 [MPIPreferences]
 __clear__ = ["libmpi", "abi", "mpiexec", "cclibs", "preloads_env_switch"]
 _format = "1.0"
-binary = "MPItrampoline_jll"
+binary = "MPICH_jll"
 preloads = ["/lustre/home/pkrysl/a64fx/spack/opt/spack/linux-rocky8-thunderx2/gcc-13.1.0/extrae-4.1.2-evpjedfg336em5at377f2g64yzrfc6np/lib/libmpitrace"]
 ```
 
@@ -435,4 +435,12 @@ cd FinEtoolsDDMethods.jl/examples
 /lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl julia --project=. conc/shells/zc_mpi_driver.jl --n1 6 --Nc 100 --ref 100
 ```
 
+Instrument the Script File:
 
+```
+using Extrae
+...
+Extrae.init()
+...
+Extrae.finish()
+```
