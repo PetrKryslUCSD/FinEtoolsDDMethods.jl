@@ -247,8 +247,23 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         peeksolution=peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
-    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f), timers = stats.timers)
+    if rank > 0
+        MPI.send(stats.timers, comm; dest = 0)
+    end
     if rank == 0
+        @show ptimers = [(i, MPI.recv(comm; source=i)) for i in 1:Np]
+        root_timers = stats.timers
+        pavgtimers = Dict([(k, 0.0) for k in keys(root_timers)])
+        for k in keys(root_timers)
+            root_timers[k] = root_timers[k] / stats.niter
+            tavg = 0.0
+            for (i, t) in ptimers
+                t[k] = t[k] / stats.niter
+                tavg += t[k]
+            end
+            pavgtimers[k] = tavg / Np
+        end
         data = Dict(
             "number_nodes" => count(fens),
             "number_elements" => count(fes),
@@ -260,6 +275,8 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "size_Kr_ff" => size(Krfactor),
             "stats" => stats,
             "iteration_time" => time() - t1,
+            "root_timers" => root_timers,
+            "pavg_timers" => pavgtimers
         )
         f = (filename == "" ?
              "zc-" *

@@ -3,6 +3,7 @@ module CGModule
 using LinearAlgebra
 using SparseArrays
 using MPI
+using ..FinEtoolsDDMethods: set_up_timers, update_timer!
 
 const KSP_NORM_UNPRECONDITIONED = 0
 const KSP_NORM_NATURAL = 1
@@ -312,25 +313,22 @@ function pcg_mpi_2level_Schwarz(
     residuals = typeof(tol)[]
     rank == 0 && peeksolution(0, x, resnorm[])
     iter = 1
-    t201 = 0.0
-    t209 = 0.0
-    t215 = 0.0
-    t227 = 0.0
-    t239 = 0.0
+    timers = set_up_timers("aop", "pre", "ite")  
     while iter < itmax
         tstart = MPI.Wtime()
+        update_timer!(timers, "aop", @elapsed begin
         Aop!(Ap, p) # Compute A*p
-        tend = MPI.Wtime(); t201 += tend - tstart; tstart = tend
+        end)
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. r -= alpha * Ap # Update the residual
         end
-        tend = MPI.Wtime(); t209 += tend - tstart; tstart = tend
+        update_timer!(timers, "pre", @elapsed begin
         M!(z, r) # Apply the 2-level preconditioner
+        end)
         if rank == 0
             @. x += alpha * p # Update the solution
         end
-        tend = MPI.Wtime(); t215 += tend - tstart; tstart = tend
         if rank == 0
             rho = dot(z, r)
             beta = rho / rhoold;   rhoold = rho
@@ -340,31 +338,23 @@ function pcg_mpi_2level_Schwarz(
                 resnorm[] = sqrt(rho) 
             end
         end
-        tend = MPI.Wtime(); t227 += tend - tstart; tstart = tend
         req = MPI.Ibcast!(resnorm, comm; root=0) # Broadcast the residual norm 
         if rank == 0
             @. p = z + beta * p # Update the search direction
         end
         MPI.Wait(req) # Wait for the broadcast to finish
-        tend = MPI.Wtime(); t239 += tend - tstart; tstart = tend
         push!(residuals, resnorm[])
         rank == 0 && peeksolution(iter, x, resnorm[])
         if resnorm[] < tol
-            @info """Rank $rank 
-                    A op                 : $(t201) 
-                    update r             : $(t209) 
-                    precond + update x   : $(t215) 
-                    update z*r           : $(t227) 
-                    bcast resnorm, upda p: $(t239) 
-                    """
             break
         end
+        update_timer!(timers, "ite", MPI.Wtime() - tstart)
         iter += 1
     end
     MPI.Bcast!(x, comm; root=0) # Broadcast the solution
     iter = MPI.Bcast(iter, 0, comm) # Broadcast the number of iterations
     resnorm[] = MPI.Bcast(resnorm[], 0, comm) # Broadcast the residual norm
-    stats = (niter=iter, resnorm=resnorm[], residuals=residuals)
+    stats = (niter = iter, resnorm = resnorm[], residuals = residuals, timers = timers)
     return (x, stats)
 end
 

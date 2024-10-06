@@ -30,6 +30,14 @@ function mebibytes(a)
     Int(round(b/2^20, digits=0))
 end    
 
+function set_up_timers(names...)
+    Dict([(name, 0.0) for name in names])
+end
+
+function update_timer!(timers, n, t)
+    timers[n] += t
+end
+
 # @show allbytes(1)
 # @show allbytes([1, 2, 3])
 # @show allbytes([1, 2, [3, 2]])
