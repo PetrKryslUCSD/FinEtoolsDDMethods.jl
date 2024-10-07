@@ -29,8 +29,9 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using MPI
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
-using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precond_2level!
+using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precond_2level!, MPIAOperator, MPITwoLevelPreconditioner
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates, conc_cache
+using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
 using Test
@@ -236,34 +237,73 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     
     t1 = time()
     norm_F_f = norm(F_f) 
+    aop = MPIAOperator(comm, rank, partition, cpi,
+        (rank == 0
+         ? set_up_timers("send_nbuffs", "add_nbuffs", "total")
+         : set_up_timers("mult_local"))
+    )
+    pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache, 
+        (rank == 0 
+        ? set_up_timers("send_obuffs", "solve_global", "wait_send_obuffs", "add_obuffs", "total")
+        : set_up_timers("solve_local"))
+    )
     (u_f, stats) = pcg_mpi_2level_Schwarz(
         comm, 
         rank,
-        (q, p) -> partition_mult!(q, cpi, comm, rank, partition, p),
+        (q, p) -> partition_mult!(q, aop, p),
         F_f,
         zeros(size(F_f)),
-        (q, p) -> precond_2level!(q, ccache, cpi, comm, rank, partition, p);
+        (q, p) -> precond_2level!(q, pre, p);
         itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
         peeksolution=peeksolution)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f), timers = stats.timers)
+
     if rank > 0
         MPI.send(stats.timers, comm; dest = 0)
     end
+    root_timers = stats.timers
+    pavg_timers = Dict([(k, 0.0) for k in keys(root_timers)])
     if rank == 0
-        @show ptimers = [(i, MPI.recv(comm; source=i)) for i in 1:Np]
-        root_timers = stats.timers
-        pavgtimers = Dict([(k, 0.0) for k in keys(root_timers)])
+        ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
         for k in keys(root_timers)
             root_timers[k] = root_timers[k] / stats.niter
-            tavg = 0.0
-            for (i, t) in ptimers
-                t[k] = t[k] / stats.niter
-                tavg += t[k]
-            end
-            pavgtimers[k] = tavg / Np
+            pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter 
         end
+    end
+
+    if rank > 0
+        MPI.send(aop.timers, comm; dest = 0)
+    end
+    aop_pavg_timers = nothing
+    if rank == 0
+        ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
+        aop_pavg_timers = Dict([(k, 0.0) for k in keys(ptimers[1])])
+        for k in keys(ptimers[1])
+            aop_pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter
+        end
+        for k in keys(aop.timers)
+            aop.timers[k] = aop.timers[k] / stats.niter
+        end
+    end
+
+    if rank > 0
+        MPI.send(pre.timers, comm; dest = 0)
+    end
+    pre_pavg_timers = nothing
+    if rank == 0
+        ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
+        pre_pavg_timers = Dict([(k, 0.0) for k in keys(ptimers[1])])
+        for k in keys(ptimers[1])
+            pre_pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter
+        end
+        for k in keys(pre.timers)
+            pre.timers[k] = pre.timers[k] / stats.niter
+        end
+    end
+
+    if rank == 0
         data = Dict(
             "number_nodes" => count(fens),
             "number_elements" => count(fes),
@@ -275,8 +315,14 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "size_Kr_ff" => size(Krfactor),
             "stats" => stats,
             "iteration_time" => time() - t1,
-            "root_timers" => root_timers,
-            "pavg_timers" => pavgtimers
+            "timers" => Dict(
+                "ite_root" => root_timers,
+                "ite_pavg" => pavg_timers,
+                "aop_root" => aop.timers,
+                "aop_pavg" => aop_pavg_timers,
+                "pre_root" => pre.timers,
+                "pre_pavg" => pre_pavg_timers,
+            )
         )
         f = (filename == "" ?
              "zc-" *
@@ -289,7 +335,6 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         @info "Storing data in $(f * ".json")"
         DataDrop.store_json(f * ".json", data)
     end
-    scattersysvec!(dchi, u_f, DOF_KIND_FREE)
     
     MPI.Finalize()
     rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))

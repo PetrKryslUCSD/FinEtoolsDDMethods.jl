@@ -96,134 +96,6 @@ function pcg_seq(Aop!, b, x0;
     return (x, stats)
 end
 
-function pcg_mpi_2level_Schwarz_old(
-    comm, 
-    rank,
-    Aop!,
-    b,
-    x0,
-    (MG!)=(q, p) -> (q .= p),
-    (ML!)=(q, p) -> (q .= p);
-    itmax=0,
-    atol=√eps(eltype(b)),
-    rtol=√eps(eltype(b)),
-    normtype = KSP_NORM_NATURAL,
-    peeksolution = (iter, x, resnorm) -> nothing
-    )
-    itmax = (itmax > 0 ? itmax : length(b))
-    (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
-    x = deepcopy(x0); p = similar(x); r = similar(x); zg = similar(x); zl = similar(x)
-    alpha = zero(typeof(atol))
-    beta = zero(typeof(atol))
-    z = zg # Alias for legibility
-    Ap = z # Alias for legibility
-    MPI.Bcast!(x, comm; root=0) # Broadcast the initial guess
-    Aop!(Ap, x) # If partition, compute contribution to the A*p
-    MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
-    if rank == 0
-        @. r = b - Ap # Compute the residual
-    end
-    req = MPI.Ibcast!(r, comm; root=0) # Broadcast the residual
-    if rank == 0
-        MG!(zg, r) # If root, apply the global preconditioner
-    end
-    MPI.Wait(req) # Wait for the residual to be broadcasted
-    ML!(zl, r) # Apply the local preconditioner, if partition
-    MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
-    tol = zero(typeof(atol))
-    resnorm = Ref(Inf)
-    if rank == 0
-        @. z = zl + zg # Combine the local and global preconditioners
-        @. p = z
-        rhoold = dot(z, r)
-        if normtype == KSP_NORM_UNPRECONDITIONED
-            resnorm[] = sqrt(dot(r, r))
-            tol = atol + rtol * resnorm[]
-        else
-            resnorm[] = sqrt(rhoold)
-            tol = atol + rtol * resnorm[]
-        end
-    end
-    tol = MPI.Bcast(tol, 0, comm) # Broadcast the tolerance
-    residuals = typeof(tol)[]
-    rank == 0 && peeksolution(0, x, resnorm[])
-    iter = 1
-    t198 = 0.0
-    t201 = 0.0
-    t204 = 0.0
-    t209 = 0.0
-    t215 = 0.0
-    t221 = 0.0
-    t224 = 0.0
-    t227 = 0.0
-    t239 = 0.0
-    while iter < itmax
-        tstart = MPI.Wtime()
-        MPI.Bcast!(p, comm; root=0) # Broadcast the search direction
-        tend = MPI.Wtime(); t198 += tend - tstart; tstart = tend
-        Aop!(Ap, p) # If partition, compute contribution to the A*p
-        tend = MPI.Wtime(); t201 += tend - tstart; tstart = tend
-        MPI.Reduce!(Ap, MPI.SUM, comm; root=0) # Reduce the A*p
-        tend = MPI.Wtime(); t204 += tend - tstart; tstart = tend
-        if rank == 0
-            alpha = rhoold / dot(p, Ap)
-            @. r -= alpha * Ap # Update the residual
-        end
-        tend = MPI.Wtime(); t209 += tend - tstart; tstart = tend
-        req = MPI.Ibcast!(r, comm; root=0) # Broadcast the residual
-        if rank == 0
-            MG!(zg, r) # If root, apply the global preconditioner
-            @. x += alpha * p # Update the solution
-        end
-        MPI.Wait(req) # Wait for the broadcast to finish
-        tend = MPI.Wtime(); t215 += tend - tstart; tstart = tend
-        ML!(zl, r) # Apply the local preconditioner, if partition
-        tend = MPI.Wtime(); t221 += tend - tstart; tstart = tend
-        MPI.Reduce!(zl, MPI.SUM, comm; root=0) # Reduce the local preconditioner
-        tend = MPI.Wtime(); t224 += tend - tstart; tstart = tend
-        if rank == 0
-            @. z = zl + zg # Combine the local and global preconditioners
-            rho = dot(z, r)
-            beta = rho / rhoold;   rhoold = rho
-            if normtype == KSP_NORM_UNPRECONDITIONED
-                resnorm[] = sqrt(dot(r, r))
-            else
-                resnorm[] = sqrt(rho) 
-            end
-        end
-        tend = MPI.Wtime(); t227 += tend - tstart; tstart = tend
-        req = MPI.Ibcast!(resnorm, comm; root=0) # Broadcast the residual norm 
-        if rank == 0
-            @. p = z + beta * p # Update the search direction
-        end
-        MPI.Wait(req) # Wait for the broadcast to finish
-        tend = MPI.Wtime(); t239 += tend - tstart; tstart = tend
-        push!(residuals, resnorm[])
-        rank == 0 && peeksolution(iter, x, resnorm[])
-        if resnorm[] < tol
-            @info """Rank $rank 
-                    broadcast p          : $(t198) 
-                    A op                 : $(t201) 
-                    reduce Ap            : $(t204) 
-                    update r             : $(t209) 
-                    compute zg + update x: $(t215) 
-                    compute zl           : $(t221) 
-                    reduce zl            : $(t224) 
-                    update z, z*r        : $(t227) 
-                    bcast resnorm, upda p: $(t239) 
-                    """
-            break
-        end
-        iter += 1
-    end
-    MPI.Bcast!(x, comm; root=0) # Broadcast the solution
-    iter = MPI.Bcast(iter, 0, comm) # Broadcast the number of iterations
-    resnorm[] = MPI.Bcast(resnorm[], 0, comm) # Broadcast the residual norm
-    stats = (niter=iter, resnorm=resnorm[], residuals=residuals)
-    return (x, stats)
-end
-
-
 """
     pcg_mpi_2level_Schwarz(
         comm, 
@@ -313,7 +185,7 @@ function pcg_mpi_2level_Schwarz(
     residuals = typeof(tol)[]
     rank == 0 && peeksolution(0, x, resnorm[])
     iter = 1
-    timers = set_up_timers("aop", "pre", "ite")  
+    timers = set_up_timers("aop", "pre", "total")  
     while iter < itmax
         tstart = MPI.Wtime()
         update_timer!(timers, "aop", @elapsed begin
@@ -348,7 +220,7 @@ function pcg_mpi_2level_Schwarz(
         if resnorm[] < tol
             break
         end
-        update_timer!(timers, "ite", MPI.Wtime() - tstart)
+        update_timer!(timers, "total", MPI.Wtime() - tstart)
         iter += 1
     end
     MPI.Bcast!(x, comm; root=0) # Broadcast the solution
