@@ -54,15 +54,17 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
         update_timer!(timers, "2_add_nbuffs", MPI.Wtime() - tstart)
         update_timer!(timers, "3_total", MPI.Wtime() - tstart0)
     else
-        tstart = MPI.Wtime()
+        tstart0 = MPI.Wtime()
         d = partition.ndof
         if size(partition.nonoverlapping_K,1) != length(d) # trim size
             partition.nonoverlapping_K = partition.nonoverlapping_K[d, d]
         end
         MPI.Recv!(partition.ntempp, comm; source=0)
+        tstart = MPI.Wtime()
         mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
-        MPI.Send(partition.ntempq, comm; dest = 0)
         update_timer!(timers, "1_mult_local", MPI.Wtime() - tstart)
+        MPI.Send(partition.ntempq, comm; dest = 0)
+        update_timer!(timers, "2_total", MPI.Wtime() - tstart0)
     end
     q
 end
