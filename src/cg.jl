@@ -185,17 +185,17 @@ function pcg_mpi_2level_Schwarz(
     residuals = typeof(tol)[]
     rank == 0 && peeksolution(0, x, resnorm[])
     iter = 1
-    timers = set_up_timers("aop", "pre", "total")  
+    timers = set_up_timers("1_aop", "2_pre", "3_total")  
     while iter < itmax
         tstart = MPI.Wtime()
-        update_timer!(timers, "aop", @elapsed begin
+        update_timer!(timers, "1_aop", @elapsed begin
         Aop!(Ap, p) # Compute A*p
         end)
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. r -= alpha * Ap # Update the residual
         end
-        update_timer!(timers, "pre", @elapsed begin
+        update_timer!(timers, "2_pre", @elapsed begin
         M!(z, r) # Apply the 2-level preconditioner
         end)
         if rank == 0
@@ -220,7 +220,7 @@ function pcg_mpi_2level_Schwarz(
         if resnorm[] < tol
             break
         end
-        update_timer!(timers, "total", MPI.Wtime() - tstart)
+        update_timer!(timers, "3_total", MPI.Wtime() - tstart)
         iter += 1
     end
     MPI.Bcast!(x, comm; root=0) # Broadcast the solution

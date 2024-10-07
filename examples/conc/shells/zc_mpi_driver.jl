@@ -304,6 +304,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
 
     if rank == 0
+        sorted(k) = sort(collect(keys(k)))
         data = Dict(
             "number_nodes" => count(fens),
             "number_elements" => count(fes),
@@ -316,12 +317,12 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "stats" => stats,
             "iteration_time" => time() - t1,
             "timers" => Dict(
-                "ite_root" => root_timers,
-                "ite_pavg" => pavg_timers,
-                "aop_root" => aop.timers,
-                "aop_pavg" => aop_pavg_timers,
-                "pre_root" => pre.timers,
-                "pre_pavg" => pre_pavg_timers,
+                "ite_root" => sort(collect(root_timers), by = x -> x[1]),
+                "ite_pavg" => sort(collect(pavg_timers), by = x -> x[1]),
+                "aop_root" => sort(collect(aop.timers), by = x -> x[1]),
+                "aop_pavg" => sort(collect(aop_pavg_timers), by = x -> x[1]),
+                "pre_root" => sort(collect(pre.timers), by = x -> x[1]),
+                "pre_pavg" => sort(collect(pre_pavg_timers), by = x -> x[1]),
             )
         )
         f = (filename == "" ?
