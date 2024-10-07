@@ -239,13 +239,13 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     norm_F_f = norm(F_f) 
     aop = MPIAOperator(comm, rank, partition, cpi,
         (rank == 0
-         ? set_up_timers("send_nbuffs", "add_nbuffs", "total")
-         : set_up_timers("mult_local"))
+         ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
+         : set_up_timers("1_mult_local"))
     )
     pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache, 
         (rank == 0 
-        ? set_up_timers("send_obuffs", "solve_global", "wait_send_obuffs", "add_obuffs", "total")
-        : set_up_timers("solve_local"))
+        ? set_up_timers("1_send_obuffs", "2_solve_global", "3_wait_obuffs", "4_add_obuffs", "5_total")
+        : set_up_timers("1_solve_local"))
     )
     (u_f, stats) = pcg_mpi_2level_Schwarz(
         comm, 

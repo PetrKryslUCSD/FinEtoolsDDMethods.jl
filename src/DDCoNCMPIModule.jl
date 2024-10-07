@@ -40,7 +40,7 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
             push!(requests, req)
         end
         MPI.Waitall!(requests)
-        update_timer!(timers, "send_nbuffs", MPI.Wtime() - tstart)
+        update_timer!(timers, "1_send_nbuffs", MPI.Wtime() - tstart)
         tstart = MPI.Wtime()
         requests = [MPI.Irecv!(cpi.nbuffs[i], comm; source = i) for i in 1:length(cpi.dof_lists)]
         while true
@@ -51,8 +51,8 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
             d = cpi.dof_lists[i].nonoverlapping
             q[d] .+= cpi.nbuffs[i]
         end
-        update_timer!(timers, "add_nbuffs", MPI.Wtime() - tstart)
-        update_timer!(timers, "total", MPI.Wtime() - tstart0)
+        update_timer!(timers, "2_add_nbuffs", MPI.Wtime() - tstart)
+        update_timer!(timers, "3_total", MPI.Wtime() - tstart0)
     else
         tstart = MPI.Wtime()
         d = partition.ndof
@@ -62,7 +62,7 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
         MPI.Recv!(partition.ntempp, comm; source=0)
         mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
         MPI.Send(partition.ntempq, comm; dest = 0)
-        update_timer!(timers, "mult_local", MPI.Wtime() - tstart)
+        update_timer!(timers, "1_mult_local", MPI.Wtime() - tstart)
     end
     q
 end
@@ -91,15 +91,15 @@ function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p)
             req = MPI.Isend(cpi.obuffs[i], comm; dest = i)
             push!(requests, req)
         end
-        update_timer!(timers, "send_obuffs", MPI.Wtime() - tstart)
+        update_timer!(timers, "1_send_obuffs", MPI.Wtime() - tstart)
         # q .= Phi * (Krfactor \ (Phi' * p))
         tstart = MPI.Wtime()
         mul!(cc.PhiTp, cc.Phi', p)
         ldiv!(cc.KrfactorPhiTp, cc.Krfactor, cc.PhiTp)
         q .= mul!(cc.q, cc.Phi, cc.KrfactorPhiTp)
-        update_timer!(timers, "solve_global", MPI.Wtime() - tstart)
+        update_timer!(timers, "2_solve_global", MPI.Wtime() - tstart)
         MPI.Waitall!(requests)
-        update_timer!(timers, "wait_send_obuffs", MPI.Wtime() - tstart0)
+        update_timer!(timers, "3_wait_obuffs", MPI.Wtime() - tstart0)
         tstart = MPI.Wtime()
         requests = [MPI.Irecv!(cpi.obuffs[i], comm; source = i) for i in 1:length(cpi.dof_lists)]
         while true
@@ -110,14 +110,14 @@ function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p)
             d = cpi.dof_lists[i].overlapping
             q[d] .+= cpi.obuffs[i]
         end
-        update_timer!(timers, "add_obuffs", MPI.Wtime() - tstart)
-        update_timer!(timers, "total", MPI.Wtime() - tstart0)
+        update_timer!(timers, "4_add_obuffs", MPI.Wtime() - tstart)
+        update_timer!(timers, "5_total", MPI.Wtime() - tstart0)
     else
         tstart = MPI.Wtime()
         MPI.Recv!(partition.otempp, comm; source = 0)
         ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
         MPI.Send(partition.otempq, comm; dest = 0)
-        update_timer!(timers, "solve_local", MPI.Wtime() - tstart)
+        update_timer!(timers, "1_solve_local", MPI.Wtime() - tstart)
     end
     q
 end
