@@ -39,7 +39,7 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
             req = MPI.Isend(cpi.nbuffs[i], comm; dest = i)
             push!(requests, req)
         end
-        MPI.Waitall!(requests)
+        # MPI.Waitall!(requests) # This may not be needed?
         update_timer!(timers, "1_send_nbuffs", MPI.Wtime() - tstart)
         tstart = MPI.Wtime()
         requests = [MPI.Irecv!(cpi.nbuffs[i], comm; source = i) for i in 1:length(cpi.dof_lists)]
@@ -63,7 +63,7 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
         tstart = MPI.Wtime()
         mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
         update_timer!(timers, "1_mult_local", MPI.Wtime() - tstart)
-        MPI.Send(partition.ntempq, comm; dest = 0)
+        MPI.Isend(partition.ntempq, comm; dest = 0)
         update_timer!(timers, "2_total", MPI.Wtime() - tstart0)
     end
     q
