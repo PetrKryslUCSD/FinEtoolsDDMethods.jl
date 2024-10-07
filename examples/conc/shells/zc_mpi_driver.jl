@@ -240,7 +240,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     aop = MPIAOperator(comm, rank, partition, cpi,
         (rank == 0
          ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
-         : set_up_timers("1_mult_local", "2_total"))
+         : set_up_timers("1_recv", "2_mult_local", "3_total"))
     )
     pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache, 
         (rank == 0 
