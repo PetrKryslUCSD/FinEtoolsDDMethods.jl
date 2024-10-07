@@ -198,8 +198,9 @@ function CoNCPartitionData(cpi::CPI,
     Kn = make_matrix(subset(fes, el))
     # Now compute (contribution to) the reduced matrix for the global
     # preconditioner. At this point the matrix has the size of the overall
-    # global stiffness matrix. It will need to be trimmed to only refer to the
-    # non overlapping degrees of freedom.
+    # global stiffness matrix so that the reduced matrix Phi'*Kn_ff*Phi can be
+    # computed later. It will need to be trimmed to only refer to the non
+    # overlapping degrees of freedom.
     Kn_ff = Kn[fr, fr]
     # Compute the right hand side contribution
     u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
