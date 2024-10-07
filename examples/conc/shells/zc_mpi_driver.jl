@@ -316,14 +316,14 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "size_Kr_ff" => size(Krfactor),
             "stats" => stats,
             "iteration_time" => time() - t1,
-            "timers" => Dict(
-                "ite_root" => sort(collect(root_timers), by = x -> x[1]),
-                "ite_pavg" => sort(collect(pavg_timers), by = x -> x[1]),
-                "aop_root" => sort(collect(aop.timers), by = x -> x[1]),
-                "aop_pavg" => sort(collect(aop_pavg_timers), by = x -> x[1]),
-                "pre_root" => sort(collect(pre.timers), by = x -> x[1]),
-                "pre_pavg" => sort(collect(pre_pavg_timers), by = x -> x[1]),
-            )
+            "timers" => [
+                ["aop_root", [[s[1], s[2]] for s in sort(collect(aop.timers), by = x -> x[1])]],
+                ["aop_pavg", [[s[1], s[2]] for s in sort(collect(aop_pavg_timers), by = x -> x[1])]],
+                ["pre_root", [[s[1], s[2]] for s in sort(collect(pre.timers), by = x -> x[1])]],
+                ["pre_pavg", [[s[1], s[2]] for s in sort(collect(pre_pavg_timers), by = x -> x[1])]],
+                ["ite_root", [[s[1], s[2]] for s in sort(collect(root_timers), by = x -> x[1])]],
+                ["ite_pavg", [[s[1], s[2]] for s in sort(collect(pavg_timers), by = x -> x[1])]],
+            ]
         )
         f = (filename == "" ?
              "zc-" *
