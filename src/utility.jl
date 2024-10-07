@@ -38,6 +38,12 @@ function update_timer!(timers, n, t)
     timers[n] += t
 end
 
+function reset_timers!(timers)
+    for (k, v) in timers
+        timers[k] = 0.0
+    end
+end
+
 # @show allbytes(1)
 # @show allbytes([1, 2, 3])
 # @show allbytes([1, 2, [3, 2]])

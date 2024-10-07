@@ -237,16 +237,8 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     
     t1 = time()
     norm_F_f = norm(F_f) 
-    aop = MPIAOperator(comm, rank, partition, cpi,
-        (rank == 0
-         ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
-         : set_up_timers("1_recv", "2_mult_local", "3_total"))
-    )
-    pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache, 
-        (rank == 0 
-        ? set_up_timers("1_send_obuffs", "2_solve_global", "3_wait_obuffs", "4_add_obuffs", "5_total")
-        : set_up_timers("1_solve_local"))
-    )
+    aop = MPIAOperator(comm, rank, partition, cpi)
+    pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache)
     (u_f, stats) = pcg_mpi_2level_Schwarz(
         comm, 
         rank,
@@ -259,7 +251,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f), timers = stats.timers)
-
+@show rank, stats.timers
     if rank > 0
         MPI.send(stats.timers, comm; dest = 0)
     end
@@ -272,7 +264,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter 
         end
     end
-
+@show rank, aop.timers
     if rank > 0
         MPI.send(aop.timers, comm; dest = 0)
     end

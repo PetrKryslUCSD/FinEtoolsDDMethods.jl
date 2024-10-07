@@ -25,12 +25,12 @@ using MPI
 
 using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
 using ..CoNCUtilitiesModule: conc_cache
-using ..FinEtoolsDDMethods: set_up_timers, update_timer!
+using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
 
 function partition_mult!(q, cpi, comm, rank, partition, timers, p)
-    q .= zero(eltype(q))
     if rank == 0
         tstart0 = MPI.Wtime()
+        q .= zero(eltype(q))
         tstart = MPI.Wtime()
         requests = MPI.Request[]
         for i in 1:length(cpi.dof_lists)
@@ -54,11 +54,11 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
         update_timer!(timers, "2_add_nbuffs", MPI.Wtime() - tstart)
         update_timer!(timers, "3_total", MPI.Wtime() - tstart0)
     else
-        tstart0 = MPI.Wtime()
         d = partition.ndof
-        if size(partition.nonoverlapping_K,1) != length(d) # trim size
+        if size(partition.nonoverlapping_K, 1) != length(d) # trim size
             partition.nonoverlapping_K = partition.nonoverlapping_K[d, d]
         end
+        tstart0 = MPI.Wtime()
         tstart = MPI.Wtime()
         MPI.Recv!(partition.ntempp, comm; source=0)
         update_timer!(timers, "1_recv", MPI.Wtime() - tstart)
@@ -72,6 +72,7 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
 end
 
 mutable struct MPIAOperator{PD, CI}
+    first::Bool
     comm::MPI.Comm
     rank::Int
     partition::PD
@@ -79,8 +80,21 @@ mutable struct MPIAOperator{PD, CI}
     timers::Dict{String, Float64}
 end
 
+function MPIAOperator(comm, rank, partition, cpi) 
+    MPIAOperator(true, comm, rank, partition, cpi,
+        (rank == 0
+         ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
+         : set_up_timers("1_recv", "2_mult_local", "3_total"))
+    )
+end
+
 function partition_mult!(q, aop::A, p) where {A<:MPIAOperator}
     partition_mult!(q, aop.cpi, aop.comm, aop.rank, aop.partition, aop.timers, p)
+    if aop.first
+        aop.first = false
+        reset_timers!(aop.timers)
+    end
+    q
 end
 
 function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p) 
@@ -134,6 +148,14 @@ mutable struct MPITwoLevelPreconditioner{PD, CI, CC}
     cc::CC
     timers::Dict{String, Float64}
 end
+
+function MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache)
+    MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache, 
+        (rank == 0 
+        ? set_up_timers("1_send_obuffs", "2_solve_global", "3_wait_obuffs", "4_add_obuffs", "5_total")
+        : set_up_timers("1_solve_local"))
+    )
+end 
 
 function precond_2level!(q, pre::P, p)  where {P<:MPITwoLevelPreconditioner}
     precond_2level!(q, pre.cc, pre.cpi, pre.comm, pre.rank, pre.partition, pre.timers, p)

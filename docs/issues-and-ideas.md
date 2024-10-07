@@ -444,3 +444,8 @@ Extrae.init()
 ...
 Extrae.finish()
 ```
+
+-- Why does the first call take so much longer?
+partition_mult!(q, cpi, comm, rank, partition, timers, p) (for MPI)
+I put in a check that resets the timers erasing the recording of the first call, 
+so that the average during iteration matches the iteration timer.

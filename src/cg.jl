@@ -188,16 +188,15 @@ function pcg_mpi_2level_Schwarz(
     timers = set_up_timers("1_aop", "2_pre", "3_total")  
     while iter < itmax
         tstart = MPI.Wtime()
-        update_timer!(timers, "1_aop", @elapsed begin
         Aop!(Ap, p) # Compute A*p
-        end)
+        update_timer!(timers, "1_aop", MPI.Wtime() - tstart)
         if rank == 0
             alpha = rhoold / dot(p, Ap)
             @. r -= alpha * Ap # Update the residual
         end
-        update_timer!(timers, "2_pre", @elapsed begin
+        tstart = MPI.Wtime()
         M!(z, r) # Apply the 2-level preconditioner
-        end)
+        update_timer!(timers, "2_pre", MPI.Wtime() - tstart)
         if rank == 0
             @. x += alpha * p # Update the solution
         end
