@@ -143,6 +143,7 @@ mpiexec -n 5 julia --project=. .\conc\shells\zc_mpi_driver.jl
 ```
 
 Batch execution on the Ookami A64FX nodes is described with the following `sbatch` script
+for MPICH:
 ```
 #!/usr/bin/env bash
 
@@ -167,3 +168,28 @@ cd FinEtoolsDDMethods.jl/examples
 ```
 The above executes on 24 nodes (root + 23 partitions), using 2 BLAS threads per process.
 
+And this one for OpenMPI:
+```
+#!/usr/bin/env bash
+
+#SBATCH --job-name=job_zc
+#SBATCH --output=job_zc_Np=8.log
+#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks=9
+#SBATCH --time=00:15:00
+#SBATCH -p short
+
+# Load OpenMPI and Julia
+export JULIA_DEPOT_PATH="~/a64fx/depot"
+module load julia
+module load gcc/13.1.0
+module load slurm
+module load openmpi/gcc8/4.1.2
+
+# Automatically set the number of Julia threads depending on number of Slurm threads
+export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
+export BLAS_THREADS=2
+
+cd FinEtoolsDDMethods.jl/examples
+mpiexec julia --project=. conc/shells/zc_mpi_driver.jl --n1 6 --Nc 100 --ref 100
+```
