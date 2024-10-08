@@ -1,3 +1,5 @@
+using  OrderedCollections
+
 function meminfo_julia(where = "")
     toint(n) = Int(ceil(n))
     @info """Memory: $(where)
@@ -31,7 +33,7 @@ function mebibytes(a)
 end    
 
 function set_up_timers(names...)
-    Dict([(name, 0.0) for name in names])
+    LittleDict([(name, 0.0) for name in names])
 end
 
 function update_timer!(timers, n, t)
