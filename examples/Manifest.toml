@@ -242,10 +242,10 @@ uuid = "91bb5406-6c9a-523d-811d-0644c4229550"
 version = "8.0.25"
 
 [[deps.FinEtoolsDDMethods]]
-deps = ["CoNCMOR", "DataDrop", "FinEtools", "JET", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "OrderedCollections", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
+deps = ["CoNCMOR", "DataDrop", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "OrderedCollections", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
 path = ".."
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
-version = "0.6.4"
+version = "0.6.5"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "SuiteSparse", "Test"]
@@ -313,20 +313,6 @@ version = "0.2.1"
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
-
-[[deps.JET]]
-deps = ["CodeTracking", "InteractiveUtils", "JuliaInterpreter", "LoweredCodeUtils", "MacroTools", "Pkg", "PrecompileTools", "Preferences", "Test"]
-git-tree-sha1 = "db3d262aed9730b3670d54000f452f4cd839f185"
-uuid = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
-version = "0.9.10"
-
-    [deps.JET.extensions]
-    JETCthulhuExt = "Cthulhu"
-    ReviseExt = "Revise"
-
-    [deps.JET.weakdeps]
-    Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
-    Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [[deps.JLLWrappers]]
 deps = ["Artifacts", "Preferences"]
@@ -502,12 +488,6 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifac
 git-tree-sha1 = "70e830dab5d0775183c99fc75e4c24c614ed7142"
 uuid = "f1f71cc9-e9ae-5b93-9b94-4fe0e1ad3748"
 version = "5.5.1+0"
-
-[[deps.MacroTools]]
-deps = ["Markdown", "Random"]
-git-tree-sha1 = "2fa9ee3e63fd3a4f7a9a4f4744a52f4856de82df"
-uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
-version = "0.5.13"
 
 [[deps.ManualMemory]]
 git-tree-sha1 = "bcaef4fc7a0cfe2cba636d84cda54b5e4e4ca3cd"
