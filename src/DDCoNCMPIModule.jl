@@ -128,7 +128,7 @@ function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p)
         tstart = MPI.Wtime()
         MPI.Recv!(partition.otempp, comm; source = 0)
         ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
-        MPI.Send(partition.otempq, comm; dest = 0)
+        MPI.Isend(partition.otempq, comm; dest = 0)
         update_timer!(timers, "1_solve_local", MPI.Wtime() - tstart)
     end
     q
