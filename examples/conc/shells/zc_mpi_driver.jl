@@ -49,7 +49,6 @@ using ILUZero
 using Statistics
 using ShellStructureTopo: make_topo_faces, create_partitions
 
-
 # using MatrixSpy
 
 function zcant!(csmatout, XYZ, tangents, feid, qpid)
@@ -236,7 +235,6 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
     
     t1 = time()
-    norm_F_f = norm(F_f) 
     aop = MPIAOperator(comm, rank, partition, cpi)
     pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache)
     (u_f, stats) = pcg_mpi_2level_Schwarz(

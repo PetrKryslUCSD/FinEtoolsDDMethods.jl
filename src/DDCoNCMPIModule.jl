@@ -72,7 +72,6 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
 end
 
 mutable struct MPIAOperator{PD, CI}
-    first::Bool
     comm::MPI.Comm
     rank::Int
     partition::PD
@@ -81,7 +80,7 @@ mutable struct MPIAOperator{PD, CI}
 end
 
 function MPIAOperator(comm, rank, partition, cpi) 
-    MPIAOperator(true, comm, rank, partition, cpi,
+    MPIAOperator(comm, rank, partition, cpi,
         (rank == 0
          ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
          : set_up_timers("1_recv", "2_mult_local", "3_total"))
@@ -90,11 +89,6 @@ end
 
 function partition_mult!(q, aop::A, p) where {A<:MPIAOperator}
     partition_mult!(q, aop.cpi, aop.comm, aop.rank, aop.partition, aop.timers, p)
-    if aop.first
-        aop.first = false
-        reset_timers!(aop.timers)
-    end
-    q
 end
 
 function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p) 
@@ -112,9 +106,9 @@ function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p)
         update_timer!(timers, "1_send_obuffs", MPI.Wtime() - tstart)
         # q .= Phi * (Krfactor \ (Phi' * p))
         tstart = MPI.Wtime()
-        @time mul!(cc.PhiTp, cc.Phi', p)
-        @time ldiv!(cc.KrfactorPhiTp, cc.Krfactor, cc.PhiTp)
-        @time q .= mul!(cc.q, cc.Phi, cc.KrfactorPhiTp)
+        mul!(cc.PhiTp, cc.Phi', p)
+        ldiv!(cc.KrfactorPhiTp, cc.Krfactor, cc.PhiTp)
+        q .= mul!(cc.q, cc.Phi, cc.KrfactorPhiTp)
         update_timer!(timers, "2_solve_global", MPI.Wtime() - tstart)
         MPI.Waitall!(requests)
         update_timer!(timers, "3_wait_obuffs", MPI.Wtime() - tstart0)
