@@ -249,7 +249,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
     rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f), timers = stats.timers)
-@show rank, stats.timers
+
     if rank > 0
         MPI.send(stats.timers, comm; dest = 0)
     end
@@ -259,10 +259,10 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
         for k in keys(root_timers)
             root_timers[k] = root_timers[k] / stats.niter
-            pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter 
+            pavg_timers[k] = median([t[k] for t in ptimers]) / stats.niter 
         end
     end
-@show rank, aop.timers
+
     if rank > 0
         MPI.send(aop.timers, comm; dest = 0)
     end
@@ -271,7 +271,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
         aop_pavg_timers = Dict([(k, 0.0) for k in keys(ptimers[1])])
         for k in keys(ptimers[1])
-            aop_pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter
+            aop_pavg_timers[k] = median([t[k] for t in ptimers]) / stats.niter
         end
         for k in keys(aop.timers)
             aop.timers[k] = aop.timers[k] / stats.niter
@@ -286,7 +286,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
         pre_pavg_timers = Dict([(k, 0.0) for k in keys(ptimers[1])])
         for k in keys(ptimers[1])
-            pre_pavg_timers[k] = mean([t[k] for t in ptimers]) / stats.niter
+            pre_pavg_timers[k] = median([t[k] for t in ptimers]) / stats.niter
         end
         for k in keys(pre.timers)
             pre.timers[k] = pre.timers[k] / stats.niter
@@ -294,7 +294,6 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
 
     if rank == 0
-        sorted(k) = sort(collect(keys(k)))
         data = Dict(
             "number_nodes" => count(fens),
             "number_elements" => count(fes),
@@ -307,12 +306,12 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "stats" => stats,
             "iteration_time" => time() - t1,
             "timers" => [
-                ["aop_root", [[s[1], s[2]] for s in sort(collect(aop.timers), by = x -> x[1])]],
-                ["aop_pavg", [[s[1], s[2]] for s in sort(collect(aop_pavg_timers), by = x -> x[1])]],
-                ["pre_root", [[s[1], s[2]] for s in sort(collect(pre.timers), by = x -> x[1])]],
-                ["pre_pavg", [[s[1], s[2]] for s in sort(collect(pre_pavg_timers), by = x -> x[1])]],
-                ["ite_root", [[s[1], s[2]] for s in sort(collect(root_timers), by = x -> x[1])]],
-                ["ite_pavg", [[s[1], s[2]] for s in sort(collect(pavg_timers), by = x -> x[1])]],
+                "aop_root", aop.timers,
+                "aop_pavg", aop_pavg_timers,
+                "pre_root", pre.timers,
+                "pre_pavg", pre_pavg_timers,
+                "ite_root", root_timers,
+                "ite_pavg", pavg_timers,
             ]
         )
         f = (filename == "" ?

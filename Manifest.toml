@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.4"
+julia_version = "1.10.5"
 manifest_format = "2.0"
-project_hash = "52ddf471fc35054acdef3104a6a71a16515f0f57"
+project_hash = "0a5ef980ad0087b6462f22224efd84c46c8d2df5"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -446,6 +446,11 @@ git-tree-sha1 = "a028ee3cb5641cccc4c24e90c36b0a4f7707bdf5"
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
 version = "3.0.14+0"
 
+[[deps.OrderedCollections]]
+git-tree-sha1 = "dfdf5519f235516220579f949664f1bf44e741c5"
+uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+version = "1.6.3"
+
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]
 git-tree-sha1 = "8489905bcdbcfac64d1daa51ca07c0d8f0283821"
@@ -663,7 +668,7 @@ version = "1.1.2+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.8.0+1"
+version = "5.11.0+0"
 
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]

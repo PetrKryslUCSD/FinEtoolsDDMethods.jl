@@ -71,12 +71,12 @@ function partition_mult!(q, cpi, comm, rank, partition, timers, p)
     q
 end
 
-mutable struct MPIAOperator{PD, CI}
+mutable struct MPIAOperator{PD, CI, TD}
     comm::MPI.Comm
     rank::Int
     partition::PD
     cpi::CI
-    timers::Dict{String, Float64}
+    timers::TD
 end
 
 function MPIAOperator(comm, rank, partition, cpi) 
@@ -134,13 +134,13 @@ function precond_2level!(q, cc, cpi, comm, rank, partition, timers, p)
     q
 end
 
-mutable struct MPITwoLevelPreconditioner{PD, CI, CC}
+mutable struct MPITwoLevelPreconditioner{PD, CI, CC, TD}
     comm::MPI.Comm
     rank::Int
     partition::PD
     cpi::CI
     cc::CC
-    timers::Dict{String, Float64}
+    timers::TD
 end
 
 function MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache)
