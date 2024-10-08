@@ -185,7 +185,6 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
     cpi = MPI.bcast(cpi, 0, comm)
     rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
-    rank == 0 && (@info "Mean partition size: $(mean_partition_size(cpi))")
     
     t1 = time()
     partition = nothing
@@ -209,7 +208,18 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
         Phi = Phi[fr, :]
         @info("Size of the reduced problem: $(size(Phi, 2))")
         @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-    end    
+    end  
+    meanps = 0 
+    if rank == 0
+        partition_sizes = Int[]
+        for i in 1:Np
+            push!(partition_sizes, MPI.recv(comm; source=i))
+        end
+        meanps = Int(round(mean(partition_sizes)))
+        @info "Mean fine partition size: $(meanps)"
+    else
+        MPI.send(partition_size(partition), comm; dest=0)
+    end
     MPI.Barrier(comm)
     Phi = MPI.bcast(Phi, 0, comm)
     rank == 0 && (@info "Create partitions and clusters ($(round(time() - t1, digits=3)) [s])")
@@ -302,6 +312,7 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "n1" => n1,
             "Np" => Np,
             "No" => No,
+            "meanps" => meanps,
             "size_Kr_ff" => size(Krfactor),
             "stats" => stats,
             "iteration_time" => time() - t1,
