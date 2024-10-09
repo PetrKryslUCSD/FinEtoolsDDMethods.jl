@@ -449,3 +449,38 @@ Extrae.finish()
 partition_mult!(q, cpi, comm, rank, partition, timers, p) (for MPI)
 I put in a check that resets the timers erasing the recording of the first call, 
 so that the average during iteration matches the iteration timer.
+Answer: It could be compilation.
+
+-- Alternative data distribution strategy:
+```
+initial residual is distributed to partitions
+initial solution is distributed to partitions
+while iter < itmax
+    Aop!(Ap, p) # p is held by partitions
+    alpha = rhoold / dot(p, Ap) # computed on partitions, plus reduction
+    @. r -= alpha * Ap # update on partitions
+    M!(z, r) # ???
+    @. x += alpha * p # update on partitions
+    if rank == 0
+        rho = dot(z, r) # ???
+        beta = rho / rhoold;   rhoold = rho
+        if normtype == KSP_NORM_UNPRECONDITIONED
+            resnorm[] = sqrt(dot(r, r))
+        else
+            resnorm[] = sqrt(rho) 
+        end
+    end
+    @. p = z + beta * p # update on partitions
+    push!(residuals, resnorm[])
+    rank == 0 && peeksolution(iter, x, resnorm[])
+    if resnorm[] < tol
+        break
+    end
+    iter += 1
+end
+```
+So the key is the preconditioner. The partition could 
+transform the residual, all-broadcast to the other partitions.
+All partitions could solve the global problem concurrently.
+The vector z could then also be held only locally.
+
