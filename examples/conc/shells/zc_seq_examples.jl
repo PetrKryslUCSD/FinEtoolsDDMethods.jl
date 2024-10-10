@@ -29,7 +29,8 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, AOperator, a_mult!, preconditioner!
+using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
 using Test
@@ -314,6 +315,9 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
+
+    K = stiffness(femm, geom0, u0, Rfield0, dchi)
+    K_f = K[fr, fr]
     
     @info("Refinement factor: $(ref)")
     @info("Number of fine grid partitions: $(Np)")
@@ -364,15 +368,19 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
+        Kr_ff += (Phi' * partition.nonshared_K * Phi)
     end
     Krfactor = lu(Kr_ff)
     @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
     
     t0 = time()
+    aop = AOperator(partition_list, cpi) 
     M! = preconditioner!(Krfactor, Phi, partition_list)
+    p = rand(Float64, size(F_f))
+    q = zeros(size(F_f))
+    a_mult!(q, aop, p)
     (u_f, stats) = pcg_seq(
-        (q, p) -> partition_multiply!(q, partition_list, p), 
+        (q, p) -> a_mult!(q, aop, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,

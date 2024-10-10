@@ -25,14 +25,14 @@ using ShellStructureTopo
 
 # Node lists are constructed for the non-shared, and then by extending the
 # partitions with the shared nodes. Connected elements are identified.
-function _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, i)
-    nonshared_node_list = findall(x -> x == i, node_1st_partitioning)
-    nocel = connectedelems(fes, nonshared_node_list, count(fens))
+function _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, dofnums, fr, i)
+    nsnl = findall(x -> x == i, node_1st_partitioning)
+    nocel = connectedelems(fes, nsnl, count(fens))
     bfes = meshboundary(subset(fes, nocel))
     cnl = connectednodes(bfes)
     # mark the members of the extended partition: start with the non-shared nodes
     ismember = fill(false, count(fens))
-    ismember[nonshared_node_list] .= true 
+    ismember[nsnl] .= true 
     for ov in 1:overlap
         addednl = Int[]
         sizehint!(addednl, length(cnl))
@@ -48,20 +48,23 @@ function _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning,
         end
         cnl = addednl
     end
-    all_node_list = findall(x -> x, ismember)
-    ocel = connectedelems(fes, all_node_list, count(fens))
+    anl = findall(x -> x, ismember)
+    ocel = connectedelems(fes, anl, count(fens))
+    nonshared_dof_list, all_dof_list = _dof_lists(nsnl, anl, dofnums, fr)
     return (
-        nonshared_nodes = nonshared_node_list,
-        all_nodes = all_node_list,
+        nonshared_nodes = nsnl,
+        all_nodes = anl,
         connected_to_nonshared = nocel,
-        connected_to_all = ocel
+        connected_to_all = ocel,
+        nonshared_dofs = nonshared_dof_list,
+        all_dofs = all_dof_list
     )
 end
 
 """
-    subdomain_element_lists(fens, fes, npartitions, overlap)
+    _partition_entity_lists(fens, fes, Np, overlap, dofnums, fr)
 
-Make element lists for all grid subdomains.
+Make entity lists for all grid subdomains.
 
 The grid is partitioned into `Np` non-overlapping node partitions using the
 Metis library. This means each partition owns it nodes, nodes are not shared
@@ -69,7 +72,7 @@ among partitions.
 
 The element partitions are extended by the given overlap. 
 """
-function partition_entity_lists(fens, fes, Np, overlap)
+function _partition_entity_lists(fens, fes, Np, overlap, dofnums, fr)
     femm = FEMMBase(IntegDomain(fes, PointRule()))
     C = connectionmatrix(femm, count(fens))
     g = Metis.graph(C; check_hermitian=true)
@@ -78,7 +81,7 @@ function partition_entity_lists(fens, fes, Np, overlap)
     n2e = FENodeToFEMap(fes, count(fens))
     entity_lists = []
     for i in 1:Np
-        push!(entity_lists, _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, i))
+        push!(entity_lists, _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, dofnums, fr, i))
     end
     return entity_lists
 end
@@ -88,38 +91,31 @@ end
 
 Collect the degree-of-freedom lists for all partitions.
 """
-function subdomain_dof_lists(node_lists, dofnums, fr)
-    dof_lists = []
-    for n in node_lists
-        nonoverlapping_dof_list = Int[]
-        sizehint!(nonoverlapping_dof_list, prod(size(dofnums))) 
-        for n in n.nonoverlapping
-            for d in axes(dofnums, 2)
-                if dofnums[n, d] in fr
-                    push!(nonoverlapping_dof_list, dofnums[n, d]) # TO DO get rid of pushing
-                end
+function _dof_lists(nonshared_node_list, all_node_list, dofnums, fr)
+    nonshared_dof_list = Int[]
+    sizehint!(nonshared_dof_list, prod(size(dofnums)))
+    for n in nonshared_node_list
+        for d in axes(dofnums, 2)
+            if dofnums[n, d] in fr
+                push!(nonshared_dof_list, dofnums[n, d]) # TO DO get rid of pushing
             end
         end
-        overlapping_dof_list = Int[]
-        sizehint!(overlapping_dof_list, prod(size(dofnums))) 
-        for n in n.overlapping
-            for d in axes(dofnums, 2)
-                if dofnums[n, d] in fr
-                    push!(overlapping_dof_list, dofnums[n, d])
-                end
-            end
-        end
-        part = (overlapping=overlapping_dof_list,
-                nonoverlapping=nonoverlapping_dof_list)
-        push!(dof_lists, part)
     end
-    return dof_lists
+    all_dof_list = Int[]
+    sizehint!(all_dof_list, prod(size(dofnums)))
+    for n in all_node_list
+        for d in axes(dofnums, 2)
+            if dofnums[n, d] in fr
+                push!(all_dof_list, dofnums[n, d])
+            end
+        end
+    end
+    return nonshared_dof_list, all_dof_list
 end
 
-struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL, DL, BV} 
+struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL} 
     u::NF
-    element_lists::EL
-    dof_lists::DL
+    entity_lists::EL
 end
 
 function nndof(cpi::CoNCPartitioningInfo, i)
@@ -130,8 +126,9 @@ function ondof(cpi::CoNCPartitioningInfo, i)
     length(cpi.dof_lists[i].overlapping)
 end
 
-function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T, IT}; visualize = false) where {T, IT}
-    entity_lists = partition_entity_lists(fens, fes, nfpartitions, overlap) # expensive
+function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize = false) where {T, IT}
+    fr = dofrange(u, DOF_KIND_FREE)
+    entity_lists = _partition_entity_lists(fens, fes, Np, No, u.dofnums, fr) # expensive
     if visualize
         p = 1
         for el in entity_lists
@@ -144,29 +141,26 @@ function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T,
             p += 1
         end
     end
-    fr = dofrange(u, DOF_KIND_FREE)
-    dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr) # intermediate
-    
-    return CoNCPartitioningInfo(u, element_lists, dof_lists, nbuffs, obuffs)
+    return CoNCPartitioningInfo(u, entity_lists)
 end
 
 function mean_partition_size(cpi::CoNCPartitioningInfo)
-    return Int(round(mean([length(cpi.dof_lists[i].overlapping) for i in eachindex(cpi.dof_lists)])))
+    return Int(round(mean([length(cpi.entity_lists[i].all_dof_list) for i in eachindex(cpi.entity_lists)])))
 end
 
 function npartitions(cpi::CoNCPartitioningInfo)
-    @assert length(cpi.element_lists) == length(cpi.dof_lists)
-    return length(cpi.element_lists)
+    return length(cpi.entity_lists)
 end
 
 mutable struct CoNCPartitionData{T, IT, FACTOR}
-    nonoverlapping_K::SparseMatrixCSC{T, IT}
-    overlapping_K_factor::FACTOR
+    rank::Int
+    nonshared_K::SparseMatrixCSC{T, IT}
+    all_K_factor::FACTOR
     rhs::Vector{T}
-    ndof::Vector{IT}
+    nsdof::Vector{IT}
     ntempq::Vector{T}
     ntempp::Vector{T}
-    odof::Vector{IT}
+    alldof::Vector{IT}
     otempq::Vector{T}
     otempp::Vector{T}
 end
@@ -174,6 +168,7 @@ end
 function CoNCPartitionData(cpi::CPI) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
+        0,
         spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
@@ -192,12 +187,11 @@ function CoNCPartitionData(cpi::CPI,
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
-    element_lists = cpi.element_lists
-    dof_lists = cpi.dof_lists
+    entity_lists = cpi.entity_lists
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non overlapping elements
-    el = element_lists[i].nonoverlapping
+    el = entity_lists[i].connected_to_nonshared
     Kn = make_matrix(subset(fes, el))
     # Now compute (contribution to) the reduced matrix for the global
     # preconditioner. At this point the matrix has the size of the overall
@@ -216,25 +210,25 @@ function CoNCPartitionData(cpi::CPI,
     end
     Kn = nothing
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
-    el = setdiff(element_lists[i].all_connected, element_lists[i].nonoverlapping)
+    el = setdiff(entity_lists[i].connected_to_all, entity_lists[i].connected_to_nonshared)
     Ke = make_matrix(subset(fes, el))
-    Ko_ff = Kn_ff + Ke[fr, fr]
+    Ka_ff = Kn_ff + Ke[fr, fr]
     Ke = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
-    odof = dof_lists[i].overlapping
-    Ko_ff = Ko_ff[odof, odof]
+    alldof = entity_lists[i].all_dofs
+    Ka_ff = Ka_ff[alldof, alldof]
     # Reduce the matrix to adjust the degrees of freedom referenced
-    ndof = dof_lists[i].nonoverlapping
+    nsdof = entity_lists[i].nonshared_dofs
     # Allocate some temporary vectors
-    otempq = zeros(eltype(cpi.u.values), length(odof))
-    otempp = zeros(eltype(cpi.u.values), length(odof))
-    ntempq = zeros(eltype(cpi.u.values), length(ndof))
-    ntempp = zeros(eltype(cpi.u.values), length(ndof))
-    return CoNCPartitionData(Kn_ff, lu(Ko_ff), rhs, ndof, ntempq, ntempp, odof, otempq, otempp)
+    otempq = zeros(eltype(cpi.u.values), length(alldof))
+    otempp = zeros(eltype(cpi.u.values), length(alldof))
+    ntempq = zeros(eltype(cpi.u.values), length(nsdof))
+    ntempp = zeros(eltype(cpi.u.values), length(nsdof))
+    return CoNCPartitionData(i, Kn_ff, lu(Ka_ff), rhs, nsdof, ntempq, ntempp, alldof, otempq, otempp)
 end
 
 function partition_size(cpd::CoNCPartitionData)
-    return length(cpd.odof)
+    return length(cpd.alldof)
 end
 
 function rhs(partition_list)

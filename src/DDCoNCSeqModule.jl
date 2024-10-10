@@ -25,6 +25,7 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
 
 using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
+using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
 
 function make_partitions(cpi, fes, make_matrix, make_interior_load)
     partition_list  = [CoNCPartitionData(cpi) for i in 1:npartitions(cpi)]
@@ -34,18 +35,33 @@ function make_partitions(cpi, fes, make_matrix, make_interior_load)
     return partition_list
 end
 
-function partition_multiply!(q, partition_list, p)
+function _a_mult!(q, cpi, partition_list, timers, p)
     q .= zero(eltype(q))
     for partition in partition_list
-        d = partition.ndof
+        d = partition.nsdof
         partition.ntempp .= p[d]
-        mul!(partition.ntempq, partition.nonoverlapping_K, partition.ntempp)
-    end
-    for partition in partition_list
-        d = partition.ndof
+        mul!(partition.ntempq, partition.nonshared_K, partition.ntempp)
         q[d] .+= partition.ntempq
     end
     q
+end
+
+mutable struct AOperator{PD, CI, TD}
+    partition_list::Vector{PD}
+    cpi::CI
+    timers::TD
+end
+
+function AOperator(partition_list, cpi) 
+    AOperator(partition_list, cpi,
+        (rank == 0
+         ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
+         : set_up_timers("1_recv", "2_mult_local", "3_total"))
+    )
+end
+
+function a_mult!(q, aop::A, p) where {A<:AOperator}
+    _a_mult!(q, aop.cpi, aop.partition_list, aop.timers, p)
 end
 
 function _precondition_global_solve!(q, Krfactor, Phi, p) 
@@ -55,9 +71,9 @@ end
 
 function _precondition_local_solve!(q, partition_list, p) 
     for partition in partition_list
-        d = partition.odof
+        d = partition.alldof
         partition.otempp .= p[d]
-        ldiv!(partition.otempq, partition.overlapping_K_factor, partition.otempp)
+        ldiv!(partition.otempq, partition.all_K_factor, partition.otempp)
         q[d] .+= partition.otempq
     end
     q
@@ -66,7 +82,7 @@ end
 function preconditioner!(Krfactor, Phi, partition_list)
     # Make sure the partitions only refer to the local non-overlapping dofs
     for _p in partition_list
-        _p.nonoverlapping_K = _p.nonoverlapping_K[_p.ndof, _p.ndof]
+        _p.nonshared_K = _p.nonshared_K[_p.nsdof, _p.nsdof]
     end
     function M!(q, p)
         q .= zero(eltype(q))
