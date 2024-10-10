@@ -317,8 +317,8 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     associategeometry!(femm, geom0)
 
     K = stiffness(femm, geom0, u0, Rfield0, dchi)
-    K_f = K[fr, fr]
-    
+    K_ff = K[fr, fr]
+
     @info("Refinement factor: $(ref)")
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
@@ -365,6 +365,13 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
+    
+    K_ff_2 = spzeros(size(K_ff, 1), size(K_ff, 1))
+    for partition in partition_list
+        K_ff_2 += partition.nonshared_K
+    end
+    @show norm(K_ff - K_ff_2) / norm(K_ff)
+    
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
@@ -379,6 +386,8 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     p = rand(Float64, size(F_f))
     q = zeros(size(F_f))
     a_mult!(q, aop, p)
+    q1 = K_ff * p
+    @show norm(q - q1)
     (u_f, stats) = pcg_seq(
         (q, p) -> a_mult!(q, aop, p), 
         F_f, zeros(size(F_f));
