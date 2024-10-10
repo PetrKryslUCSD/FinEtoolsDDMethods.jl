@@ -23,34 +23,38 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ..FinEtoolsDDMethods: allbytes
 using ShellStructureTopo
 
-function _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i)
-    nonoverlapping_element_list = findall(x -> x == i, element_1st_partitioning)
-    enl = deepcopy(nonoverlapping_element_list)
-    touched = fill(false, count(fes)) 
-    touched[enl] .= true 
+# Node lists are constructed for the non-shared, and then by extending the
+# partitions with the shared nodes. Connected elements are identified.
+function _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, i)
+    nonshared_node_list = findall(x -> x == i, node_1st_partitioning)
+    nocel = connectedelems(fes, nonshared_node_list, count(fens))
+    bfes = meshboundary(subset(fes, nocel))
+    cnl = connectednodes(bfes)
+    # mark the members of the extended partition: start with the non-shared nodes
+    ismember = fill(false, count(fens))
+    ismember[nonshared_node_list] .= true 
     for ov in 1:overlap
-        sfes = subset(fes, enl)
-        bsfes = meshboundary(sfes)
-        addenl = Int[]
-        for e in eachindex(bsfes)
-            for n in bsfes.conn[e]
-                for ne in n2e.map[n]
-                    if !touched[ne] 
-                        touched[ne] = true
-                        push!(addenl, ne)
+        addednl = Int[]
+        sizehint!(addednl, length(cnl))
+        for cn in cnl
+            for e in n2e.map[cn] # neighbor
+                for on in fes.conn[e] # node
+                    if !ismember[on]
+                        ismember[on] = true
+                        push!(addednl, on)
                     end
                 end
             end
         end
-        enl = cat(enl, addenl; dims=1)
+        cnl = addednl
     end
-    overlapping_element_list = enl
-    n = connectednodes(subset(fes, overlapping_element_list))
-    all_connected_element_list = connectedelems(fes, n, length(n2e.map))
+    all_node_list = findall(x -> x, ismember)
+    ocel = connectedelems(fes, all_node_list, count(fens))
     return (
-        nonoverlapping=nonoverlapping_element_list,
-        overlapping=overlapping_element_list,
-        all_connected=all_connected_element_list
+        nonshared_nodes = nonshared_node_list,
+        all_nodes = all_node_list,
+        connected_to_nonshared = nocel,
+        connected_to_all = ocel
     )
 end
 
@@ -59,41 +63,24 @@ end
 
 Make element lists for all grid subdomains.
 
-The grid is partitioned into `npartitions` non-overlapping element partitions using the
-Metis library. The element partitions are extended by the given overlap. 
+The grid is partitioned into `Np` non-overlapping node partitions using the
+Metis library. This means each partition owns it nodes, nodes are not shared
+among partitions. 
+
+The element partitions are extended by the given overlap. 
 """
-function subdomain_element_lists(fens, fes, npartitions, overlap)
+function partition_entity_lists(fens, fes, Np, overlap)
     femm = FEMMBase(IntegDomain(fes, PointRule()))
-    C = dualconnectionmatrix(femm, fens, nodesperelem(boundaryfe(fes)))
+    C = connectionmatrix(femm, count(fens))
     g = Metis.graph(C; check_hermitian=true)
-    element_1st_partitioning = Metis.partition(g, npartitions; alg=:KWAY)
-    npartitions = maximum(element_1st_partitioning)
+    node_1st_partitioning = Metis.partition(g, Np; alg=:KWAY)
+    Np = maximum(node_1st_partitioning)
     n2e = FENodeToFEMap(fes, count(fens))
-    element_lists = []
-    for i in 1:npartitions
-        push!(element_lists, _construct_element_lists(fes, n2e, overlap, element_1st_partitioning, i))
+    entity_lists = []
+    for i in 1:Np
+        push!(entity_lists, _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, i))
     end
-    return element_lists
-end
-
-"""
-    subdomain_node_lists(element_lists, fes)
-
-Make node lists for all grid subdomains.
-
-List of named tuples of these nodelists is returned. 
-"""
-function subdomain_node_lists(element_lists, fes)
-    node_lists = []
-    for i in eachindex(element_lists)
-        push!(node_lists,
-            (
-                nonoverlapping=connectednodes(subset(fes, element_lists[i].nonoverlapping)),
-                overlapping=connectednodes(subset(fes, element_lists[i].overlapping))
-            )
-        )
-    end
-    return node_lists
+    return entity_lists
 end
 
 """
@@ -133,17 +120,33 @@ struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL, DL, BV}
     u::NF
     element_lists::EL
     dof_lists::DL
-    nbuffs::BV
-    obuffs::BV
 end
 
-function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T, IT}) where {T, IT}
-    element_lists = subdomain_element_lists(fens, fes, nfpartitions, overlap) # expensive
-    node_lists = subdomain_node_lists(element_lists, fes) # cheap
+function nndof(cpi::CoNCPartitioningInfo, i)
+    length(cpi.dof_lists[i].nonoverlapping)
+end
+
+function ondof(cpi::CoNCPartitioningInfo, i)
+    length(cpi.dof_lists[i].overlapping)
+end
+
+function CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, u::NodalField{T, IT}; visualize = false) where {T, IT}
+    entity_lists = partition_entity_lists(fens, fes, nfpartitions, overlap) # expensive
+    if visualize
+        p = 1
+        for el in entity_lists
+            vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.connected_to_nonshared))
+            sfes = FESetP1(reshape(el.nonshared_nodes, length(el.nonshared_nodes), 1))
+            vtkexportmesh("partition-$(p)-non-shared-nodes.vtk", fens, sfes)
+            vtkexportmesh("partition-$(p)-all-elements.vtk", fens, subset(fes, el.connected_to_all))
+            sfes = FESetP1(reshape(el.all_nodes, length(el.all_nodes), 1))
+            vtkexportmesh("partition-$(p)-all-nodes.vtk", fens, sfes)
+            p += 1
+        end
+    end
     fr = dofrange(u, DOF_KIND_FREE)
     dof_lists = subdomain_dof_lists(node_lists, u.dofnums, fr) # intermediate
-    nbuffs = [zeros(eltype(u.values), length(dof_lists[i].nonoverlapping)) for i in eachindex(dof_lists)]
-    obuffs = [zeros(eltype(u.values), length(dof_lists[i].overlapping)) for i in eachindex(dof_lists)]
+    
     return CoNCPartitioningInfo(u, element_lists, dof_lists, nbuffs, obuffs)
 end
 

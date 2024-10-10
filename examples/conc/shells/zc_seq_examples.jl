@@ -303,12 +303,6 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    @info("Refinement factor: $(ref)")
-    @info("Number of fine grid partitions: $(Np)")
-    @info("Number of overlaps: $(No)")
-    @info("Number of elements: $(count(fes))")
-    @info("Number of free dofs = $(nfreedofs(dchi))")
-
     bfes = meshboundary(fes)
     el = selectelem(fens, bfes, box = Float64[10.0 10.0 1.0 1.0 -1 1], tolerance = tolerance)
     lfemm1 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
@@ -321,6 +315,13 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     associategeometry!(femm, geom0)
     
+    @info("Refinement factor: $(ref)")
+    @info("Number of fine grid partitions: $(Np)")
+    @info("Number of overlaps: $(No)")
+    @info("Number of nodes: $(count(fens))")
+    @info("Number of elements: $(count(fes))")
+    @info("Number of free dofs = $(nfreedofs(dchi))")
+
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
         femm1.integdomain.fes = fes
@@ -328,7 +329,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi; visualize = true) 
     @info "Create CoNCPartitioningInfo ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
@@ -425,7 +426,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     true
 end
 
-function test(;filename = "", ref = 8, Nc = 2, n1 = 6, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+function test(;filename = "", ref = 8, Nc = 2, n1 = 6, Np = 5, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
     _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
 end
 
