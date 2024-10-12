@@ -25,15 +25,16 @@ using ShellStructureTopo
 
 # Node lists are constructed for the non-shared, and then by extending the
 # partitions with the shared nodes. Connected elements are identified.
-function _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, dofnums, fr, i)
-    nsnl = findall(x -> x == i, node_1st_partitioning)
+function _construct_node_lists(fens, fes, n2e, No, node_to_partition, i)
+    # this is the non-shared node list
+    nsnl = findall(x -> x == i, node_to_partition)
     nocel = connectedelems(fes, nsnl, count(fens))
     bfes = meshboundary(subset(fes, nocel))
     cnl = connectednodes(bfes)
     # mark the members of the extended partition: start with the non-shared nodes
     ismember = fill(false, count(fens))
     ismember[nsnl] .= true 
-    for ov in 1:overlap
+    for ov in 1:No
         addednl = Int[]
         sizehint!(addednl, length(cnl))
         for cn in cnl
@@ -48,17 +49,60 @@ function _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning,
         end
         cnl = addednl
     end
-    anl = findall(x -> x, ismember)
-    ocel = connectedelems(fes, anl, count(fens))
-    nonshared_dof_list, all_dof_list = _dof_lists(nsnl, anl, dofnums, fr)
+    # the all node list consists of all the nodes reached within a given number of overlaps
+    xtnl = findall(x -> x, ismember)
     return (
         nonshared_nodes = nsnl,
-        all_nodes = anl,
-        connected_to_nonshared = nocel,
-        connected_to_all = ocel,
-        nonshared_dofs = nonshared_dof_list,
-        all_dofs = all_dof_list
+        extended_nodes = xtnl,
     )
+end
+
+function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
+    # Record assignment of the elements to partitions. This assignment is
+    # unique: each element is assigned to the partition whose nodes reference it
+    # the most. Ties are broken.
+    element_to_partition = fill(0, count(fes))
+    nodebuf = fill(0, nodesperelem(fes))
+    numpartitions = fill(0, length(node_lists))
+    ix = fill(0, length(node_lists))
+    for n in eachindex(n2e.map)
+        for e in n2e.map[n]
+            if element_to_partition[e] == 0
+                for k in eachindex(nodebuf)
+                    nodebuf[k] = node_to_partition[fes.conn[e][k]]
+                end
+                numpartitions .= 0
+                for i in eachindex(nodebuf)
+                    numpartitions[nodebuf[i]] += 1
+                end
+                ix = sortperm!(ix, numpartitions)
+                if numpartitions[ix[end]] > numpartitions[ix[end-1]]
+                    element_to_partition[e] = ix[end] # assign to the most connected partition
+                else # if there is a tie, assign to the partition with the smallest number
+                    # numpartitions =  [9, 1, 8, 10, 10, 3, 0, 10]
+                    # ix = sortperm!(ix, numpartitions)
+                    k = 0
+                    for j in length(ix):-1:1
+                        # @show j, numpartitions[ix[j]], numpartitions[ix[end]]
+                        if numpartitions[ix[j]] < numpartitions[ix[end]]
+                            k = j + 1
+                            break
+                        end
+                    end
+                    # @show k, ix[k:end], minimum(ix[k:end])
+                    element_to_partition[e] = minimum(ix[k:end])
+                end
+            end
+        end
+    end
+    # Now find all elements that support the extended partition nodes
+    element_lists = []
+    for i in eachindex(node_lists)
+        xtel = connectedelems(fes, node_lists[i].extended_nodes, count(fens))
+        uel = findall(x -> x == i, element_to_partition)
+        push!(element_lists, (nonshared_elements = uel, extended_elements = xtel))
+    end # for i in eachindex(node_lists)
+    return element_lists
 end
 
 """
@@ -72,17 +116,29 @@ among partitions.
 
 The element partitions are extended by the given overlap. 
 """
-function _partition_entity_lists(fens, fes, Np, overlap, dofnums, fr)
+function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
     femm = FEMMBase(IntegDomain(fes, PointRule()))
     C = connectionmatrix(femm, count(fens))
     g = Metis.graph(C; check_hermitian=true)
-    node_1st_partitioning = Metis.partition(g, Np; alg=:KWAY)
-    Np = maximum(node_1st_partitioning)
+    node_to_partition = Metis.partition(g, Np; alg=:KWAY)
+    Np = maximum(node_to_partition)
     n2e = FENodeToFEMap(fes, count(fens))
+    node_lists = []
+    for i in 1:Np
+        push!(node_lists, _construct_node_lists(fens, fes, n2e, No, node_to_partition, i))
+    end
+    element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     entity_lists = []
     for i in 1:Np
-        push!(entity_lists, _construct_entity_lists(fens, fes, n2e, overlap, node_1st_partitioning, dofnums, fr, i))
+        push!(entity_lists, (
+            nonshared_nodes = node_lists[i].nonshared_nodes,
+            extended_nodes=node_lists[i].extended_nodes,
+            nonshared_elements = element_lists[i].nonshared_elements,
+            extended_elements = element_lists[i].extended_elements
+            )
+        )
     end
+    @show entity_lists
     return entity_lists
 end
 
@@ -132,12 +188,12 @@ function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize
     if visualize
         p = 1
         for el in entity_lists
-            vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.connected_to_nonshared))
+            vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.nonshared_elements))
             sfes = FESetP1(reshape(el.nonshared_nodes, length(el.nonshared_nodes), 1))
             vtkexportmesh("partition-$(p)-non-shared-nodes.vtk", fens, sfes)
-            vtkexportmesh("partition-$(p)-all-elements.vtk", fens, subset(fes, el.connected_to_all))
-            sfes = FESetP1(reshape(el.all_nodes, length(el.all_nodes), 1))
-            vtkexportmesh("partition-$(p)-all-nodes.vtk", fens, sfes)
+            vtkexportmesh("partition-$(p)-extended-elements.vtk", fens, subset(fes, el.extended_elements))
+            sfes = FESetP1(reshape(el.extended_nodes, length(el.extended_nodes), 1))
+            vtkexportmesh("partition-$(p)-extended-nodes.vtk", fens, sfes)
             p += 1
         end
     end
@@ -208,7 +264,6 @@ function CoNCPartitionData(cpi::CPI,
     if make_interior_load !== nothing
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
-    Kn = nothing
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(entity_lists[i].connected_to_all, entity_lists[i].connected_to_nonshared)
     Ke = make_matrix(subset(fes, el))
@@ -217,8 +272,9 @@ function CoNCPartitionData(cpi::CPI,
     # Reduce the matrix to adjust the degrees of freedom referenced
     alldof = entity_lists[i].all_dofs
     Ka_ff = Ka_ff[alldof, alldof]
-    # Reduce the matrix to adjust the degrees of freedom referenced
     nsdof = entity_lists[i].nonshared_dofs
+    Kn_ff = Kn[nsdof, nsdof]
+    Kn = nothing
     # Allocate some temporary vectors
     otempq = zeros(eltype(cpi.u.values), length(alldof))
     otempp = zeros(eltype(cpi.u.values), length(alldof))

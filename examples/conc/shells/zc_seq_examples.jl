@@ -365,10 +365,24 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
-    
+    # @show cpi.entity_lists[1].nonshared_nodes
+    # @show fens.xyz[cpi.entity_lists[1].nonshared_nodes, :]
+    # @show dchi.dofnums
+    # @show intersect(partition_list[1].nsdof, partition_list[2].nsdof)
+@show partition_list[1].nsdof, partition_list[2].nsdof
+
     K_ff_2 = spzeros(size(K_ff, 1), size(K_ff, 1))
     for partition in partition_list
-        K_ff_2 += partition.nonshared_K
+        d = partition.nsdof
+        K_ff_2[d, d] += partition.nonshared_K
+    end
+    @show norm(K_ff_2)
+    for i in axes(K_ff, 1)
+        for j in axes(K_ff, 1)
+            if abs(K_ff[i, j] - K_ff_2[i, j]) / abs(K_ff[i, j]) > 1e-6
+                @show i, j, K_ff[i, j], K_ff_2[i, j]
+            end
+        end
     end
     @show norm(K_ff - K_ff_2) / norm(K_ff)
     
@@ -443,7 +457,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     true
 end
 
-function test(;filename = "", ref = 8, Nc = 2, n1 = 6, Np = 5, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+function test(;filename = "", ref = 3, Nc = 2, n1 = 1, Np = 4, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
     _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
 end
 
