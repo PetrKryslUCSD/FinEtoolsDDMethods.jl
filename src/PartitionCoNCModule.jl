@@ -105,6 +105,30 @@ function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     return element_lists
 end
 
+function _construct_communication_lists(node_lists, n2e, fes, node_to_partition)
+    Np = length(node_lists)
+    comm_lists = []
+    for p in eachindex(node_lists)
+        l = node_lists[p]
+        p_comm_lists = [Int[] for i in 1:Np]
+        for n in l.nonshared_nodes
+            for e in n2e.map[n]
+                for on in fes.conn[e]
+                    op = node_to_partition[on]
+                    if op != p
+                        push!(p_comm_lists[op], on)
+                    end
+                end
+            end
+        end
+        for j in 1:Np
+            p_comm_lists[j] = unique(p_comm_lists[j])
+        end
+        push!(comm_lists, p_comm_lists)
+    end
+    return comm_lists
+end
+
 """
     _partition_entity_lists(fens, fes, Np, overlap, dofnums, fr)
 
@@ -127,6 +151,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
     for i in 1:Np
         push!(node_lists, _construct_node_lists(fens, fes, n2e, No, node_to_partition, i))
     end
+    comm_lists = _construct_communication_lists(node_lists, n2e, fes, node_to_partition)
     element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     entity_lists = []
     for i in 1:Np
@@ -134,11 +159,11 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
             nonshared_nodes = node_lists[i].nonshared_nodes,
             extended_nodes=node_lists[i].extended_nodes,
             nonshared_elements = element_lists[i].nonshared_elements,
-            extended_elements = element_lists[i].extended_elements
+            extended_elements = element_lists[i].extended_elements,
+            comm_list = comm_lists[i]
             )
         )
     end
-    @show entity_lists
     return entity_lists
 end
 
@@ -186,15 +211,20 @@ function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize
     fr = dofrange(u, DOF_KIND_FREE)
     entity_lists = _partition_entity_lists(fens, fes, Np, No, u.dofnums, fr) # expensive
     if visualize
-        p = 1
-        for el in entity_lists
+        for p in eachindex(entity_lists)
+            el = entity_lists[p]
             vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.nonshared_elements))
             sfes = FESetP1(reshape(el.nonshared_nodes, length(el.nonshared_nodes), 1))
             vtkexportmesh("partition-$(p)-non-shared-nodes.vtk", fens, sfes)
             vtkexportmesh("partition-$(p)-extended-elements.vtk", fens, subset(fes, el.extended_elements))
             sfes = FESetP1(reshape(el.extended_nodes, length(el.extended_nodes), 1))
             vtkexportmesh("partition-$(p)-extended-nodes.vtk", fens, sfes)
-            p += 1
+            for i in eachindex(el.comm_list)
+                if length(el.comm_list[i]) > 0
+                    sfes = FESetP1(reshape(el.comm_list[i], length(el.comm_list[i]), 1))
+                    vtkexportmesh("partition-$(p)-comm-$(i).vtk", fens, sfes)
+                end
+            end
         end
     end
     return CoNCPartitioningInfo(u, entity_lists)
