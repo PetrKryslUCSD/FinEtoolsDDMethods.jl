@@ -105,7 +105,7 @@ function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     return element_lists
 end
 
-function _construct_communication_lists(node_lists, n2e, fes, node_to_partition)
+function _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_partition)
     Np = length(node_lists)
     comm_lists = [Int[] for i in 1:Np, j in 1:Np] # communication lists for each partition
     for p in eachindex(node_lists)
@@ -127,9 +127,32 @@ function _construct_communication_lists(node_lists, n2e, fes, node_to_partition)
         end
     end
     # comm_lists[p, op] is the list of nodes that partition p needs from partition op
-    receive_lists = [comm_lists[i, :]  for i in 1:Np]
-    send_lists = [comm_lists[:, i]  for i in 1:Np]
-    return receive_lists, send_lists
+    receive_nodes = [comm_lists[i, :]  for i in 1:Np]
+    send_nodes = [comm_lists[:, i]  for i in 1:Np]
+    return (receive_nodes = receive_nodes, send_nodes = send_nodes)
+end
+
+function _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
+    Np = length(node_lists)
+    comm_lists = [Int[] for i in 1:Np, j in 1:Np] # communication lists for each partition
+    for p in eachindex(node_lists)
+        l = node_lists[p]
+        for n in l.extended_nodes
+            op = node_to_partition[n]
+            if op != p
+                push!(comm_lists[p, op], n)
+            end
+        end
+    end
+    for i in 1:Np
+        for j in 1:Np
+            comm_lists[i, j] = unique(comm_lists[i, j])
+        end
+    end
+    # comm_lists[p, op] is the list of nodes that partition p needs from partition op
+    receive_nodes = [comm_lists[i, :]  for i in 1:Np]
+    send_nodes = [comm_lists[:, i]  for i in 1:Np]
+    return (receive_nodes = receive_nodes, send_nodes = send_nodes)
 end
 
 """
@@ -154,62 +177,92 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
     for i in 1:Np
         push!(node_lists, _construct_node_lists(fens, fes, n2e, No, node_to_partition, i))
     end
-    receive_lists, send_lists = _construct_communication_lists(node_lists, n2e, fes, node_to_partition)
+    nonshared_comm = _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_partition)
+    extended_comm = _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
     element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     entity_lists = []
     for i in 1:Np
-        @show i, receive_lists[i], send_lists[i]
-        push!(entity_lists, (
-            nonshared_nodes = node_lists[i].nonshared_nodes,
-            extended_nodes=node_lists[i].extended_nodes,
-            nonshared_elements = element_lists[i].nonshared_elements,
-            extended_elements = element_lists[i].extended_elements,
-            receive_list = receive_lists[i],
-            send_list = send_lists[i]
-            )
+        # nonshared
+        nodes = node_lists[i].nonshared_nodes
+        elements = element_lists[i].nonshared_elements
+        receive_nodes = nonshared_comm.receive_nodes[i]
+        send_nodes = nonshared_comm.send_nodes[i]
+        global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
+        receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
+                        for j in eachindex(nonshared_comm.receive_nodes[i])]
+        receive_starts = [length(global_dofs)+1]
+        for j in eachindex(receive_dofs)
+            global_dofs = vcat(global_dofs, receive_dofs[j])
+            push!(receive_starts, length(global_dofs)+1)
+        end
+        global_to_local = fill(0, prod(size(dofnums)))
+        for j in eachindex(global_dofs)
+            global_to_local[global_dofs[j]] = j
+        end
+        send_dofs = [_dof_list(nonshared_comm.send_nodes[i][j], dofnums, fr)
+                     for j in eachindex(nonshared_comm.send_nodes[i])]
+        nonshared = (
+            nodes = nodes,
+            elements = elements,
+            receive_nodes = receive_nodes,
+            send_nodes = send_nodes,
+            global_dofs = global_dofs,
+            receive_dofs = receive_dofs,
+            send_dofs = send_dofs,
+            receive_starts = receive_starts,
+            global_to_local = global_to_local,
         )
+        # extended
+        nodes = node_lists[i].extended_nodes
+        elements = element_lists[i].extended_elements
+        receive_nodes = extended_comm.receive_nodes[i]
+        send_nodes = extended_comm.send_nodes[i]
+        global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
+        receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
+                        for j in eachindex(extended_comm.receive_nodes[i])]
+        receive_starts = [length(global_dofs)+1]
+        for j in eachindex(receive_dofs)
+            global_dofs = vcat(global_dofs, receive_dofs[j])
+            push!(receive_starts, length(global_dofs)+1)
+        end
+        global_to_local = fill(0, prod(size(dofnums)))
+        for j in eachindex(global_dofs)
+            global_to_local[global_dofs[j]] = j
+        end
+        send_dofs = [_dof_list(extended_comm.send_nodes[i][j], dofnums, fr)
+                     for j in eachindex(extended_comm.send_nodes[i])]
+        extended = (
+            nodes = nodes,
+            elements = elements,
+            receive_nodes = receive_nodes,
+            send_nodes = send_nodes,
+            global_dofs = global_dofs,
+            receive_dofs = receive_dofs,
+            send_dofs = send_dofs,
+            receive_starts = receive_starts,
+            global_to_local = global_to_local,
+        )
+        push!(entity_lists, (nonshared=nonshared, extended=extended))
     end
     return entity_lists
 end
 
-"""
-    subdomain_dof_lists(node_lists, dofnums, fr)
-
-Collect the degree-of-freedom lists for all partitions.
-"""
-function _dof_lists(nonshared_node_list, all_node_list, dofnums, fr)
-    nonshared_dof_list = Int[]
-    sizehint!(nonshared_dof_list, prod(size(dofnums)))
-    for n in nonshared_node_list
+function _dof_list(node_list, dofnums, fr)
+    dof_list = Int[]
+    sizehint!(dof_list, length(node_list) * size(dofnums, 2))
+    for n in node_list
         for d in axes(dofnums, 2)
             if dofnums[n, d] in fr
-                push!(nonshared_dof_list, dofnums[n, d]) # TO DO get rid of pushing
+                push!(dof_list, dofnums[n, d]) # TO DO get rid of pushing
             end
         end
     end
-    all_dof_list = Int[]
-    sizehint!(all_dof_list, prod(size(dofnums)))
-    for n in all_node_list
-        for d in axes(dofnums, 2)
-            if dofnums[n, d] in fr
-                push!(all_dof_list, dofnums[n, d])
-            end
-        end
-    end
-    return nonshared_dof_list, all_dof_list
+    return dof_list
 end
 
 struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL} 
     u::NF
     entity_lists::EL
-end
-
-function nndof(cpi::CoNCPartitioningInfo, i)
-    length(cpi.dof_lists[i].nonoverlapping)
-end
-
-function ondof(cpi::CoNCPartitioningInfo, i)
-    length(cpi.dof_lists[i].overlapping)
 end
 
 function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize = false) where {T, IT}
@@ -218,22 +271,38 @@ function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize
     if visualize
         for p in eachindex(entity_lists)
             el = entity_lists[p]
-            vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.nonshared_elements))
-            sfes = FESetP1(reshape(el.nonshared_nodes, length(el.nonshared_nodes), 1))
+            vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.nonshared.elements))
+            sfes = FESetP1(reshape(el.nonshared.nodes, length(el.nonshared.nodes), 1))
             vtkexportmesh("partition-$(p)-non-shared-nodes.vtk", fens, sfes)
-            vtkexportmesh("partition-$(p)-extended-elements.vtk", fens, subset(fes, el.extended_elements))
-            sfes = FESetP1(reshape(el.extended_nodes, length(el.extended_nodes), 1))
+            vtkexportmesh("partition-$(p)-extended-elements.vtk", fens, subset(fes, el.extended.elements))
+            sfes = FESetP1(reshape(el.extended.nodes, length(el.extended.nodes), 1))
             vtkexportmesh("partition-$(p)-extended-nodes.vtk", fens, sfes)
-            for i in eachindex(el.receive_list)
-                if length(el.receive_list[i]) > 0
-                    sfes = FESetP1(reshape(el.receive_list[i], length(el.receive_list[i]), 1))
-                    vtkexportmesh("partition-$(p)-receive-$(i).vtk", fens, sfes)
+            receive_nodes = el.nonshared.receive_nodes
+            for i in eachindex(receive_nodes)
+                if length(receive_nodes[i]) > 0
+                    sfes = FESetP1(reshape(receive_nodes[i], length(receive_nodes[i]), 1))
+                    vtkexportmesh("partition-$(p)-nonshared-receive-$(i).vtk", fens, sfes)
                 end
             end
-            for i in eachindex(el.send_list)
-                if length(el.send_list[i]) > 0
-                    sfes = FESetP1(reshape(el.send_list[i], length(el.send_list[i]), 1))
-                    vtkexportmesh("partition-$(p)-send-$(i).vtk", fens, sfes)
+            send_nodes = el.nonshared.send_nodes
+            for i in eachindex(send_nodes)
+                if length(send_nodes[i]) > 0
+                    sfes = FESetP1(reshape(send_nodes[i], length(send_nodes[i]), 1))
+                    vtkexportmesh("partition-$(p)-nonshared-send-$(i).vtk", fens, sfes)
+                end
+            end
+            receive_nodes = el.extended.receive_nodes
+            for i in eachindex(receive_nodes)
+                if length(receive_nodes[i]) > 0
+                    sfes = FESetP1(reshape(receive_nodes[i], length(receive_nodes[i]), 1))
+                    vtkexportmesh("partition-$(p)-extended-receive-$(i).vtk", fens, sfes)
+                end
+            end
+            send_nodes = el.extended.send_nodes
+            for i in eachindex(send_nodes)
+                if length(send_nodes[i]) > 0
+                    sfes = FESetP1(reshape(send_nodes[i], length(send_nodes[i]), 1))
+                    vtkexportmesh("partition-$(p)-extended-send-$(i).vtk", fens, sfes)
                 end
             end
         end
@@ -288,7 +357,7 @@ function CoNCPartitionData(cpi::CPI,
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non overlapping elements
-    el = entity_lists[i].connected_to_nonshared
+    el = entity_lists[i].extended.elements
     Kn = make_matrix(subset(fes, el))
     # Now compute (contribution to) the reduced matrix for the global
     # preconditioner. At this point the matrix has the size of the overall
