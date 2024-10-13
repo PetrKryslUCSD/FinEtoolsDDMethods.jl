@@ -28,40 +28,30 @@ using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartition
 using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
 
 function make_partitions(cpi, fes, make_matrix, make_interior_load)
-    partition_list  = [CoNCPartitionData(cpi) for i in 1:npartitions(cpi)]
+    partition_list  = [CoNCPartitionData(cpi, i) for i in 1:npartitions(cpi)]
     for i in eachindex(partition_list)
         partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, make_interior_load)
     end  
     return partition_list
 end
 
-function _a_mult!(q, cpi, partition_list, timers, p)
-    q .= zero(eltype(q))
-    for partition in partition_list
-        d = partition.nsdof
-        partition.ntempp .= p[d]
-        mul!(partition.ntempq, partition.nonshared_K, partition.ntempp)
-        q[d] .+= partition.ntempq
-    end
-    q
-end
-
-mutable struct AOperator{PD, CI, TD}
+struct PartitionedVector{PD, T}
     partition_list::Vector{PD}
-    cpi::CI
-    timers::TD
+    nonshared::Vector{Vector{T}}
+    extended::Vector{Vector{T}}
 end
 
-function AOperator(partition_list, cpi) 
-    AOperator(partition_list, cpi,
-        (rank == 0
-         ? set_up_timers("1_send_nbuffs", "2_add_nbuffs", "3_total")
-         : set_up_timers("1_recv", "2_mult_local", "3_total"))
-    )
+function PartitionedVector(T, partition_list::Vector{CoNCPartitionData})
+    nonshared = [fill(zero(T), length(partition.nonshared.global_dofs)) for partition in partition_list]
+    extended = [fill(zero(T), length(partition.extended.global_dofs)) for partition in partition_list]
+    return PartitionedVector(partition_list, nonshared, extended)
 end
 
-function a_mult!(q, aop::A, p) where {A<:AOperator}
-    _a_mult!(q, aop.cpi, aop.partition_list, aop.timers, p)
+function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
+    for i in eachindex(q.partition_list)
+        
+    end
+    q    
 end
 
 function _precondition_global_solve!(q, Krfactor, Phi, p) 

@@ -25,7 +25,7 @@ using ShellStructureTopo
 
 # Node lists are constructed for the non-shared, and then by extending the
 # partitions with the shared nodes. Connected elements are identified.
-function _construct_node_lists(fens, fes, n2e, No, node_to_partition, i)
+function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
     # this is the non-shared node list
     nsnl = findall(x -> x == i, node_to_partition)
     nocel = connectedelems(fes, nsnl, count(fens))
@@ -57,14 +57,23 @@ function _construct_node_lists(fens, fes, n2e, No, node_to_partition, i)
     )
 end
 
+function _construct_node_lists(fens, fes, n2e, No, Np, node_to_partition)
+    node_lists = []
+    for i in 1:Np
+        push!(node_lists, _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i))
+    end
+    return node_lists
+end
+
 function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
+    Np = length(node_lists)
     # Record assignment of the elements to partitions. This assignment is
     # unique: each element is assigned to the partition whose nodes reference it
     # the most. Ties are broken.
     element_to_partition = fill(0, count(fes))
     nodebuf = fill(0, nodesperelem(fes))
-    numpartitions = fill(0, length(node_lists))
-    ix = fill(0, length(node_lists))
+    numpartitions = fill(0, Np)
+    ix = fill(0, Np)
     for n in eachindex(n2e.map)
         for e in n2e.map[n]
             if element_to_partition[e] == 0
@@ -173,10 +182,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
     node_to_partition = Metis.partition(g, Np; alg=:KWAY)
     Np = maximum(node_to_partition)
     n2e = FENodeToFEMap(fes, count(fens))
-    node_lists = []
-    for i in 1:Np
-        push!(node_lists, _construct_node_lists(fens, fes, n2e, No, node_to_partition, i))
-    end
+    node_lists =  _construct_node_lists(fens, fes, n2e, No, Np, node_to_partition)
     nonshared_comm = _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_partition)
     extended_comm = _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
     element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
@@ -318,32 +324,22 @@ function npartitions(cpi::CoNCPartitioningInfo)
     return length(cpi.entity_lists)
 end
 
-mutable struct CoNCPartitionData{T, IT, FACTOR}
-    rank::Int
+mutable struct CoNCPartitionData{EL, T, IT, FACTOR}
+    rank::IT
+    entity_list::EL
     nonshared_K::SparseMatrixCSC{T, IT}
-    all_K_factor::FACTOR
+    extended_K_factor::FACTOR
     rhs::Vector{T}
-    nsdof::Vector{IT}
-    ntempq::Vector{T}
-    ntempp::Vector{T}
-    alldof::Vector{IT}
-    otempq::Vector{T}
-    otempp::Vector{T}
 end
 
-function CoNCPartitionData(cpi::CPI) where {CPI<:CoNCPartitioningInfo}
+function CoNCPartitionData(cpi::CPI, rank) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
-        0,
+        rank,
         spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
-        Int[],
-        zeros(eltype(cpi.u.values), 0),
-        zeros(eltype(cpi.u.values), 0),
-        Int[],
-        zeros(eltype(cpi.u.values), 0),
-        zeros(eltype(cpi.u.values), 0)
+        cpi.entity_lists[rank]
     )
 end
 
@@ -353,44 +349,35 @@ function CoNCPartitionData(cpi::CPI,
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
-    entity_lists = cpi.entity_lists
+    entity_list = cpi.entity_lists[i]
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
-    # Compute the matrix for the non overlapping elements
-    el = entity_lists[i].extended.elements
-    Kn = make_matrix(subset(fes, el))
-    # Now compute (contribution to) the reduced matrix for the global
-    # preconditioner. At this point the matrix has the size of the overall
-    # global stiffness matrix so that the reduced matrix Phi'*Kn_ff*Phi can be
-    # computed later. It will need to be trimmed to only refer to the non
-    # overlapping degrees of freedom.
-    Kn_ff = Kn[fr, fr]
+    # Compute the matrix for the non shared elements
+    el = entity_list.nonshared.elements
+    Kns = make_matrix(subset(fes, el))
+    # Trim to just the free degrees of freedom
+    Kns_ff = Kns[fr, fr]
     # Compute the right hand side contribution
     u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
-    rhs = zeros(eltype(cpi.u.values), size(Kn_ff, 1))
+    rhs = zeros(eltype(cpi.u.values), size(Kns_ff, 1))
     if norm(u_d, Inf) > 0
-        rhs += - Kn[fr, dr] * u_d
+        rhs += - Kns[fr, dr] * u_d
     end
+    Kns = nothing
     if make_interior_load !== nothing
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
-    el = setdiff(entity_lists[i].connected_to_all, entity_lists[i].connected_to_nonshared)
-    Ke = make_matrix(subset(fes, el))
-    Ka_ff = Kn_ff + Ke[fr, fr]
-    Ke = nothing
+    el = setdiff(entity_list.extended.elements, entity_list.nonshared.elements)
+    Kadd = make_matrix(subset(fes, el))
+    Kxt_ff = Kns_ff + Kadd[fr, fr]
+    Kadd = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
-    alldof = entity_lists[i].all_dofs
-    Ka_ff = Ka_ff[alldof, alldof]
-    nsdof = entity_lists[i].nonshared_dofs
-    Kn_ff = Kn[nsdof, nsdof]
-    Kn = nothing
-    # Allocate some temporary vectors
-    otempq = zeros(eltype(cpi.u.values), length(alldof))
-    otempp = zeros(eltype(cpi.u.values), length(alldof))
-    ntempq = zeros(eltype(cpi.u.values), length(nsdof))
-    ntempp = zeros(eltype(cpi.u.values), length(nsdof))
-    return CoNCPartitionData(i, Kn_ff, lu(Ka_ff), rhs, nsdof, ntempq, ntempp, alldof, otempq, otempp)
+    d = entity_list.extended.global_dofs
+    Kxt_ff = Kxt_ff[d, d]
+    d = entity_list.nonshared.global_dofs
+    Kns_ff = Kns[d, d]
+    return CoNCPartitionData(i, Kn_ff, lu(Ka_ff), rhs, entity_list)
 end
 
 function partition_size(cpd::CoNCPartitionData)
