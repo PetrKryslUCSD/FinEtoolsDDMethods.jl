@@ -196,10 +196,10 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
         global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
         receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(nonshared_comm.receive_nodes[i])]
-        receive_starts = [length(global_dofs)+1]
+        # receive_starts = [length(global_dofs)+1]
         for j in eachindex(receive_dofs)
             global_dofs = vcat(global_dofs, receive_dofs[j])
-            push!(receive_starts, length(global_dofs)+1)
+            # push!(receive_starts, length(global_dofs)+1)
         end
         global_to_local = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
@@ -215,7 +215,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
             global_dofs = global_dofs,
             receive_dofs = receive_dofs,
             send_dofs = send_dofs,
-            receive_starts = receive_starts,
+            # receive_starts = receive_starts,
             global_to_local = global_to_local,
         )
         # extended
@@ -226,11 +226,11 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
         global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
         receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(extended_comm.receive_nodes[i])]
-        receive_starts = [length(global_dofs)+1]
-        for j in eachindex(receive_dofs)
-            global_dofs = vcat(global_dofs, receive_dofs[j])
-            push!(receive_starts, length(global_dofs)+1)
-        end
+        # receive_starts = [length(global_dofs)+1]
+        # for j in eachindex(receive_dofs)
+        #     global_dofs = vcat(global_dofs, receive_dofs[j])
+        #     push!(receive_starts, length(global_dofs)+1)
+        # end
         global_to_local = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
             global_to_local[global_dofs[j]] = j
@@ -245,7 +245,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
             global_dofs = global_dofs,
             receive_dofs = receive_dofs,
             send_dofs = send_dofs,
-            receive_starts = receive_starts,
+            # receive_starts = receive_starts,
             global_to_local = global_to_local,
         )
         push!(entity_lists, (nonshared=nonshared, extended=extended))
@@ -336,20 +336,20 @@ function CoNCPartitionData(cpi::CPI, rank) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
         rank,
+        cpi.entity_lists[rank],
         spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
-        cpi.entity_lists[rank]
     )
 end
 
 function CoNCPartitionData(cpi::CPI, 
-    i, 
+    rank, 
     fes, 
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
-    entity_list = cpi.entity_lists[i]
+    entity_list = cpi.entity_lists[rank]
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non shared elements
@@ -363,7 +363,6 @@ function CoNCPartitionData(cpi::CPI,
     if norm(u_d, Inf) > 0
         rhs += - Kns[fr, dr] * u_d
     end
-    Kns = nothing
     if make_interior_load !== nothing
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
@@ -377,11 +376,12 @@ function CoNCPartitionData(cpi::CPI,
     Kxt_ff = Kxt_ff[d, d]
     d = entity_list.nonshared.global_dofs
     Kns_ff = Kns[d, d]
-    return CoNCPartitionData(i, Kn_ff, lu(Ka_ff), rhs, entity_list)
+    Kns = nothing
+    return CoNCPartitionData(rank, entity_list, Kns_ff, lu(Kxt_ff), rhs)
 end
 
 function partition_size(cpd::CoNCPartitionData)
-    return length(cpd.alldof)
+    return length(cpd.entity_list.extended.global_dofs)
 end
 
 function rhs(partition_list)

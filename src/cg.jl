@@ -12,7 +12,7 @@ function vec_copyto!(y, x)
     @. y = x 
 end
 
-# Computes y = x + beta y.
+# Computes y = x + a y.
 function vec_aypx!(y, a, x)
     @. y = x + a * y
 end
