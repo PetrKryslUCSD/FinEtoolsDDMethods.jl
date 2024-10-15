@@ -8,6 +8,24 @@ using ..FinEtoolsDDMethods: set_up_timers, update_timer!
 const KSP_NORM_UNPRECONDITIONED = 0
 const KSP_NORM_NATURAL = 1
 
+function vec_copyto!(y, x)
+    @. y = x 
+end
+
+# Computes y = x + beta y.
+function vec_aypx!(y, a, x)
+    @. y = x + a * y
+end
+
+# Computes y += a x
+function vec_ypax!(y, a, x)
+    @. y = a * x + y
+end
+
+function vec_dot(x, y)
+    return dot(x, y)
+end
+
 """
     pcg_seq(Aop!, b, x0; 
         M! =(q, p) -> (q .= p), 
@@ -54,15 +72,15 @@ function pcg_seq(Aop!, b, x0;
     )
     itmax = (itmax > 0 ? itmax : length(b))
     (normtype == KSP_NORM_UNPRECONDITIONED || normtype == KSP_NORM_NATURAL) || throw(ArgumentError("Invalid normtype"))
-    x = deepcopy(x0); p = similar(x); r = similar(x); z = similar(x); 
+    x = deepcopy(x0); p = deepcopy(x); r = deepcopy(x); z = deepcopy(x); 
     Ap = z # Alias for legibility
     Aop!(Ap, x) 
-    @. r = b - Ap
+    vec_copyto!(r, b); vec_ypax!(r, -1.0, Ap) # @. r = b - Ap
     M!(z, r)
-    @. p = z
-    rhoold = dot(z, r)
+    vec_copyto!(p, z); # @. p = z
+    rhoold = vec_dot(z, r)
     if normtype == KSP_NORM_UNPRECONDITIONED
-        resnorm = sqrt(dot(r, r))
+        resnorm = sqrt(vec_dot(r, r))
         tol = atol + rtol * resnorm
     else
         resnorm = sqrt(rhoold)
@@ -73,15 +91,15 @@ function pcg_seq(Aop!, b, x0;
     iter = 1
     while iter < itmax
         Aop!(Ap, p)
-        alpha = rhoold / dot(p, Ap)
-        @. x += alpha * p
-        @. r -= alpha * Ap
+        alpha = rhoold / vec_dot(p, Ap)
+        vec_ypax!(x, +alpha, p) # @. x += alpha * p
+        vec_ypax!(r, -alpha, Ap) # @. r -= alpha * Ap
         M!(z, r)
-        rho = dot(z, r)
+        rho = vec_dot(z, r)
         beta = rho / rhoold;   rhoold = rho
-        @. p = z + beta * p
+        vec_aypx!(p, +beta, z) # @. p = z + beta * p
         if normtype == KSP_NORM_UNPRECONDITIONED
-            resnorm = sqrt(dot(r, r))
+            resnorm = sqrt(vec_dot(r, r))
         else
             resnorm = sqrt(rho) 
         end
