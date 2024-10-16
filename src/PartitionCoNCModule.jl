@@ -1,8 +1,15 @@
 """
     PartitionCoNCModule  
 
-Module for operations on partitions of finite element models for solves based
-on the Coherent Nodal Clusters.
+Module for operations on partitions of finite element models for solves based on
+the Coherent Nodal Clusters.
+
+The grid is partitioned into `Np` non-overlapping node partitions using the
+Metis library. This means each partition owns it nodes, nodes are not shared
+among partitions. 
+
+The partitions are extended by the given overlap using the connections among the
+nodes. 
 """
 module PartitionCoNCModule
 
@@ -34,7 +41,7 @@ function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
     # mark the members of the extended partition: start with the non-shared nodes
     ismember = fill(false, count(fens))
     ismember[nsnl] .= true 
-    for ov in 1:No
+    for _ in 1:No
         addednl = Int[]
         sizehint!(addednl, length(cnl))
         for cn in cnl
@@ -164,18 +171,57 @@ function _construct_communication_lists_extended(node_lists, n2e, fes, node_to_p
     return (receive_nodes = receive_nodes, send_nodes = send_nodes)
 end
 
-"""
-    _partition_entity_lists(fens, fes, Np, overlap, dofnums, fr)
+struct EntityListNonShared{IT<:Integer}
+    # All nodes that constitute the partition.
+    nodes::Vector{IT}
+    # All elements that constitute the partition.
+    elements::Vector{IT}
+    # Nodes for which dofs are received from other partitions.
+    receive_nodes::Vector{Vector{IT}}
+    # Nodes for which dofs are sent to other partitions.
+    send_nodes::Vector{Vector{IT}}
+    # All global dofs for the partition.
+    global_dofs::Vector{IT}
+    # Number of own dofs.
+    num_own_dofs::IT
+    # Global dofs received from other partitions.
+    global_receive_dofs::Vector{Vector{IT}}
+    # Global dofs sent to other partitions.
+    global_send_dofs::Vector{Vector{IT}}
+    # Local numbers of dofs received from other partitions.
+    local_receive_dofs::Vector{Vector{IT}}
+    # Local numbers of dofs sent to other partitions.
+    local_send_dofs::Vector{Vector{IT}}
+    # Mapping from global to local dofs.
+    global_to_local::Vector{IT}
+end
 
-Make entity lists for all grid subdomains.
+struct EntityListExtended{IT<:Integer}
+    # All nodes that constitute the partition.
+    nodes::Vector{IT}
+    # All elements that constitute the partition.
+    elements::Vector{IT}
+    # Nodes for which dofs are received from other partitions.
+    receive_nodes::Vector{Vector{IT}}
+    # Nodes for which dofs are sent to other partitions.
+    send_nodes::Vector{Vector{IT}}
+    # All global dofs for the partition.
+    global_dofs::Vector{IT}
+    # Number of own dofs.
+    num_own_dofs::IT
+    # Global dofs received from other partitions.
+    global_receive_dofs::Vector{Vector{IT}}
+    # Global dofs sent to other partitions.
+    global_send_dofs::Vector{Vector{IT}}
+    # Local numbers of dofs received from other partitions.
+    local_receive_dofs::Vector{Vector{IT}}
+    # Local numbers of dofs sent to other partitions.
+    local_send_dofs::Vector{Vector{IT}}
+    # Mapping from global to local dofs.
+    global_to_local::Vector{IT}
+end
 
-The grid is partitioned into `Np` non-overlapping node partitions using the
-Metis library. This means each partition owns it nodes, nodes are not shared
-among partitions. 
-
-The element partitions are extended by the given overlap. 
-"""
-function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
+function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
     femm = FEMMBase(IntegDomain(fes, PointRule()))
     C = connectionmatrix(femm, count(fens))
     g = Metis.graph(C; check_hermitian=true)
@@ -186,7 +232,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
     nonshared_comm = _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_partition)
     extended_comm = _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
     element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
-    entity_lists = []
+    list_of_entity_lists = []
     for i in 1:Np
         # nonshared
         nodes = node_lists[i].nonshared_nodes
@@ -194,31 +240,32 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
         receive_nodes = nonshared_comm.receive_nodes[i]
         send_nodes = nonshared_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
-        own_global_dofs = deepcopy(global_dofs)
-        receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
+        num_own_dofs = length(global_dofs)
+        global_receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(nonshared_comm.receive_nodes[i])]
-        # receive_starts = [length(global_dofs)+1]
-        for j in eachindex(receive_dofs)
-            global_dofs = vcat(global_dofs, receive_dofs[j])
-            # push!(receive_starts, length(global_dofs)+1)
+        for j in eachindex(global_receive_dofs)
+            global_dofs = vcat(global_dofs, global_receive_dofs[j])
         end
         global_to_local = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
             global_to_local[global_dofs[j]] = j
         end
-        send_dofs = [_dof_list(nonshared_comm.send_nodes[i][j], dofnums, fr)
+        global_send_dofs = [_dof_list(nonshared_comm.send_nodes[i][j], dofnums, fr)
                      for j in eachindex(nonshared_comm.send_nodes[i])]
-        nonshared = (
-            nodes = nodes,
-            elements = elements,
-            receive_nodes = receive_nodes,
-            send_nodes = send_nodes,
-            global_dofs = global_dofs,
-            own_global_dofs = own_global_dofs,
-            receive_dofs = receive_dofs,
-            send_dofs = send_dofs,
-            # receive_starts = receive_starts,
-            global_to_local = global_to_local,
+        local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
+        local_send_dofs = [global_to_local[global_send_dofs[j]] for j in eachindex(global_send_dofs)]
+        nonshared = EntityListNonShared(
+            nodes,
+            elements,
+            receive_nodes,
+            send_nodes,
+            global_dofs,
+            num_own_dofs,
+            global_receive_dofs,
+            global_send_dofs,
+            local_receive_dofs,
+            local_send_dofs,
+            global_to_local,
         )
         # extended
         nodes = node_lists[i].extended_nodes
@@ -226,33 +273,33 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
         receive_nodes = extended_comm.receive_nodes[i]
         send_nodes = extended_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
-        receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
+        num_own_dofs = length(global_dofs)
+        global_receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(extended_comm.receive_nodes[i])]
-        # receive_starts = [length(global_dofs)+1]
-        # for j in eachindex(receive_dofs)
-        #     global_dofs = vcat(global_dofs, receive_dofs[j])
-        #     push!(receive_starts, length(global_dofs)+1)
-        # end
         global_to_local = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
             global_to_local[global_dofs[j]] = j
         end
-        send_dofs = [_dof_list(extended_comm.send_nodes[i][j], dofnums, fr)
-                     for j in eachindex(extended_comm.send_nodes[i])]
-        extended = (
-            nodes = nodes,
-            elements = elements,
-            receive_nodes = receive_nodes,
-            send_nodes = send_nodes,
-            global_dofs = global_dofs,
-            receive_dofs = receive_dofs,
-            send_dofs = send_dofs,
-            # receive_starts = receive_starts,
-            global_to_local = global_to_local,
+        global_send_dofs = [_dof_list(extended_comm.send_nodes[i][j], dofnums, fr)
+                            for j in eachindex(extended_comm.send_nodes[i])]
+        local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
+        local_send_dofs = [global_to_local[global_send_dofs[j]] for j in eachindex(global_send_dofs)]
+        extended = EntityListExtended(
+            nodes,
+            elements,
+            receive_nodes,
+            send_nodes,
+            global_dofs,
+            num_own_dofs,
+            global_receive_dofs,
+            global_send_dofs,
+            local_receive_dofs,
+            local_send_dofs,
+            global_to_local,
         )
-        push!(entity_lists, (nonshared=nonshared, extended=extended))
+        push!(list_of_entity_lists, (nonshared=nonshared, extended=extended))
     end
-    return entity_lists
+    return list_of_entity_lists
 end
 
 function _dof_list(node_list, dofnums, fr)
@@ -270,15 +317,15 @@ end
 
 struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL} 
     u::NF
-    entity_lists::EL
+    list_of_entity_lists::EL
 end
 
 function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize = false) where {T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
-    entity_lists = _partition_entity_lists(fens, fes, Np, No, u.dofnums, fr) # expensive
+    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr) # expensive
     if visualize
-        for p in eachindex(entity_lists)
-            el = entity_lists[p]
+        for p in eachindex(list_of_entity_lists)
+            el = list_of_entity_lists[p]
             vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.nonshared.elements))
             sfes = FESetP1(reshape(el.nonshared.nodes, length(el.nonshared.nodes), 1))
             vtkexportmesh("partition-$(p)-non-shared-nodes.vtk", fens, sfes)
@@ -315,7 +362,7 @@ function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}; visualize
             end
         end
     end
-    return CoNCPartitioningInfo(u, entity_lists)
+    return CoNCPartitioningInfo(u, list_of_entity_lists)
 end
 
 function mean_partition_size(cpi::CoNCPartitioningInfo)
@@ -323,14 +370,14 @@ function mean_partition_size(cpi::CoNCPartitioningInfo)
 end
 
 function npartitions(cpi::CoNCPartitioningInfo)
-    return length(cpi.entity_lists)
+    return length(cpi.list_of_entity_lists)
 end
 
 mutable struct CoNCPartitionData{EL, T, IT, FACTOR}
     rank::IT
     entity_list::EL
-    nonshared_K::SparseMatrixCSC{T, IT}
-    extended_K_factor::FACTOR
+    Kns_ff::SparseMatrixCSC{T, IT}
+    Kxt_ff_factor::FACTOR
     rhs::Vector{T}
 end
 
@@ -338,7 +385,7 @@ function CoNCPartitionData(cpi::CPI, rank) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
         rank,
-        cpi.entity_lists[rank],
+        cpi.list_of_entity_lists[rank],
         spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
@@ -351,7 +398,7 @@ function CoNCPartitionData(cpi::CPI,
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
-    entity_list = cpi.entity_lists[rank]
+    entity_list = cpi.list_of_entity_lists[rank]
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non shared elements

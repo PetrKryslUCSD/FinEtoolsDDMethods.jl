@@ -10,7 +10,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, vec_copyto!, vec_dot
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -155,45 +155,75 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     #@info "Mean fine partition size: $(meanps)"
     #@info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
-    x0 = PartitionedVector(Float64, partition_list)
-    # Test 1
-    vec_copyto!(x0, 0.0)
-    q = rand(Float64, size(F_f))
-    vec_copyto!(q, x0)
-    @test norm(q) == 0
-    # Test 2
-    q = rand(Float64, size(F_f))
-    vec_copyto!(x0, q)
-    q1 = rand(Float64, size(F_f))
-    vec_copyto!(q1, x0)
-    @test norm(q - q1) == 0
-    b = PartitionedVector(Float64, partition_list)
-    vec_copyto!(b, F_f)
-    p = rand(Float64, size(F_f))
-    q = rand(Float64, size(F_f))
-    vec_copyto!(x0, p)
-    q .= 0.0
-    vec_copyto!(q, x0)
-    @test norm(p - q) < 1e-10 * norm(p)
-    # Test 3
-    q = rand(Float64, size(F_f))
-    p = rand(Float64, size(F_f))
-    q .= 0.0; p .= 1
-    vec_copyto!(x0, p)
-    p1 = rand(Float64, size(F_f))
-    vec_copyto!(p1, x0)
-    @test norm(p - p1) < 1e-10 * norm(p)
-    # Test aop!(q, p)
-    q = rand(Float64, size(F_f))
-    p = rand(Float64, size(F_f))
-    q .= 0.0; p .= 1
-    x0 = PartitionedVector(Float64, partition_list)
-    vec_copyto!(x0, p)
-    b = PartitionedVector(Float64, partition_list)
-    aop!(b, x0)
-    vec_copyto!(q, b)
-    q1 = K_ff * p
-    @test norm(q - q1) / norm(q) < 1e-10
+    let
+        # Test 1
+        x0 = PartitionedVector(Float64, partition_list)
+        vec_copyto!(x0, 0.0)
+        q = rand(Float64, size(F_f))
+        vec_copyto!(q, x0)
+        @test norm(q) == 0
+    end
+
+    let
+        # Test 2
+        q = rand(Float64, size(F_f))
+        x0 = PartitionedVector(Float64, partition_list)
+        vec_copyto!(x0, q)
+        q1 = rand(Float64, size(F_f))
+        vec_copyto!(q1, x0)
+        @test norm(q - q1) == 0
+        b = PartitionedVector(Float64, partition_list)
+        vec_copyto!(b, F_f)
+        p = rand(Float64, size(F_f))
+        q = rand(Float64, size(F_f))
+        vec_copyto!(x0, p)
+        q .= 0.0
+        vec_copyto!(q, x0)
+        @test norm(p - q) < 1e-10 * norm(p)
+    end
+
+    let
+        # Test 3
+        q = rand(Float64, size(F_f))
+        p = rand(Float64, size(F_f))
+        q .= 0.0
+        p .= 1
+        x0 = PartitionedVector(Float64, partition_list)
+        vec_copyto!(x0, p)
+        p1 = rand(Float64, size(F_f))
+        vec_copyto!(p1, x0)
+        @test norm(p - p1) < 1e-10 * norm(p)
+    end
+
+    let
+        # Test 4
+        q = 5.0 .* rand(Float64, size(F_f))
+        p = -3.0 .* rand(Float64, size(F_f))
+        r = dot(q, p)
+        x0 = PartitionedVector(Float64, partition_list)
+        b = PartitionedVector(Float64, partition_list)
+        vec_copyto!(x0, p)
+        vec_copyto!(b, q)
+        r1 = vec_dot(b, x0)
+        @test norm(r - r1) < 1e-10
+        r1 = vec_dot(x0, b)
+        @test norm(r - r1) < 1e-10
+        end
+    
+    let
+        # Test aop!(q, p)
+        q = rand(Float64, size(F_f))
+        p = rand(Float64, size(F_f))
+        q .= 0.0
+        p .= 1
+        x0 = PartitionedVector(Float64, partition_list)
+        vec_copyto!(x0, p)
+        b = PartitionedVector(Float64, partition_list)
+        aop!(b, x0)
+        vec_copyto!(q, b)
+        q1 = K_ff * p
+        @test norm(q - q1) / norm(q) < 1e-10
+    end
 
     true
 end

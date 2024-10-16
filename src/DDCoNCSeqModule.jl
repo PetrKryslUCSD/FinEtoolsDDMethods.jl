@@ -47,47 +47,71 @@ struct PartitionedVector{PD, T}
 end
 
 function PartitionedVector(::Type{T}, partition_list::Vector{PD}) where {T, PD<:CoNCPartitionData}
-    nonshared = [fill(zero(T), length(partition.entity_list.nonshared.global_dofs)) for partition in partition_list]
-    extended = [fill(zero(T), length(partition.entity_list.extended.global_dofs)) for partition in partition_list]
-    return PartitionedVector(partition_list, nonshared, extended)
+    buff_ns = [fill(zero(T), length(partition.entity_list.nonshared.global_dofs)) for partition in partition_list]
+    buff_xt = [fill(zero(T), length(partition.entity_list.extended.global_dofs)) for partition in partition_list]
+    return PartitionedVector(partition_list, buff_ns, buff_xt)
 end
 
+"""
+    vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
+
+Copy a single value into the partitioned vector.
+"""
 function vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        od = a.partition_list[i].entity_list.nonshared.own_global_dofs
-        lod = a.partition_list[i].entity_list.nonshared.global_to_local[od]
-        a.buff_ns[i][lod] .= v   
+        a.buff_ns[i] .= v   
     end
     a
 end
 
+"""
+    vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
+
+Copy a global vector into a partitioned vector.
+"""
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        od = a.partition_list[i].entity_list.nonshared.own_global_dofs
-        lod = a.partition_list[i].entity_list.nonshared.global_to_local[od]
-        a.buff_ns[i][lod] .= v[a.partition_list[i].entity_list.nonshared.own_global_dofs]
+        a.buff_ns[i] .= v[a.partition_list[i].entity_list.nonshared.global_dofs]
     end
     a
 end
 
+"""
+    vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
+
+Copy a partitioned vector into a global vector.
+"""
 function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        od = a.partition_list[i].entity_list.nonshared.own_global_dofs
-        lod = a.partition_list[i].entity_list.nonshared.global_to_local[od]
-        v[od] .= a.buff_ns[i][lod]
+        el = a.partition_list[i].entity_list
+        ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
+        lod = el.nonshared.global_to_local[ownd]
+        v[ownd] .= a.buff_ns[i][lod]
     end
     a
 end
 
-function deepcopy(a::PV) where {PV<:PartitionedVector}
-    return PartitionedVector(a.partition_list, deepcopy(a.buff_ns), deepcopy(a.buff_xt))
-end
+"""
+    vec_copyto!(y::PV, x::PV) where {PV<:PartitionedVector}
 
+Copy one partitioned vector to another.
+
+The contents of `x` is copied into `y`.
+"""
 function vec_copyto!(y::PV, x::PV) where {PV<:PartitionedVector}
     for i in eachindex(y.partition_list)
         @. y.buff_ns[i] = x.buff_ns[i]
     end
     y
+end
+
+"""
+    deepcopy(a::PV) where {PV<:PartitionedVector}
+
+Create a deep copy of a partitioned vector.
+"""
+function deepcopy(a::PV) where {PV<:PartitionedVector}
+    return PartitionedVector(a.partition_list, deepcopy(a.buff_ns), deepcopy(a.buff_xt))
 end
 
 # Computes y = x + a y.
@@ -109,7 +133,8 @@ end
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     result = zero(eltype(x.buff_ns[1]))
     for i in eachindex(y.partition_list)
-        result += dot(y.buff_ns[i], x.buff_ns[i])
+        own = 1:y.partition_list[i].entity_list.nonshared.num_own_dofs
+        result += dot(y.buff_ns[i][own], x.buff_ns[i][own])
     end
     return result
 end
@@ -117,12 +142,12 @@ end
 function gather!(p::PV) where {PV<:PartitionedVector}
     for i in eachindex(p.partition_list)
         pin = p.partition_list[i].entity_list.nonshared
-        for j in eachindex(pin.receive_dofs)
-            if !isempty(pin.receive_dofs[j])
+        for j in eachindex(pin.local_receive_dofs)
+            if !isempty(pin.local_receive_dofs[j])
                 @assert i != j
                 pjn = p.partition_list[j].entity_list.nonshared
-                ldi = pin.global_to_local[pin.receive_dofs[j]]
-                ldj = pjn.global_to_local[pjn.send_dofs[i]]
+                ldi = pin.local_receive_dofs[j]
+                ldj = pjn.local_send_dofs[i]
                 p.buff_ns[i][ldi] .= p.buff_ns[j][ldj]
             end
         end
@@ -132,12 +157,12 @@ end
 function scatter!(q::PV) where {PV<:PartitionedVector}
     for i in eachindex(q.partition_list)
         qin = q.partition_list[i].entity_list.nonshared
-        for j in eachindex(qin.send_dofs)
-            if !isempty(qin.send_dofs[j])
+        for j in eachindex(qin.local_send_dofs)
+            if !isempty(qin.local_send_dofs[j])
                 @assert i != j
                 qjn = q.partition_list[j].entity_list.nonshared
-                ldi = qin.global_to_local[qin.send_dofs[j]]
-                ldj = qjn.global_to_local[qjn.receive_dofs[i]]
+                ldi = qin.local_send_dofs[j]
+                ldj = qjn.local_receive_dofs[i]
                 q.buff_ns[i][ldi] .+= q.buff_ns[j][ldj]
             end
         end
@@ -147,7 +172,7 @@ end
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     gather!(p)
     for i in eachindex(q.partition_list)
-        q.buff_ns[i] .= p.partition_list[i].nonshared_K * p.buff_ns[i]
+        q.buff_ns[i] .= p.partition_list[i].Kns_ff * p.buff_ns[i]
     end
     scatter!(q)
     q    

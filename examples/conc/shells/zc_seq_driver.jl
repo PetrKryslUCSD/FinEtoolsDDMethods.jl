@@ -368,7 +368,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     K_ff_2 = spzeros(size(K_ff, 1), size(K_ff, 1))
     for partition in partition_list
         d = partition.entity_list.nonshared.global_dofs
-        K_ff_2[d, d] += partition.nonshared_K
+        K_ff_2[d, d] += partition.Kns_ff
     end
     # @show norm(K_ff_2)
     # for i in axes(K_ff, 1)
@@ -385,7 +385,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     for partition in partition_list
         d = partition.entity_list.nonshared.global_dofs
         P = Phi[d, :]
-        Kr_ff += (P' * partition.nonshared_K * P)
+        Kr_ff += (P' * partition.Kns_ff * P)
     end
     Krfactor = lu(Kr_ff)
     @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
