@@ -40,7 +40,7 @@ function make_partitions(cpi, fes, make_matrix, make_interior_load)
     return partition_list
 end
 
-struct PartitionedVector{PD, T}
+struct PartitionedVector{PD<:CoNCPartitionData, T<:Number}
     partition_list::Vector{PD}
     buff_ns::Vector{Vector{T}}
     buff_xt::Vector{Vector{T}}
@@ -139,7 +139,7 @@ function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     return result
 end
 
-function gather!(p::PV) where {PV<:PartitionedVector}
+function lhs_update!(p::PV) where {PV<:PartitionedVector}
     for i in eachindex(p.partition_list)
         pin = p.partition_list[i].entity_list.nonshared
         for j in eachindex(pin.local_receive_dofs)
@@ -154,7 +154,7 @@ function gather!(p::PV) where {PV<:PartitionedVector}
     end
 end
 
-function scatter!(q::PV) where {PV<:PartitionedVector}
+function rhs_update!(q::PV) where {PV<:PartitionedVector}
     for i in eachindex(q.partition_list)
         qin = q.partition_list[i].entity_list.nonshared
         for j in eachindex(qin.local_send_dofs)
@@ -170,12 +170,29 @@ function scatter!(q::PV) where {PV<:PartitionedVector}
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
-    gather!(p)
+    lhs_update!(p)
     for i in eachindex(q.partition_list)
         q.buff_ns[i] .= p.partition_list[i].Kns_ff * p.buff_ns[i]
     end
-    scatter!(q)
+    rhs_update!(q)
     q    
+end
+
+struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
+    partition_list::Vector{PD}
+    buff_Phis::Vector{SparseMatrixCSC{T, IT}}
+    Krfactor::FACTOR
+end
+
+function TwoLevelPreConditioner(partition_list, Phi)
+    n = size(Phi, 2)
+    buff_Phis = [Phi[partition_list[i].entity_list.nonshared.global_dofs, :] for i in eachindex(partition_list)]
+    Kr_ff = spzeros(n, n)
+    for i in eachindex(partition_list)
+        Kr_ff += (buff_Phis[i]' * partition_list[i].Kns_ff * buff_Phis[i])
+    end
+    Krfactor = lu(Kr_ff)
+    return TwoLevelPreConditioner(partition_list, buff_Phis, Krfactor)
 end
 
 function _precondition_global_solve!(q, Krfactor, Phi, p) 
