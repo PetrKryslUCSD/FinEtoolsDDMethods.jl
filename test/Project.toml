@@ -1,0 +1,10 @@
+[deps]
+CoNCMOR = "3a989f29-cff0-4f1c-87be-5dcdd41bd240"
+DataDrop = "aa547a04-dd37-49ab-8e73-656744f8a8fc"
+FinEtools = "91bb5406-6c9a-523d-811d-0644c4229550"
+FinEtoolsDDMethods = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
+FinEtoolsDeforLinear = "e9187c00-8bdd-11e9-1e70-7ba8303116a2"
+FinEtoolsFlexStructures = "723391e6-6814-4d1d-921c-018f691214d8"
+Metis = "2679e427-3c69-5b7f-982b-ece356f1e94b"
+ShellStructureTopo = "77fad3b7-27a3-4ff4-b61b-6ce40034767b"
+SymRCM = "286e6d88-80af-4590-acc9-0001b223b9bd"
