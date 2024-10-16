@@ -8,10 +8,6 @@ using ..FinEtoolsDDMethods: set_up_timers, update_timer!
 const KSP_NORM_UNPRECONDITIONED = 0
 const KSP_NORM_NATURAL = 1
 
-function vec_set!(y, a)
-    @. y = a
-end
-
 function vec_copyto!(y, x)
     @. y = x 
 end

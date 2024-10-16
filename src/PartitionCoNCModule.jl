@@ -85,12 +85,12 @@ function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
                     numpartitions[nodebuf[i]] += 1
                 end
                 ix = sortperm!(ix, numpartitions)
-                if numpartitions[ix[end]] > numpartitions[ix[end-1]]
+                if length(ix) > 1  &&  numpartitions[ix[end]] > numpartitions[ix[end-1]]
                     element_to_partition[e] = ix[end] # assign to the most connected partition
                 else # if there is a tie, assign to the partition with the smallest number
                     # numpartitions =  [9, 1, 8, 10, 10, 3, 0, 10]
                     # ix = sortperm!(ix, numpartitions)
-                    k = 0
+                    k = 1
                     for j in length(ix):-1:1
                         # @show j, numpartitions[ix[j]], numpartitions[ix[end]]
                         if numpartitions[ix[j]] < numpartitions[ix[end]]
@@ -194,6 +194,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
         receive_nodes = nonshared_comm.receive_nodes[i]
         send_nodes = nonshared_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
+        own_global_dofs = deepcopy(global_dofs)
         receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(nonshared_comm.receive_nodes[i])]
         # receive_starts = [length(global_dofs)+1]
@@ -213,6 +214,7 @@ function _partition_entity_lists(fens, fes, Np, No, dofnums, fr)
             receive_nodes = receive_nodes,
             send_nodes = send_nodes,
             global_dofs = global_dofs,
+            own_global_dofs = own_global_dofs,
             receive_dofs = receive_dofs,
             send_dofs = send_dofs,
             # receive_starts = receive_starts,

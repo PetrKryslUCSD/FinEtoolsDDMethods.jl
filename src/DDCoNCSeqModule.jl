@@ -18,7 +18,7 @@ using Metis
 using LinearOperators
 using SparseArrays
 using LinearAlgebra
-import Base: size, eltype
+import Base: size, eltype, deepcopy
 import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
@@ -52,24 +52,29 @@ function PartitionedVector(::Type{T}, partition_list::Vector{PD}) where {T, PD<:
     return PartitionedVector(partition_list, nonshared, extended)
 end
 
-function set!(a::PV, v::T) where {PV<:PartitionedVector, T}
+function vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        a.buff_ns[i] .= v   
+        od = a.partition_list[i].entity_list.nonshared.own_global_dofs
+        lod = a.partition_list[i].entity_list.nonshared.global_to_local[od]
+        a.buff_ns[i][lod] .= v   
     end
     a
 end
 
-function set!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
+function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        a.buff_ns[i] .= v[a.partition_list[i].entity_list.nonshared.global_dofs]
+        od = a.partition_list[i].entity_list.nonshared.own_global_dofs
+        lod = a.partition_list[i].entity_list.nonshared.global_to_local[od]
+        a.buff_ns[i][lod] .= v[a.partition_list[i].entity_list.nonshared.own_global_dofs]
     end
     a
 end
 
-
-function set!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
+function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        v[a.partition_list[i].entity_list.nonshared.global_dofs] .= a.buff_ns[i]
+        od = a.partition_list[i].entity_list.nonshared.own_global_dofs
+        lod = a.partition_list[i].entity_list.nonshared.global_to_local[od]
+        v[od] .= a.buff_ns[i][lod]
     end
     a
 end
@@ -109,23 +114,42 @@ function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     return result
 end
 
-function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
-    for i in eachindex(q.partition_list)
-        qvi = q.buff_ns[i]
-        ppi = p.partition_list[i]
-        piel = ppi.entity_list
-        pvi = p.buff_ns[i]
-        for j in eachindex(piel.nonshared.receive_dofs)
-            if !isempty(piel.nonshared.receive_dofs[j])
-                ppj = p.partition_list[j]
-                ldi = piel.nonshared.global_to_local[piel.nonshared.receive_dofs[j]]
-                ldj = ppj.entity_list.nonshared.global_to_local[ppj.entity_list.nonshared.send_dofs[i]]
-                pvj = p.buff_ns[j]
-                pvi[ldi] .+= pvj[ldj]
+function gather!(p::PV) where {PV<:PartitionedVector}
+    for i in eachindex(p.partition_list)
+        pin = p.partition_list[i].entity_list.nonshared
+        for j in eachindex(pin.receive_dofs)
+            if !isempty(pin.receive_dofs[j])
+                @assert i != j
+                pjn = p.partition_list[j].entity_list.nonshared
+                ldi = pin.global_to_local[pin.receive_dofs[j]]
+                ldj = pjn.global_to_local[pjn.send_dofs[i]]
+                p.buff_ns[i][ldi] .= p.buff_ns[j][ldj]
             end
         end
-        qvi .+= ppi.nonshared_K * pvi
     end
+end
+
+function scatter!(q::PV) where {PV<:PartitionedVector}
+    for i in eachindex(q.partition_list)
+        qin = q.partition_list[i].entity_list.nonshared
+        for j in eachindex(qin.send_dofs)
+            if !isempty(qin.send_dofs[j])
+                @assert i != j
+                qjn = q.partition_list[j].entity_list.nonshared
+                ldi = qin.global_to_local[qin.send_dofs[j]]
+                ldj = qjn.global_to_local[qjn.receive_dofs[i]]
+                q.buff_ns[i][ldi] .+= q.buff_ns[j][ldj]
+            end
+        end
+    end
+end
+
+function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
+    gather!(p)
+    for i in eachindex(q.partition_list)
+        q.buff_ns[i] .= p.partition_list[i].nonshared_K * p.buff_ns[i]
+    end
+    scatter!(q)
     q    
 end
 

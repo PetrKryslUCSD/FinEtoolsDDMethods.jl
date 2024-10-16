@@ -29,7 +29,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, AOperator, a_mult!, preconditioner!
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, preconditioner!, set!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -365,15 +365,9 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
-    # @show cpi.entity_lists[1].nonshared_nodes
-    # @show fens.xyz[cpi.entity_lists[1].nonshared_nodes, :]
-    # @show dchi.dofnums
-    # @show intersect(partition_list[1].nsdof, partition_list[2].nsdof)
-@show partition_list[1].nsdof, partition_list[2].nsdof
-
     K_ff_2 = spzeros(size(K_ff, 1), size(K_ff, 1))
     for partition in partition_list
-        d = partition.nsdof
+        d = partition.entity_list.nonshared.global_dofs
         K_ff_2[d, d] += partition.nonshared_K
     end
     @show norm(K_ff_2)
@@ -389,22 +383,33 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        Kr_ff += (Phi' * partition.nonshared_K * Phi)
+        d = partition.entity_list.nonshared.global_dofs
+        P = Phi[d, :]
+        Kr_ff += (P' * partition.nonshared_K * P)
     end
     Krfactor = lu(Kr_ff)
     @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
     
     t0 = time()
-    aop = AOperator(partition_list, cpi) 
-    M! = preconditioner!(Krfactor, Phi, partition_list)
+    x0 = PartitionedVector(Float64, partition_list)
+    set!(x0, 0.0)
+    b = PartitionedVector(Float64, partition_list)
+    set!(b, F_f)
     p = rand(Float64, size(F_f))
-    q = zeros(size(F_f))
-    a_mult!(q, aop, p)
-    q1 = K_ff * p
-    @show norm(q - q1)
+    q = rand(Float64, size(F_f))
+    set!(x0, p)
+    q .= 0.0
+    set!(q, x0)
+    @show norm(p - q)
+    # aop = AOperator(partition_list, cpi) 
+    # M! = preconditioner!(Krfactor, Phi, partition_list)
+    # q = zeros(size(F_f))
+    # a_mult!(q, aop, p)
+    # q1 = K_ff * p
+    # @show norm(q - q1)
     (u_f, stats) = pcg_seq(
-        (q, p) -> a_mult!(q, aop, p), 
-        F_f, zeros(size(F_f));
+        (q, p) -> aop!(q, p), 
+        b, x0;
         (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
@@ -457,7 +462,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     true
 end
 
-function test(;filename = "", ref = 3, Nc = 2, n1 = 1, Np = 4, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
+function test(;filename = "", ref = 2, Nc = 2, n1 = 1, Np = 4, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
     _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
 end
 

@@ -29,7 +29,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, preconditioner!, set!
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, preconditioner!, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -370,14 +370,14 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         d = partition.entity_list.nonshared.global_dofs
         K_ff_2[d, d] += partition.nonshared_K
     end
-    @show norm(K_ff_2)
-    for i in axes(K_ff, 1)
-        for j in axes(K_ff, 1)
-            if abs(K_ff[i, j] - K_ff_2[i, j]) / abs(K_ff[i, j]) > 1e-6
-                @show i, j, K_ff[i, j], K_ff_2[i, j]
-            end
-        end
-    end
+    # @show norm(K_ff_2)
+    # for i in axes(K_ff, 1)
+    #     for j in axes(K_ff, 1)
+    #         if abs(K_ff[i, j] - K_ff_2[i, j]) / abs(K_ff[i, j]) > 1e-6
+    #             @show i, j, K_ff[i, j], K_ff_2[i, j]
+    #         end
+    #     end
+    # end
     @show norm(K_ff - K_ff_2) / norm(K_ff)
     
     t1 = time()
@@ -392,26 +392,54 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     t0 = time()
     x0 = PartitionedVector(Float64, partition_list)
-    set!(x0, 0.0)
+    # Test 1
+    vec_copyto!(x0, 0.0)
+    q = rand(Float64, size(F_f))
+    vec_copyto!(q, x0)
+    @show norm(q) == 0
+    # Test 2
+    q = rand(Float64, size(F_f))
+    vec_copyto!(x0, q)
+    q1 = rand(Float64, size(F_f))
+    vec_copyto!(q1, x0)
+    @show norm(q - q1) == 0
     b = PartitionedVector(Float64, partition_list)
-    set!(b, F_f)
+    vec_copyto!(b, F_f)
     p = rand(Float64, size(F_f))
     q = rand(Float64, size(F_f))
-    set!(x0, p)
+    vec_copyto!(x0, p)
     q .= 0.0
-    set!(q, x0)
+    vec_copyto!(q, x0)
     @show norm(p - q)
-    set!(x0, p)
+    # Test 3
+    q = rand(Float64, size(F_f))
+    p = rand(Float64, size(F_f))
+    q .= 0.0; p .= 1
+    vec_copyto!(x0, p)
+    p1 = rand(Float64, size(F_f))
+    vec_copyto!(p1, x0)
+    @show norm(p - p1)
+    # Test aop!(q, p)
+    q = rand(Float64, size(F_f))
+    p = rand(Float64, size(F_f))
+    q .= 0.0; p .= 1
+    x0 = PartitionedVector(Float64, partition_list)
+    vec_copyto!(x0, p)
+    b = PartitionedVector(Float64, partition_list)
     aop!(b, x0)
-    set!(q, b)
+    vec_copyto!(q, b)
     q1 = K_ff * p
     @show norm(q - q1), norm(q), norm(q1)
-    # aop = AOperator(partition_list, cpi) 
+    return
     # M! = preconditioner!(Krfactor, Phi, partition_list)
     # q = zeros(size(F_f))
     # a_mult!(q, aop, p)
     # q1 = K_ff * p
     # @show norm(q - q1)
+    x0 = PartitionedVector(Float64, partition_list)
+    vec_copyto!(x0, 0.0)
+    b = PartitionedVector(Float64, partition_list)
+    vec_copyto!(b, F_f)
     (u_f, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 
         b, x0;
@@ -483,7 +511,7 @@ function parse_commandline()
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 5
+        default = 1
         "--No"
         help = "Number of overlaps"
         arg_type = Int
@@ -495,11 +523,11 @@ function parse_commandline()
         "--ref"
         help = "Refinement factor"
         arg_type = Int
-        default = 5
+        default = 6
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
-        default = 20
+        default = 200
         "--relrestol"
         help = "Relative residual tolerance"
         arg_type = Float64
