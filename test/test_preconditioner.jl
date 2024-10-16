@@ -1,22 +1,4 @@
-"""
-MODEL DESCRIPTION
-
-Z-section cantilever under torsional loading.
-
-Linear elastic analysis, Young's modulus = 210 GPa, Poisson's ratio = 0.3.
-
-All displacements are fixed at X=0.
-
-Torque of 1.2 MN-m applied at X=10. The torque is applied by two 
-uniformly distributed shear loads of 0.6 MN at each flange surface.
-
-Objective of the analysis is to compute the axial stress at X = 2.5 from fixed end.
-
-NAFEMS REFERENCE SOLUTION
-
-Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
-"""
-module zc_seq_examples
+module test_preconditioner
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -36,13 +18,9 @@ using Metis
 using Test
 using LinearAlgebra
 using SparseArrays
-using PlotlyLight
-using Krylov
-using LinearOperators
 import Base: size, eltype
 import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
-using Targe2
 using DataDrop
 using Statistics
 using ShellStructureTopo: create_partitions
@@ -394,132 +372,53 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     M! = TwoLevelPreConditioner(partition_list, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
     
-    t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
-    vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, partition_list)
-    vec_copyto!(b, F_f)
-    (u_f, stats) = pcg_seq(
-        (q, p) -> aop!(q, p), 
-        b, x0;
-        (M!)=(q, p) -> M!(q, p),
-        peeksolution=peeksolution,
-        itmax=itmax, 
-        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
-        # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
-        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
-        )
-    t1 = time()
-    @info("Number of iterations:  $(stats.niter)")
-    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
-    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
-    data = Dict(
-        "number_nodes" => count(fens),
-        "number_elements" => count(fes),
-        "nfreedofs" => nfreedofs(dchi),
-        "Nc" => Nc,
-        "n1" => n1,
-        "Np" => Np,
-        "No" => No,
-        "meanps" => meanps,
-        "size_Kr_ff" => size(Krfactor),
-        "stats" => stats,
-        "iteration_time" => t1 - t0,
-    )
-    f = (filename == "" ?
-         "zc-" *
-         "-ref=$(ref)" *
-         "-Nc=$(Nc)" *
-         "-n1=$(n1)" *
-         "-Np=$(Np)" *
-         "-No=$(No)" :
-         filename)
-    @info "Storing data in $(f * ".json")"
-    DataDrop.store_json(f * ".json", data)
-    # scattersysvec!(dchi, u_f)
-    
-    if visualize
-        f = (filename == "" ?
-         "zc-" *
-         "-ref=$(ref)" *
-         "-Nc=$(Nc)" *
-         "-n1=$(n1)" *
-         "-Np=$(Np)" *
-         "-No=$(No)" :
-         filename) * "-cg-sol"
-        VTK.vtkexportmesh(f * ".vtk", fens, fes;
-            vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
-    end
+    p = 1000 * rand(Float64, size(F_f))
+    vec_copyto!(b, p)
+    r = PartitionedVector(Float64, partition_list)
+    q = rand(Float64, size(F_f))
+    M!(r, b)
+    vec_copyto!(q, r)
+    q1 = Phi * (Krfactor \ (Phi' * p))
+    @show norm(q)
+    @show norm(q1)
+    @test norm(q - q1) / norm(q) == 0
 
     true
 end
 
-using ArgParse
+filename = "test_partitioned_vector"
+ref = 11
+Nc = 5
+n1 = 4
+Np = 5
+No = 1
+itmax = 20
+relrestol = 1e-6
+peek = true
+visualize = false
 
-function parse_commandline()
-    s = ArgParseSettings()
-    @add_arg_table! s begin
-        "--filename"
-        help = "Use filename to name the output files"
-        arg_type = String
-        default = ""
-        "--Nc"
-        help = "Number of clusters"
-        arg_type = Int
-        default = 2
-        "--n1"
-        help = "Number 1D basis functions"
-        arg_type = Int
-        default = 1
-        "--No"
-        help = "Number of overlaps"
-        arg_type = Int
-        default = 1
-        "--Np"
-        help = "Number of partitions"
-        arg_type = Int
-        default = 2
-        "--ref"
-        help = "Refinement factor"
-        arg_type = Int
-        default = 6
-        "--itmax"
-        help = "Maximum number of iterations allowed"
-        arg_type = Int
-        default = 200
-        "--relrestol"
-        help = "Relative residual tolerance"
-        arg_type = Float64
-        default = 1.0e-6
-        "--peek"
-        help = "Peek at the iterations?"
-        arg_type = Bool
-        default = true
-        "--visualize"
-        help = "Write out visualization files?"
-        arg_type = Bool
-        default = false
+for ref in [13, 11, ]
+    for Np in [11, 1, 2, 16]
+        for No in [1, 2]
+            for n1 in [4, 6]
+                _execute_alt(
+                    filename,
+                    ref,
+                    Nc, 
+                    n1,
+                    Np, 
+                    No, 
+                    itmax, 
+                    relrestol,
+                    peek,
+                    visualize
+                    )
+            end
+        end
     end
-    return parse_args(s)
 end
-
-p = parse_commandline()
-
-_execute_alt(
-    p["filename"],
-    p["ref"],
-    p["Nc"], 
-    p["n1"],
-    p["Np"], 
-    p["No"], 
-    p["itmax"], 
-    p["relrestol"],
-    p["peek"],
-    p["visualize"]
-    )
-
 
 nothing
 end # module
-
 

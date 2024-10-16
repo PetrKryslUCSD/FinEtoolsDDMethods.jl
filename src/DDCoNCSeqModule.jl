@@ -139,7 +139,7 @@ function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     return result
 end
 
-function lhs_update!(p::PV) where {PV<:PartitionedVector}
+function rhs_update!(p::PV) where {PV<:PartitionedVector}
     for i in eachindex(p.partition_list)
         pin = p.partition_list[i].entity_list.nonshared
         for j in eachindex(pin.local_receive_dofs)
@@ -154,7 +154,7 @@ function lhs_update!(p::PV) where {PV<:PartitionedVector}
     end
 end
 
-function rhs_update!(q::PV) where {PV<:PartitionedVector}
+function lhs_update!(q::PV) where {PV<:PartitionedVector}
     for i in eachindex(q.partition_list)
         qin = q.partition_list[i].entity_list.nonshared
         for j in eachindex(qin.local_send_dofs)
@@ -170,11 +170,11 @@ function rhs_update!(q::PV) where {PV<:PartitionedVector}
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
-    lhs_update!(p)
+    rhs_update!(p)
     for i in eachindex(q.partition_list)
         q.buff_ns[i] .= p.partition_list[i].Kns_ff * p.buff_ns[i]
     end
-    rhs_update!(q)
+    lhs_update!(q)
     q    
 end
 
@@ -202,8 +202,12 @@ function TwoLevelPreConditioner(partition_list, Phi)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
-    @show length(pre.buffp)
-    vec_copyto!(pre.buffp, p)
+    # vec_copyto!(q, p) # this would be a identity preconditioner 
+    rhs_update!(p)
+    for i in eachindex(q.partition_list)
+        q.buff_ns[i] .= pre.buff_Phis[i] * (pre.Krfactor \ (pre.buff_Phis[i]' * p.buff_ns[i]))
+    end
+    lhs_update!(q)
     q
 end
 

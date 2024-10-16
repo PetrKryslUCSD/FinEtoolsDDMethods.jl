@@ -145,7 +145,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi; visualize = true) 
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     #@info "Create CoNCPartitioningInfo ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
