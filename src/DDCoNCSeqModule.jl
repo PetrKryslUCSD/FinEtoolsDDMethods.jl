@@ -182,7 +182,7 @@ struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
     partition_list::Vector{PD}
     n::IT
     buff_Phis::Vector{SparseMatrixCSC{T, IT}}
-    Krfactor::FACTOR
+    Kr_ff_factor::FACTOR
     buffq::Vector{T}
     buffp::Vector{T}
 end
@@ -195,24 +195,19 @@ function TwoLevelPreConditioner(partition_list, Phi)
     for i in eachindex(partition_list)
         Kr_ff += (buff_Phis[i]' * partition_list[i].Kns_ff * buff_Phis[i])
     end
-    Krfactor = lu(Kr_ff)
-    buffq = fill(zero(eltype(Krfactor)), n)
-    buffp = fill(zero(eltype(Krfactor)), n)
-    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Krfactor, buffq, buffp)
+    Kr_ff_factor = lu(Kr_ff)
+    buffq = fill(zero(eltype(Kr_ff_factor)), n)
+    buffp = fill(zero(eltype(Kr_ff_factor)), n)
+    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Kr_ff_factor, buffq, buffp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
     # vec_copyto!(q, p) # this would be a identity preconditioner 
     rhs_update!(p)
     for i in eachindex(q.partition_list)
-        q.buff_ns[i] .= pre.buff_Phis[i] * (pre.Krfactor \ (pre.buff_Phis[i]' * p.buff_ns[i]))
+        q.buff_ns[i] .= pre.buff_Phis[i] * (pre.Kr_ff_factor \ (pre.buff_Phis[i]' * p.buff_ns[i]))
     end
     lhs_update!(q)
-    q
-end
-
-function _precondition_global_solve!(q, Krfactor, Phi, p) 
-    q .+= Phi * (Krfactor \ (Phi' * p))
     q
 end
 
