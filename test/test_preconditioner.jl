@@ -300,9 +300,9 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     @info("Refinement factor: $(ref)")
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
-    @info("Number of nodes: $(count(fens))")
-    @info("Number of elements: $(count(fes))")
-    @info("Number of free dofs = $(nfreedofs(dchi))")
+    #@info("Number of nodes: $(count(fens))")
+    #@info("Number of elements: $(count(fes))")
+    #@info("Number of free dofs = $(nfreedofs(dchi))")
 
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
@@ -312,32 +312,32 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    @info "Create CoNCPartitioningInfo ($(round(time() - t1, digits=3)) [s])"
+    #@info "Create CoNCPartitioningInfo ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
-    @info "make_partitions ($(round(time() - t2, digits=3)) [s])"
+    #@info "make_partitions ($(round(time() - t2, digits=3)) [s])"
     partition_sizes = [partition_size(_p) for _p in partition_list]
     meanps = mean(partition_sizes)
-    @info "Mean fine partition size: $(meanps)"
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    #@info "Mean fine partition size: $(meanps)"
+    #@info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
     t1 = time()
-    @info("Number of clusters (requested): $(Nc)")
-    @info("Number of 1D basis functions: $(n1)")
+    #@info("Number of clusters (requested): $(Nc)")
+    #@info("Number of 1D basis functions: $(n1)")
     nt = n1*(n1+1)/2 
     (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
     Nepc = count(fes) ÷ Nc
     (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
-    @info("Number of elements per cluster: $(Nepc)")
+    #@info("Number of elements per cluster: $(Nepc)")
     
     cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
-    @info("Number of clusters (actual): $(Nc)")
+    #@info("Number of clusters (actual): $(Nc)")
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
     Phi = Phi[fr, :]
-    @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    #@info("Size of the reduced problem: $(size(Phi, 2))")
+    #@info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
@@ -400,7 +400,7 @@ visualize = false
 
 for ref in [13, 11, ]
     for Np in [11, 1, 2, 16]
-        for No in [1, 2]
+        for No in [3, 1, 2]
             for n1 in [4, 6]
                 _execute_alt(
                     filename,
