@@ -29,7 +29,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, preconditioner!, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -333,7 +333,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     end
 
     t1 = time()
-    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi; visualize = true) 
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     @info "Create CoNCPartitioningInfo ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
@@ -391,51 +391,8 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
     
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
-    # Test 1
-    vec_copyto!(x0, 0.0)
-    q = rand(Float64, size(F_f))
-    vec_copyto!(q, x0)
-    @show norm(q) == 0
-    # Test 2
-    q = rand(Float64, size(F_f))
-    vec_copyto!(x0, q)
-    q1 = rand(Float64, size(F_f))
-    vec_copyto!(q1, x0)
-    @show norm(q - q1) == 0
-    b = PartitionedVector(Float64, partition_list)
-    vec_copyto!(b, F_f)
-    p = rand(Float64, size(F_f))
-    q = rand(Float64, size(F_f))
-    vec_copyto!(x0, p)
-    q .= 0.0
-    vec_copyto!(q, x0)
-    @show norm(p - q)
-    # Test 3
-    q = rand(Float64, size(F_f))
-    p = rand(Float64, size(F_f))
-    q .= 0.0; p .= 1
-    vec_copyto!(x0, p)
-    p1 = rand(Float64, size(F_f))
-    vec_copyto!(p1, x0)
-    @show norm(p - p1)
-    # Test aop!(q, p)
-    q = rand(Float64, size(F_f))
-    p = rand(Float64, size(F_f))
-    q .= 0.0; p .= 1
-    x0 = PartitionedVector(Float64, partition_list)
-    vec_copyto!(x0, p)
-    b = PartitionedVector(Float64, partition_list)
-    aop!(b, x0)
-    vec_copyto!(q, b)
-    q1 = K_ff * p
-    @show norm(q - q1), norm(q), norm(q1)
-    return
-    # M! = preconditioner!(Krfactor, Phi, partition_list)
-    # q = zeros(size(F_f))
-    # a_mult!(q, aop, p)
-    # q1 = K_ff * p
-    # @show norm(q - q1)
+    M = TwoLevelPreConditioner(partition_list, Phi)
+    @show norm(Kr_ff - M.Kr_ff)
     x0 = PartitionedVector(Float64, partition_list)
     vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, partition_list)

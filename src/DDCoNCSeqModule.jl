@@ -180,19 +180,31 @@ end
 
 struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
     partition_list::Vector{PD}
+    n::IT
     buff_Phis::Vector{SparseMatrixCSC{T, IT}}
     Krfactor::FACTOR
+    buffq::Vector{T}
+    buffp::Vector{T}
 end
 
 function TwoLevelPreConditioner(partition_list, Phi)
-    n = size(Phi, 2)
+    n = size(Phi, 1)
+    nr = size(Phi, 2)
     buff_Phis = [Phi[partition_list[i].entity_list.nonshared.global_dofs, :] for i in eachindex(partition_list)]
-    Kr_ff = spzeros(n, n)
+    Kr_ff = spzeros(nr, nr)
     for i in eachindex(partition_list)
         Kr_ff += (buff_Phis[i]' * partition_list[i].Kns_ff * buff_Phis[i])
     end
     Krfactor = lu(Kr_ff)
-    return TwoLevelPreConditioner(partition_list, buff_Phis, Krfactor)
+    buffq = fill(zero(eltype(Krfactor)), n)
+    buffp = fill(zero(eltype(Krfactor)), n)
+    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Krfactor, buffq, buffp)
+end
+
+function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
+    @show length(pre.buffp)
+    vec_copyto!(pre.buffp, p)
+    q
 end
 
 function _precondition_global_solve!(q, Krfactor, Phi, p) 
