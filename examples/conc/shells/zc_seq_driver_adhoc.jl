@@ -389,23 +389,6 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
-
-    # t0 = time()
-    # x0 = PartitionedVector(Float64, partition_list)
-    # vec_copyto!(x0, 0.0)
-    # b = PartitionedVector(Float64, partition_list)
-    # vec_copyto!(b, F_f)
-    # (u_f, stats) = pcg_seq(
-    #     (q, p) -> aop!(q, p), 
-    #     b, x0;
-    #     # (M!)=(q, p) -> vec_copyto!(q, p),
-    #     (M!)=(q, p) -> M!(q, p),
-    #     # (M!)=(q, p) -> (q .= Phi * (Krfactor \ (Phi' * p))), 
-    #     peeksolution=peeksolution,
-    #     itmax=itmax, 
-    #     atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
-    #     )
-    # t1 = time()
     @info("Number of iterations:  $(stats.niter)")
     @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
@@ -418,7 +401,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         "Np" => Np,
         "No" => No,
         "meanps" => meanps,
-        "size_Kr_ff" => size(Kr_ff_factor),
+        "size_Kr_ff" => size(M!.Kr_ff_factor),
         "stats" => stats,
         "iteration_time" => t1 - t0,
     )
