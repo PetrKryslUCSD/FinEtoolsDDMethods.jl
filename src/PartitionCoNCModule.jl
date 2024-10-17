@@ -342,45 +342,6 @@ end
 function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}) where {T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
     list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr) # expensive
-    # if visualize
-    #     for p in eachindex(list_of_entity_lists)
-    #         el = list_of_entity_lists[p]
-    #         vtkexportmesh("partition-$(p)-non-shared-elements.vtk", fens, subset(fes, el.nonshared.elements))
-    #         sfes = FESetP1(reshape(el.nonshared.nodes, length(el.nonshared.nodes), 1))
-    #         vtkexportmesh("partition-$(p)-non-shared-nodes.vtk", fens, sfes)
-    #         vtkexportmesh("partition-$(p)-extended-elements.vtk", fens, subset(fes, el.extended.elements))
-    #         sfes = FESetP1(reshape(el.extended.nodes, length(el.extended.nodes), 1))
-    #         vtkexportmesh("partition-$(p)-extended-nodes.vtk", fens, sfes)
-    #         receive_nodes = el.nonshared.receive_nodes
-    #         for i in eachindex(receive_nodes)
-    #             if length(receive_nodes[i]) > 0
-    #                 sfes = FESetP1(reshape(receive_nodes[i], length(receive_nodes[i]), 1))
-    #                 vtkexportmesh("partition-$(p)-nonshared-receive-$(i).vtk", fens, sfes)
-    #             end
-    #         end
-    #         send_nodes = el.nonshared.send_nodes
-    #         for i in eachindex(send_nodes)
-    #             if length(send_nodes[i]) > 0
-    #                 sfes = FESetP1(reshape(send_nodes[i], length(send_nodes[i]), 1))
-    #                 vtkexportmesh("partition-$(p)-nonshared-send-$(i).vtk", fens, sfes)
-    #             end
-    #         end
-    #         receive_nodes = el.extended.receive_nodes
-    #         for i in eachindex(receive_nodes)
-    #             if length(receive_nodes[i]) > 0
-    #                 sfes = FESetP1(reshape(receive_nodes[i], length(receive_nodes[i]), 1))
-    #                 vtkexportmesh("partition-$(p)-extended-receive-$(i).vtk", fens, sfes)
-    #             end
-    #         end
-    #         send_nodes = el.extended.send_nodes
-    #         for i in eachindex(send_nodes)
-    #             if length(send_nodes[i]) > 0
-    #                 sfes = FESetP1(reshape(send_nodes[i], length(send_nodes[i]), 1))
-    #                 vtkexportmesh("partition-$(p)-extended-send-$(i).vtk", fens, sfes)
-    #             end
-    #         end
-    #     end
-    # end
     return CoNCPartitioningInfo(u, list_of_entity_lists)
 end
 
