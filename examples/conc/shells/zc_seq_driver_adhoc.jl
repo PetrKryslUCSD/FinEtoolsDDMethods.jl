@@ -16,7 +16,7 @@ NAFEMS REFERENCE SOLUTION
 
 Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 """
-module zc_seq_examples
+module zc_seq_examples_adhoc
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -369,43 +369,43 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     M! = TwoLevelPreConditioner(partition_list, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
     
-    # t0 = time()
-    # function pre(q, p)
-    #     q .= Phi * (M!.Kr_ff_factor \ (Phi' * p))
-    #     for partition in partition_list
-    #         d = partition.entity_list[EXTENDED].global_dofs
-    #         q[d] .+= partition.Kxt_ff_factor \ p[d]
-    #     end
-    #     q
-    # end
-    # b = deepcopy(F_f); x0 = zeros(size(F_f))
-    # (u_f, stats) = pcg_seq(
-    #     (q, p) -> (q .= K_ff * p), 
-    #     b, x0;
-    #     # (M!)=(q, p) -> vec_copyto!(q, p),
-    #     (M!)=(q, p) -> pre(q, p), #(q .= Phi * (Krfactor \ (Phi' * p))), 
-    #     peeksolution=peeksolution,
-    #     itmax=itmax, 
-    #     atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
-    #     )
-    # t1 = time()
-
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
-    vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list)
-    vec_copyto!(b, F_f)
+    function pre(q, p)
+        q .= Phi * (M!.Kr_ff_factor \ (Phi' * p))
+        for partition in partition_list
+            d = partition.entity_list[EXTENDED].global_dofs
+            q[d] .+= partition.Kxt_ff_factor \ p[d]
+        end
+        q
+    end
+    b = deepcopy(F_f); x0 = zeros(size(F_f))
     (u_f, stats) = pcg_seq(
-        (q, p) -> aop!(q, p), 
+        (q, p) -> (q .= K_ff * p), 
         b, x0;
         # (M!)=(q, p) -> vec_copyto!(q, p),
-        (M!)=(q, p) -> M!(q, p),
-        # (M!)=(q, p) -> (q .= Phi * (Krfactor \ (Phi' * p))), 
+        (M!)=(q, p) -> pre(q, p), #(q .= Phi * (Krfactor \ (Phi' * p))), 
         peeksolution=peeksolution,
         itmax=itmax, 
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
+
+    # t0 = time()
+    # x0 = PartitionedVector(Float64, partition_list)
+    # vec_copyto!(x0, 0.0)
+    # b = PartitionedVector(Float64, partition_list)
+    # vec_copyto!(b, F_f)
+    # (u_f, stats) = pcg_seq(
+    #     (q, p) -> aop!(q, p), 
+    #     b, x0;
+    #     # (M!)=(q, p) -> vec_copyto!(q, p),
+    #     (M!)=(q, p) -> M!(q, p),
+    #     # (M!)=(q, p) -> (q .= Phi * (Krfactor \ (Phi' * p))), 
+    #     peeksolution=peeksolution,
+    #     itmax=itmax, 
+    #     atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+    #     )
+    # t1 = time()
     @info("Number of iterations:  $(stats.niter)")
     @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
@@ -418,7 +418,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         "Np" => Np,
         "No" => No,
         "meanps" => meanps,
-        "size_Kr_ff" => size(M!.Kr_ff_factor),
+        "size_Kr_ff" => size(Kr_ff_factor),
         "stats" => stats,
         "iteration_time" => t1 - t0,
     )

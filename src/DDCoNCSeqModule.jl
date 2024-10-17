@@ -229,7 +229,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     for i in eachindex(q.partition_list)
         q.buff_xt[i] .= p.partition_list[i].Kxt_ff_factor \ p.buff_xt[i]
     end
-    # lhs_update_xt!(q)
+    lhs_update_xt!(q)
     q
 end
 
