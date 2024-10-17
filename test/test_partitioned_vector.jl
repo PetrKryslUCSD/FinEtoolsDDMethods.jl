@@ -11,6 +11,7 @@ using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, vec_copyto!, vec_dot
+using FinEtoolsDDMethods.DDCoNCSeqModule: NONSHARED, EXTENDED, rhs_update!, rhs_update_xt!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -223,6 +224,29 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         vec_copyto!(q, b)
         q1 = K_ff * p
         @test norm(q - q1) / norm(q) < 1e-10
+    end
+
+    let 
+        # Test transfer of information into the partitioned vector
+        p = rand(Float64, size(F_f))
+        b = PartitionedVector(Float64, partition_list)
+        vec_copyto!(b, p)
+        for i in eachindex(partition_list)
+            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list[NONSHARED].global_dofs]) < 1e-10
+        end
+        rhs_update!(b)
+        for i in eachindex(partition_list)
+            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list[NONSHARED].global_dofs]) < 1e-10
+        end
+        for i in eachindex(partition_list)
+            pie = partition_list[i].entity_list[EXTENDED]
+            ld = pie.local_own_dofs
+            @test norm(b.buff_ns[i][ld] - p[partition_list[i].entity_list[NONSHARED].global_dofs[ld]]) < 1e-10
+        end
+        rhs_update_xt!(b)
+        for i in eachindex(partition_list)
+            @test norm(b.buff_xt[i] - p[partition_list[i].entity_list[EXTENDED].global_dofs]) < 1e-10
+        end
     end
 
     true

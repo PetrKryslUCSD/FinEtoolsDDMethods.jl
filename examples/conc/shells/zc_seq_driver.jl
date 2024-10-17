@@ -28,7 +28,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
@@ -367,7 +367,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     K_ff_2 = spzeros(size(K_ff, 1), size(K_ff, 1))
     for partition in partition_list
-        d = partition.entity_list.nonshared.global_dofs
+        d = partition.entity_list[NONSHARED].global_dofs
         K_ff_2[d, d] += partition.Kns_ff
     end
     # @show norm(K_ff_2)
@@ -383,7 +383,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        d = partition.entity_list.nonshared.global_dofs
+        d = partition.entity_list[NONSHARED].global_dofs
         P = Phi[d, :]
         Kr_ff += (P' * partition.Kns_ff * P)
     end
@@ -395,6 +395,20 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
     
     t0 = time()
+
+    b = deepcopy(F_f); x0 = zeros(size(F_f))
+    (u_f, stats) = pcg_seq(
+        (q, p) -> (q .= K_ff * p), 
+        b, x0;
+        # (M!)=(q, p) -> vec_copyto!(q, p),
+        (M!)=(q, p) -> (q .= Phi * (Krfactor \ (Phi' * p))), 
+        peeksolution=peeksolution,
+        itmax=itmax, 
+        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+        )
+    t1 = time()
+
+    t0 = time()
     x0 = PartitionedVector(Float64, partition_list)
     vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, partition_list)
@@ -402,11 +416,11 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     (u_f, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 
         b, x0;
+        # (M!)=(q, p) -> vec_copyto!(q, p),
         (M!)=(q, p) -> M!(q, p),
+        # (M!)=(q, p) -> (q .= Phi * (Krfactor \ (Phi' * p))), 
         peeksolution=peeksolution,
         itmax=itmax, 
-        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
-        # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
@@ -486,7 +500,7 @@ function parse_commandline()
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
-        default = 200
+        default = 20
         "--relrestol"
         help = "Relative residual tolerance"
         arg_type = Float64

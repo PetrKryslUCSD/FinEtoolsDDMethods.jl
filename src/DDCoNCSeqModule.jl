@@ -24,7 +24,7 @@ using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
 
-using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
+using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
 using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
 
 import ..CGModule: vec_copyto!
@@ -47,8 +47,8 @@ struct PartitionedVector{PD<:CoNCPartitionData, T<:Number}
 end
 
 function PartitionedVector(::Type{T}, partition_list::Vector{PD}) where {T, PD<:CoNCPartitionData}
-    buff_ns = [fill(zero(T), length(partition.entity_list.nonshared.global_dofs)) for partition in partition_list]
-    buff_xt = [fill(zero(T), length(partition.entity_list.extended.global_dofs)) for partition in partition_list]
+    buff_ns = [fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs)) for partition in partition_list]
+    buff_xt = [fill(zero(T), length(partition.entity_list[EXTENDED].global_dofs)) for partition in partition_list]
     return PartitionedVector(partition_list, buff_ns, buff_xt)
 end
 
@@ -71,7 +71,7 @@ Copy a global vector into a partitioned vector.
 """
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
-        a.buff_ns[i] .= v[a.partition_list[i].entity_list.nonshared.global_dofs]
+        a.buff_ns[i] .= v[a.partition_list[i].entity_list[NONSHARED].global_dofs]
     end
     a
 end
@@ -84,8 +84,8 @@ Copy a partitioned vector into a global vector.
 function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
     for i in eachindex(a.partition_list)
         el = a.partition_list[i].entity_list
-        ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
-        lod = el.nonshared.global_to_local[ownd]
+        ownd = el[NONSHARED].global_dofs[1:el[NONSHARED].num_own_dofs]
+        lod = el[NONSHARED].global_to_local[ownd]
         v[ownd] .= a.buff_ns[i][lod]
     end
     a
@@ -133,7 +133,7 @@ end
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     result = zero(eltype(x.buff_ns[1]))
     for i in eachindex(y.partition_list)
-        own = 1:y.partition_list[i].entity_list.nonshared.num_own_dofs
+        own = 1:y.partition_list[i].entity_list[NONSHARED].num_own_dofs
         result += dot(y.buff_ns[i][own], x.buff_ns[i][own])
     end
     return result
@@ -141,11 +141,11 @@ end
 
 function rhs_update!(p::PV) where {PV<:PartitionedVector}
     for i in eachindex(p.partition_list)
-        pin = p.partition_list[i].entity_list.nonshared
+        pin = p.partition_list[i].entity_list[NONSHARED]
         for j in eachindex(pin.local_receive_dofs)
             if !isempty(pin.local_receive_dofs[j])
                 @assert i != j
-                pjn = p.partition_list[j].entity_list.nonshared
+                pjn = p.partition_list[j].entity_list[NONSHARED]
                 ldi = pin.local_receive_dofs[j]
                 ldj = pjn.local_send_dofs[i]
                 p.buff_ns[i][ldi] .= p.buff_ns[j][ldj]
@@ -156,11 +156,11 @@ end
 
 function lhs_update!(q::PV) where {PV<:PartitionedVector}
     for i in eachindex(q.partition_list)
-        qin = q.partition_list[i].entity_list.nonshared
+        qin = q.partition_list[i].entity_list[NONSHARED]
         for j in eachindex(qin.local_send_dofs)
             if !isempty(qin.local_send_dofs[j])
                 @assert i != j
-                qjn = q.partition_list[j].entity_list.nonshared
+                qjn = q.partition_list[j].entity_list[NONSHARED]
                 ldi = qin.local_send_dofs[j]
                 ldj = qjn.local_receive_dofs[i]
                 q.buff_ns[i][ldi] .+= q.buff_ns[j][ldj]
@@ -191,10 +191,17 @@ end
 function TwoLevelPreConditioner(partition_list, Phi)
     n = size(Phi, 1)
     nr = size(Phi, 2)
-    buff_Phis = [Phi[partition_list[i].entity_list.nonshared.global_dofs, :] for i in eachindex(partition_list)]
+    buff_Phis = typeof(Phi)[]
+    sizehint!(buff_Phis, length(partition_list))
     Kr_ff = spzeros(nr, nr)
     for i in eachindex(partition_list)
-        Kr_ff += (buff_Phis[i]' * partition_list[i].Kns_ff * buff_Phis[i])
+        pel = partition_list[i].entity_list[NONSHARED]
+        # First we work with all the degrees of freedom on the partition
+        P = Phi[pel.global_dofs, :]
+        Kr_ff += (P' * partition_list[i].Kns_ff * P)
+        # the transformation matrices are now resized to only the own dofs
+        ld = pel.local_own_dofs
+        push!(buff_Phis, P[ld, :])
     end
     Kr_ff_factor = lu(Kr_ff)
     buffq = fill(zero(eltype(Kr_ff_factor)), n)
@@ -206,45 +213,63 @@ end
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
     # vec_copyto!(q, p) # this would be a identity preconditioner 
     rhs_update!(p)
+    rhs_update_xt!(p)
     pre.buffPp .= zero(eltype(pre.buffPp))
     for i in eachindex(q.partition_list)
-        ld = q.partition_list[i].entity_list.nonshared.local_own_dofs
-        pv = p.buff_ns[i][ld]
-        Phiv = pre.buff_Phis[i][ld, :]
-        pre.buffPp .+= Phiv' * pv
+        ld = q.partition_list[i].entity_list[NONSHARED].local_own_dofs
+        pre.buffPp .+= pre.buff_Phis[i]' * p.buff_ns[i][ld]
     end
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     for i in eachindex(q.partition_list)
-        ld = q.partition_list[i].entity_list.nonshared.local_own_dofs
-        Phiv = pre.buff_Phis[i][ld, :]
-        q.buff_ns[i][ld] .= Phiv * pre.buffKiPp
+        ld = q.partition_list[i].entity_list[NONSHARED].local_own_dofs
+        q.buff_ns[i] .= 0
+        q.buff_ns[i][ld] .= pre.buff_Phis[i] * pre.buffKiPp
     end
     lhs_update!(q)
+    for i in eachindex(q.partition_list)
+        q.buff_xt[i] .= p.partition_list[i].Kxt_ff_factor \ p.buff_xt[i]
+    end
+    # lhs_update_xt!(q)
     q
 end
 
-function _precondition_local_solve!(q, partition_list, p) 
-    for partition in partition_list
-        d = partition.alldof
-        partition.otempp .= p[d]
-        ldiv!(partition.otempq, partition.all_K_factor, partition.otempp)
-        q[d] .+= partition.otempq
+function rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
+    for i in eachindex(p.partition_list)
+        pin = p.partition_list[i].entity_list[EXTENDED]
+        ld = pin.local_own_dofs
+        p.buff_xt[i] .= 0
+        p.buff_xt[i][ld] .= p.buff_ns[i][ld]
     end
-    q
+    for i in eachindex(p.partition_list)
+        pin = p.partition_list[i].entity_list[EXTENDED]
+        for j in eachindex(pin.local_receive_dofs)
+            if !isempty(pin.local_receive_dofs[j])
+                @assert i != j
+                pjn = p.partition_list[j].entity_list[EXTENDED]
+                ldi = pin.local_receive_dofs[j]
+                ldj = pjn.local_send_dofs[i]
+                p.buff_xt[i][ldi] .= p.buff_xt[j][ldj]
+            end
+        end
+    end
 end
 
-function preconditioner!(Krfactor, Phi, partition_list)
-    # Make sure the partitions only refer to the local non-overlapping dofs
-    for _p in partition_list
-        _p.nonshared_K = _p.nonshared_K[_p.nsdof, _p.nsdof]
+function lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
+    for i in eachindex(q.partition_list)
+        qie = q.partition_list[i].entity_list[EXTENDED]
+        for j in eachindex(qie.local_send_dofs)
+            if !isempty(qie.local_send_dofs[j])
+                @assert i != j
+                qjn = q.partition_list[j].entity_list[EXTENDED]
+                ldi = qie.local_send_dofs[j]
+                ldj = qjn.local_receive_dofs[i]
+                q.buff_xt[i][ldi] .+= q.buff_xt[j][ldj]
+            end
+        end
+        qin = q.partition_list[i].entity_list[NONSHARED]
+        ld = qin.local_own_dofs
+        q.buff_ns[i][ld] .+= q.buff_xt[i][ld]
     end
-    function M!(q, p)
-        q .= zero(eltype(q))
-        _precondition_local_solve!(q, partition_list, p)
-        _precondition_global_solve!(q, Krfactor, Phi, p)
-        q
-    end
-    return M!
 end
 
 end # module DDCoNCSeqModule

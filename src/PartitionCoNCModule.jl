@@ -30,6 +30,9 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ..FinEtoolsDDMethods: allbytes
 using ShellStructureTopo
 
+const NONSHARED = 1
+const EXTENDED = 2
+
 # Node lists are constructed for the non-shared, and then by extending the
 # partitions with the shared nodes. Connected elements are identified.
 function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
@@ -60,7 +63,7 @@ function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
     xtnl = findall(x -> x, ismember)
     return (
         nonshared_nodes = nsnl,
-        extended_nodes = xtnl,
+        extended_nodes = vcat(nsnl, setdiff(xtnl, nsnl)),
     )
 end
 
@@ -142,7 +145,7 @@ function _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_
             comm_lists[i, j] = unique(comm_lists[i, j])
         end
     end
-    # comm_lists[p, op] is the list of nodes that partition p needs from partition op
+    # comm_lists[p, op] is the list of nodes whose data partition p needs from partition op
     receive_nodes = [comm_lists[i, :]  for i in 1:Np]
     send_nodes = [comm_lists[:, i]  for i in 1:Np]
     return (receive_nodes = receive_nodes, send_nodes = send_nodes)
@@ -285,8 +288,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
         receive_nodes = extended_comm.receive_nodes[i]
         send_nodes = extended_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
-        global_own_dofs = deepcopy(global_dofs)
-        num_own_dofs = length(global_own_dofs)
+        num_own_dofs = nonshared.num_own_dofs # the partitions own the same nodes
+        global_own_dofs = deepcopy(global_dofs[1:num_own_dofs])
         global_receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(extended_comm.receive_nodes[i])]
         global_to_local = fill(0, prod(size(dofnums)))
@@ -313,7 +316,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
             local_send_dofs,
             global_to_local,
         )
-        push!(list_of_entity_lists, (nonshared=nonshared, extended=extended))
+        push!(list_of_entity_lists, [nonshared, extended])
     end
     return list_of_entity_lists
 end
@@ -418,7 +421,7 @@ function CoNCPartitionData(cpi::CPI,
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non shared elements
-    el = entity_list.nonshared.elements
+    el = entity_list[NONSHARED].elements
     Kns = make_matrix(subset(fes, el))
     # Trim to just the free degrees of freedom
     Kns_ff = Kns[fr, fr]
@@ -432,21 +435,21 @@ function CoNCPartitionData(cpi::CPI,
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
-    el = setdiff(entity_list.extended.elements, entity_list.nonshared.elements)
+    el = setdiff(entity_list[EXTENDED].elements, entity_list[NONSHARED].elements)
     Kadd = make_matrix(subset(fes, el))
     Kxt_ff = Kns_ff + Kadd[fr, fr]
     Kadd = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
-    d = entity_list.extended.global_dofs
+    d = entity_list[EXTENDED].global_dofs
     Kxt_ff = Kxt_ff[d, d]
-    d = entity_list.nonshared.global_dofs
+    d = entity_list[NONSHARED].global_dofs
     Kns_ff = Kns[d, d]
     Kns = nothing
     return CoNCPartitionData(rank, entity_list, Kns_ff, lu(Kxt_ff), rhs)
 end
 
 function partition_size(cpd::CoNCPartitionData)
-    return length(cpd.entity_list.extended.global_dofs)
+    return length(cpd.entity_list[EXTENDED].global_dofs)
 end
 
 function rhs(partition_list)
