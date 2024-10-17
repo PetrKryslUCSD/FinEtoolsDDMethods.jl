@@ -211,8 +211,6 @@ function TwoLevelPreConditioner(partition_list, Phi)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
-    # vec_copyto!(q, p) # this would be a identity preconditioner 
-    rhs_update!(p)
     rhs_update_xt!(p)
     pre.buffPp .= zero(eltype(pre.buffPp))
     for i in eachindex(q.partition_list)
