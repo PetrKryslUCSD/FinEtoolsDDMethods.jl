@@ -272,7 +272,7 @@ function parse_commandline()
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 1
+        default = 5
         "--No"
         help = "Number of overlaps"
         arg_type = Int
