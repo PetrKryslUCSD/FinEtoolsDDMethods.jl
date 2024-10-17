@@ -184,6 +184,10 @@ struct EntityListNonShared{IT<:Integer}
     global_dofs::Vector{IT}
     # Number of own dofs.
     num_own_dofs::IT
+    # Global own dofs.
+    global_own_dofs::Vector{IT}
+    # Local own dofs.
+    local_own_dofs::Vector{IT}
     # Global dofs received from other partitions.
     global_receive_dofs::Vector{Vector{IT}}
     # Global dofs sent to other partitions.
@@ -209,6 +213,10 @@ struct EntityListExtended{IT<:Integer}
     global_dofs::Vector{IT}
     # Number of own dofs.
     num_own_dofs::IT
+    # Global own dofs.
+    global_own_dofs::Vector{IT}
+    # Local own dofs.
+    local_own_dofs::Vector{IT}
     # Global dofs received from other partitions.
     global_receive_dofs::Vector{Vector{IT}}
     # Global dofs sent to other partitions.
@@ -240,7 +248,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
         receive_nodes = nonshared_comm.receive_nodes[i]
         send_nodes = nonshared_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
-        num_own_dofs = length(global_dofs)
+        global_own_dofs = deepcopy(global_dofs)
+        num_own_dofs = length(global_own_dofs)
         global_receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(nonshared_comm.receive_nodes[i])]
         for j in eachindex(global_receive_dofs)
@@ -250,6 +259,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
         for j in eachindex(global_dofs)
             global_to_local[global_dofs[j]] = j
         end
+        local_own_dofs = global_to_local[global_own_dofs]
         global_send_dofs = [_dof_list(nonshared_comm.send_nodes[i][j], dofnums, fr)
                      for j in eachindex(nonshared_comm.send_nodes[i])]
         local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
@@ -261,6 +271,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
             send_nodes,
             global_dofs,
             num_own_dofs,
+            global_own_dofs,
+            local_own_dofs,
             global_receive_dofs,
             global_send_dofs,
             local_receive_dofs,
@@ -273,13 +285,15 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
         receive_nodes = extended_comm.receive_nodes[i]
         send_nodes = extended_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
-        num_own_dofs = length(global_dofs)
+        global_own_dofs = deepcopy(global_dofs)
+        num_own_dofs = length(global_own_dofs)
         global_receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
                         for j in eachindex(extended_comm.receive_nodes[i])]
         global_to_local = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
             global_to_local[global_dofs[j]] = j
         end
+        local_own_dofs = global_to_local[global_own_dofs]
         global_send_dofs = [_dof_list(extended_comm.send_nodes[i][j], dofnums, fr)
                             for j in eachindex(extended_comm.send_nodes[i])]
         local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
@@ -291,6 +305,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
             send_nodes,
             global_dofs,
             num_own_dofs,
+            global_own_dofs,
+            local_own_dofs,
             global_receive_dofs,
             global_send_dofs,
             local_receive_dofs,

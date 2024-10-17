@@ -211,18 +211,19 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     q = Krfactor \ p
     q1 = M!.Kr_ff_factor \ p
     @test norm(q - q1) /  norm(q1) < 1e-9
-    
-    # b = PartitionedVector(Float64, partition_list)
-    # p = 1000 * rand(Float64, size(F_f))
-    # vec_copyto!(b, p)
-    # r = PartitionedVector(Float64, partition_list)
-    # q = rand(Float64, size(F_f))
-    # M!(r, b)
-    # vec_copyto!(q, r)
-    # q1 = Phi * (Krfactor \ (Phi' * p))
-    # @show norm(q)
-    # @show norm(q1)
-    # @test norm(q - q1) / norm(q) == 0
+
+    b = PartitionedVector(Float64, partition_list)
+    p = 1000 * rand(Float64, size(F_f))
+    vec_copyto!(b, p)
+    r = PartitionedVector(Float64, partition_list)
+    M!(r, b)
+    q = rand(Float64, size(F_f))
+    vec_copyto!(q, r)
+    # @show q1 = Phi' * p
+    # @show M!.buffPp
+    # @test norm(M!.buffPp - q1) / norm(q1) < 1e-9
+    q1 = Phi * (Krfactor \ (Phi' * p))
+    @test norm(q - q1) / norm(q)  <  1e-9
 
     true
 end
@@ -241,7 +242,7 @@ visualize = false
 for ref in [13, 11, 15]
     for Np in [11, 1, 2, 16, 9]
         for No in [3, 1, 2]
-            for n1 in [4, 6]
+            for n1 in [1, 4, 6]
                 _execute_alt(
                     filename,
                     ref,

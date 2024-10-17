@@ -184,7 +184,8 @@ struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
     buff_Phis::Vector{SparseMatrixCSC{T, IT}}
     Kr_ff_factor::FACTOR
     buffq::Vector{T}
-    buffp::Vector{T}
+    buffPp::Vector{T}
+    buffKiPp::Vector{T}
 end
 
 function TwoLevelPreConditioner(partition_list, Phi)
@@ -197,15 +198,26 @@ function TwoLevelPreConditioner(partition_list, Phi)
     end
     Kr_ff_factor = lu(Kr_ff)
     buffq = fill(zero(eltype(Kr_ff_factor)), n)
-    buffp = fill(zero(eltype(Kr_ff_factor)), n)
-    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Kr_ff_factor, buffq, buffp)
+    buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
+    buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
+    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Kr_ff_factor, buffq, buffPp, buffKiPp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
     # vec_copyto!(q, p) # this would be a identity preconditioner 
     rhs_update!(p)
+    pre.buffPp .= zero(eltype(pre.buffPp))
     for i in eachindex(q.partition_list)
-        q.buff_ns[i] .= pre.buff_Phis[i] * (pre.Kr_ff_factor \ (pre.buff_Phis[i]' * p.buff_ns[i]))
+        ld = q.partition_list[i].entity_list.nonshared.local_own_dofs
+        pv = p.buff_ns[i][ld]
+        Phiv = pre.buff_Phis[i][ld, :]
+        pre.buffPp .+= Phiv' * pv
+    end
+    pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
+    for i in eachindex(q.partition_list)
+        ld = q.partition_list[i].entity_list.nonshared.local_own_dofs
+        Phiv = pre.buff_Phis[i][ld, :]
+        q.buff_ns[i][ld] .= Phiv * pre.buffKiPp
     end
     lhs_update!(q)
     q
