@@ -18,9 +18,7 @@ __precompile__(true)
 using FinEtools
 using CoNCMOR
 using SparseArrays
-using Krylov
 using Metis
-using LinearOperators
 using SparseArrays
 using LinearAlgebra
 import Base: size, eltype
