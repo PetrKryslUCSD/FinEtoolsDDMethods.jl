@@ -484,3 +484,4 @@ transform the residual, all-broadcast to the other partitions.
 All partitions could solve the global problem concurrently.
 The vector z could then also be held only locally.
 
+-- How should the global solver be structured to avoid all-reduce?
