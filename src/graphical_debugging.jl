@@ -1,3 +1,5 @@
+using FinEtools
+
 function visualize_topology(filename, fens, fes, list_of_entity_lists)
     for p in eachindex(list_of_entity_lists)
         el = list_of_entity_lists[p]
