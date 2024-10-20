@@ -263,15 +263,15 @@ function parse_commandline()
         "--stabilize"
         help = "Stabilize rotation about axis?"
         arg_type = Bool
-        default = false
+        default = true
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
-        default = 2
+        default = 8
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 5
+        default = 6
         "--No"
         help = "Number of overlaps"
         arg_type = Int
