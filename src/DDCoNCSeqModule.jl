@@ -5,6 +5,22 @@ Module for operations on partitions of finite element models for CG solves based
 on the Coherent Nodal Clusters.
 
 Implementation for sequential execution.
+
+The module provides the following types: PartitionedVector. The partitioned
+vector defines a mechanism for storing and communicating data for each
+partition. The data is stored in two buffers: one for the non-shared degrees of,
+and one for the extended degrees of freedom. The buffers are stored in a vector
+of vectors, one for each partition.
+
+The non-shared degrees of freedom are the degrees of freedom that are owned
+exclusively by a partition. Nevertheless, the partition needs also access to
+degrees of freedom owned by other partitions.
+
+Here, the local degrees of freedom numbering is such that
+`p.partition_list[i].entity_list[NONSHARED].local_receive_dofs[j]` are degrees
+of freedom that partition `i` receives from partition `j`, and
+`p.partition_list[j].entity_list[NONSHARED].local_send_dofs[i]` are degrees of
+freedom that partition `j` sends to partition `i`.
 """
 module DDCoNCSeqModule
 
@@ -139,42 +155,36 @@ function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     return result
 end
 
-function rhs_update!(p::PV) where {PV<:PartitionedVector}
+function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     for i in eachindex(p.partition_list)
-        pin = p.partition_list[i].entity_list[NONSHARED]
-        for j in eachindex(pin.local_receive_dofs)
-            if !isempty(pin.local_receive_dofs[j])
-                @assert i != j
-                pjn = p.partition_list[j].entity_list[NONSHARED]
-                ldi = pin.local_receive_dofs[j]
-                ldj = pjn.local_send_dofs[i]
-                p.buff_ns[i][ldi] .= p.buff_ns[j][ldj]
+        local_receive_dofs = p.partition_list[i].entity_list[NONSHARED].local_receive_dofs
+        for j in eachindex(local_receive_dofs)
+            if !isempty(local_receive_dofs[j])
+                local_send_dofs = p.partition_list[j].entity_list[NONSHARED].local_send_dofs
+                p.buff_ns[i][local_receive_dofs[j]] .= p.buff_ns[j][local_send_dofs[i]]
             end
         end
     end
 end
 
-function lhs_update!(q::PV) where {PV<:PartitionedVector}
+function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     for i in eachindex(q.partition_list)
-        qin = q.partition_list[i].entity_list[NONSHARED]
-        for j in eachindex(qin.local_send_dofs)
-            if !isempty(qin.local_send_dofs[j])
-                @assert i != j
-                qjn = q.partition_list[j].entity_list[NONSHARED]
-                ldi = qin.local_send_dofs[j]
-                ldj = qjn.local_receive_dofs[i]
-                q.buff_ns[i][ldi] .+= q.buff_ns[j][ldj]
+        local_send_dofs = q.partition_list[i].entity_list[NONSHARED].local_send_dofs
+        for j in eachindex(local_send_dofs)
+            if !isempty(local_send_dofs[j])
+                local_receive_dofs = q.partition_list[j].entity_list[NONSHARED].local_receive_dofs
+                q.buff_ns[i][local_send_dofs[j]] .+= q.buff_ns[j][local_receive_dofs[i]]
             end
         end
     end
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
-    rhs_update!(p)
+    _rhs_update!(p)
     for i in eachindex(q.partition_list)
         q.buff_ns[i] .= p.partition_list[i].Kns_ff * p.buff_ns[i]
     end
-    lhs_update!(q)
+    _lhs_update!(q)
     q    
 end
 
@@ -223,7 +233,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
         q.buff_ns[i] .= 0
         q.buff_ns[i][ld] .= pre.buff_Phis[i] * pre.buffKiPp
     end
-    lhs_update!(q)
+    _lhs_update!(q)
     for i in eachindex(q.partition_list)
         q.buff_xt[i] .= p.partition_list[i].Kxt_ff_factor \ p.buff_xt[i]
     end
@@ -239,14 +249,11 @@ function rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
         p.buff_xt[i][ld] .= p.buff_ns[i][ld]
     end
     for i in eachindex(p.partition_list)
-        pin = p.partition_list[i].entity_list[EXTENDED]
-        for j in eachindex(pin.local_receive_dofs)
-            if !isempty(pin.local_receive_dofs[j])
-                @assert i != j
-                pjn = p.partition_list[j].entity_list[EXTENDED]
-                ldi = pin.local_receive_dofs[j]
-                ldj = pjn.local_send_dofs[i]
-                p.buff_xt[i][ldi] .= p.buff_xt[j][ldj]
+        local_receive_dofs = p.partition_list[i].entity_list[EXTENDED].local_receive_dofs
+        for j in eachindex(local_receive_dofs)
+            if !isempty(local_receive_dofs[j])
+                local_send_dofs = p.partition_list[j].entity_list[EXTENDED].local_send_dofs
+                p.buff_xt[i][local_receive_dofs[j]] .= p.buff_xt[j][local_send_dofs[i]]
             end
         end
     end
@@ -254,14 +261,11 @@ end
 
 function lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     for i in eachindex(q.partition_list)
-        qie = q.partition_list[i].entity_list[EXTENDED]
-        for j in eachindex(qie.local_send_dofs)
-            if !isempty(qie.local_send_dofs[j])
-                @assert i != j
-                qjn = q.partition_list[j].entity_list[EXTENDED]
-                ldi = qie.local_send_dofs[j]
-                ldj = qjn.local_receive_dofs[i]
-                q.buff_xt[i][ldi] .+= q.buff_xt[j][ldj]
+        local_send_dofs = q.partition_list[i].entity_list[EXTENDED].local_send_dofs
+        for j in eachindex(local_send_dofs)
+            if !isempty(local_send_dofs[j])
+                local_receive_dofs = q.partition_list[j].entity_list[EXTENDED].local_receive_dofs
+                q.buff_xt[i][local_send_dofs[j]] .+= q.buff_xt[j][local_receive_dofs[i]]
             end
         end
         qin = q.partition_list[i].entity_list[NONSHARED]
