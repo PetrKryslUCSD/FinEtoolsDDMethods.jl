@@ -6,10 +6,16 @@ the Coherent Nodal Clusters.
 
 The grid is partitioned into `Np` non-overlapping node partitions using the
 Metis library. This means each partition owns it nodes, nodes are not shared
-among partitions. 
+among partitions. Neither are elements: elements are assigned uniquely to
+partitions.
 
 The partitions are extended by the given overlap using the connections among the
 nodes. 
+
+The communication is set up so that each partition has a list of lists of
+degrees of freedom that it needs to receive from other partitions, one per
+partition, add also list of lists of degrees of freedom that the partition needs
+to send to other partitions (again one per partition).
 """
 module PartitionCoNCModule
 
@@ -172,36 +178,7 @@ function _construct_communication_lists_extended(node_lists, n2e, fes, node_to_p
     return (receive_nodes = receive_nodes, send_nodes = send_nodes)
 end
 
-struct EntityListNonShared{IT<:Integer}
-    # All nodes that constitute the partition.
-    nodes::Vector{IT}
-    # All elements that constitute the partition.
-    elements::Vector{IT}
-    # Nodes for which dofs are received from other partitions.
-    receive_nodes::Vector{Vector{IT}}
-    # Nodes for which dofs are sent to other partitions.
-    send_nodes::Vector{Vector{IT}}
-    # All global dofs for the partition.
-    global_dofs::Vector{IT}
-    # Number of own dofs.
-    num_own_dofs::IT
-    # Global own dofs.
-    global_own_dofs::Vector{IT}
-    # Local own dofs.
-    local_own_dofs::Vector{IT}
-    # Global dofs received from other partitions.
-    global_receive_dofs::Vector{Vector{IT}}
-    # Global dofs sent to other partitions.
-    global_send_dofs::Vector{Vector{IT}}
-    # Local numbers of dofs received from other partitions.
-    local_receive_dofs::Vector{Vector{IT}}
-    # Local numbers of dofs sent to other partitions.
-    local_send_dofs::Vector{Vector{IT}}
-    # Mapping from global to local dofs.
-    global_to_local::Vector{IT}
-end
-
-struct EntityListExtended{IT<:Integer}
+struct EntityListsContainer{IT<:Integer}
     # All nodes that constitute the partition.
     nodes::Vector{IT}
     # All elements that constitute the partition.
@@ -265,7 +242,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
                      for j in eachindex(nonshared_comm.send_nodes[i])]
         local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
         local_send_dofs = [global_to_local[global_send_dofs[j]] for j in eachindex(global_send_dofs)]
-        nonshared = EntityListNonShared(
+        nonshared = EntityListsContainer(
             nodes,
             elements,
             receive_nodes,
@@ -299,7 +276,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
                             for j in eachindex(extended_comm.send_nodes[i])]
         local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
         local_send_dofs = [global_to_local[global_send_dofs[j]] for j in eachindex(global_send_dofs)]
-        extended = EntityListExtended(
+        extended = EntityListsContainer(
             nodes,
             elements,
             receive_nodes,
