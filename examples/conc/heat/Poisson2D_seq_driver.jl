@@ -63,7 +63,6 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     t0 = time()
     material = MatHeatDiff(thermal_conductivity)
     
-    
     @info("Number of edges: $(N)")
     @info("Number of fine grid partitions: $(Np)")
     @info("Number of overlaps: $(No)")
@@ -85,7 +84,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    partition_list  = make_partitions(cpi, fes, make_matrix, make_interior_load)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     partition_sizes = [partition_size(_p) for _p in partition_list]
     meanps = mean(partition_sizes)
@@ -165,8 +164,8 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
          filename)
     @info "Storing data in $(f * ".json")"
     DataDrop.store_json(f * ".json", data)
-    T_f = deepcopy(F_f)
-    scattersysvec!(Temp, vec_copyto!(T_f, T))
+    T_f = deepcopy(F_f); T_f .= 0.0
+    scattersysvec!(Temp, vec_copyto!(T_f, T), DOF_KIND_FREE)
     
     if visualize
         f = (filename == "" ?
@@ -181,6 +180,13 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
         VTK.vtkexportmesh(f * ".vtk", fens, fes;
             scalars=[("T", deepcopy(Temp.values),)])
     end
+
+    t0 = time()
+    Error = 0.0
+    for k in axes(fens.xyz, 1)
+        Error = Error + abs.(Temp.values[k, 1] - tempf(reshape(fens.xyz[k, :], (1, 2)))[1])
+    end
+    @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
 
     true
 end
