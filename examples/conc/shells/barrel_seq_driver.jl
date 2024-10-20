@@ -10,16 +10,18 @@ along a an intersection.
 module barrel_seq_examples
 
 using FinEtools
-using FinEtools.MeshExportModule: VTK, VTKWrite
+using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
 using FinEtoolsFlexStructures.FESetShellT3Module: FESetShellT3
 using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq
+using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
 using Test
@@ -33,20 +35,10 @@ import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
-using ILUZero
 using Statistics
 using ShellStructureTopo: make_topo_faces, create_partitions
 
 # using MatrixSpy
-
-function zcant!(csmatout, XYZ, tangents, feid, qpid)
-    r = vec(XYZ); 
-    cross3!(r, view(tangents, :, 1), view(tangents, :, 2))
-    csmatout[:, 3] .= vec(r)/norm(vec(r))
-    csmatout[:, 1] .= (1.0, 0.0, 0.0)
-    cross3!(view(csmatout, :, 2), view(csmatout, :, 3), view(csmatout, :, 1))
-    return csmatout
-end
 
 # Parameters:
 E = 200e3 * phun("MPa")
@@ -56,7 +48,6 @@ thickness = 2.0 * phun("mm")
 pressure = 100.0 * phun("kilo*Pa")
 
 input = "barrel_w_stiffeners-s3.h5mesh"
-# input = "barrel_w_stiffeners-100.inp"
 
 function computetrac!(forceout, XYZ, tangents, feid, qpid)
     n = cross(tangents[:, 1], tangents[:, 2]) 
@@ -66,7 +57,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, peek, visualize)
+function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -109,8 +100,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, pe
     
     MR = DeforModelRed3D
     mater = MatDeforElastIso(MR, 0.0, E, nu, CTE)
-    ocsys = CSys(3, 3, zcant!)
-
+    
     sfes = FESetShellT3()
     accepttodelegate(fes, sfes)
     femm = FEMMShellT3FFModule.make(IntegDomain(fes, TriRule(1), thickness), mater)
@@ -145,12 +135,6 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, pe
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    @info("Refinement factor: $(ref)")
-    @info("Number of fine grid partitions: $(Np)")
-    @info("Number of overlaps: $(No)")
-    @info("Number of elements: $(count(fes))")
-    @info("Number of free dofs = $(nfreedofs(dchi))")
-
     lfemm = FEMMBase(IntegDomain(subset(fes, vessel), TriRule(3)))
     fi = ForceIntensity(Float64, 6, computetrac!);
     F = distribloads(lfemm, geom0, dchi, fi, 2);
@@ -158,14 +142,25 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, pe
 
     associategeometry!(femm, geom0)
     
+    @info("Refinement factor: $(ref)")
+    @info("Number of fine grid partitions: $(Np)")
+    @info("Number of overlaps: $(No)")
+    @info("Number of nodes: $(count(fens))")
+    @info("Number of elements: $(count(fes))")
+    @info("Number of free dofs = $(nfreedofs(dchi))")
+
     function make_matrix(fes)
-        femm.integdomain.fes = fes
-        return stiffness(femm, geom0, u0, Rfield0, dchi);
+        femm1 = deepcopy(femm) # for thread safety
+        femm1.integdomain.fes = fes
+        return stiffness(femm1, geom0, u0, Rfield0, dchi);
     end
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     partition_sizes = [partition_size(_p) for _p in partition_list]
     meanps = mean(partition_sizes)
     @info "Mean fine partition size: $(meanps)"
@@ -193,49 +188,52 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, pe
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
-    t1 = time()
-    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
-    for partition in partition_list
-        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)        
-    end
-    Krfactor = lu(Kr_ff)
-    @info "Create global factor: $(time() - t1)"
-    @info("Global reduced factor: $(mebibytes(Krfactor)) [MiB]")
     
+    t1 = time()
+    M! = TwoLevelPreConditioner(partition_list, Phi)
+    @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+
     t0 = time()
-    M! = preconditioner!(Krfactor, Phi, partition_list)
+    x0 = PartitionedVector(Float64, partition_list)
+    vec_copyto!(x0, 0.0)
+    b = PartitionedVector(Float64, partition_list)
+    vec_copyto!(b, F_f)
     (u_f, stats) = pcg_seq(
-        (q, p) -> partition_multiply!(q, partition_list, p), 
-        F_f, zeros(size(F_f));
+        (q, p) -> aop!(q, p), 
+        b, x0;
         (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
-        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
-    @info "Iteration: $(time() - t0)"
+    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
+        "number_nodes" => count(fens),
+        "number_elements" => count(fes),
         "nfreedofs" => nfreedofs(dchi),
         "Nc" => Nc,
+        "n1" => n1,
         "Np" => Np,
         "No" => No,
-        "size_Kr_ff" => size(Krfactor),
+        "meanps" => meanps,
+        "size_Kr_ff" => size(M!.Kr_ff_factor),
         "stats" => stats,
-        "time" => t1 - t0,
+        "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
-         "barrel" *
+         "barrel-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
          "-Np=$(Np)" *
          "-No=$(No)" :
          filename)
+    @info "Storing data in $(f * ".json")"
     DataDrop.store_json(f * ".json", data)
-    scattersysvec!(dchi, u_f)
+    # scattersysvec!(dchi, u_f)
     
     if visualize
         f = (filename == "" ?
@@ -253,9 +251,75 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, pe
     true
 end
 
-function test(;filename = "", ref = 1,  Nc = 0, n1 = 6, Np = 4, No = 1, itmax = 2000, relrestol = 1e-6, stabilize = false, peek = false, visualize = false) 
-    _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, stabilize, peek, visualize)
+using ArgParse
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--filename"
+        help = "Use filename to name the output files"
+        arg_type = String
+        default = ""
+        "--stabilize"
+        help = "Stabilize rotation about axis?"
+        arg_type = Bool
+        default = false
+        "--Nc"
+        help = "Number of clusters"
+        arg_type = Int
+        default = 2
+        "--n1"
+        help = "Number 1D basis functions"
+        arg_type = Int
+        default = 5
+        "--No"
+        help = "Number of overlaps"
+        arg_type = Int
+        default = 1
+        "--Np"
+        help = "Number of partitions"
+        arg_type = Int
+        default = 7
+        "--ref"
+        help = "Refinement factor"
+        arg_type = Int
+        default = 1
+        "--itmax"
+        help = "Maximum number of iterations allowed"
+        arg_type = Int
+        default = 200
+        "--relrestol"
+        help = "Relative residual tolerance"
+        arg_type = Float64
+        default = 1.0e-6
+        "--peek"
+        help = "Peek at the iterations?"
+        arg_type = Bool
+        default = true
+        "--visualize"
+        help = "Write out visualization files?"
+        arg_type = Bool
+        default = false
+    end
+    return parse_args(s)
 end
+
+p = parse_commandline()
+
+_execute_alt(
+    p["filename"],
+    p["ref"],
+    p["stabilize"],
+    p["Nc"], 
+    p["n1"],
+    p["Np"], 
+    p["No"], 
+    p["itmax"], 
+    p["relrestol"],
+    p["peek"],
+    p["visualize"],
+    )
+
 
 nothing
 end # module

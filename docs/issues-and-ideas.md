@@ -452,7 +452,7 @@ so that the average during iteration matches the iteration timer.
 Answer: It could be compilation.
 
 -- Alternative data distribution strategy:
-```
+```julia
 initial residual is distributed to partitions
 initial solution is distributed to partitions
 while iter < itmax

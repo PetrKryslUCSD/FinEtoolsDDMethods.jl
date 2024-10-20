@@ -1,4 +1,5 @@
-module hyp_free_seq_examples
+
+module hyp_seq_examples
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -8,11 +9,11 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq
+using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.CompatibilityModule
-using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
-using FinEtoolsDDMethods.DDCoNCSeqModule: partition_multiply!, preconditioner!, make_partitions
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
+using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
 using Test
@@ -27,7 +28,7 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-# using MatrixSpy
+using ShellStructureTopo: create_partitions
 
 # Parameters:
 E = 2.0e11
@@ -47,7 +48,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
     return forceout
 end
 
-function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     CTE = 0.0
     distortion = 0.0
     n = ncoarse  * ref    # number of elements along the edge of the block
@@ -120,21 +121,20 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     associategeometry!(femm, geom0)
     
     function make_matrix(fes)
-        femm.integdomain.fes = fes
-        return stiffness(femm, geom0, u0, Rfield0, dchi);
+        femm1 = deepcopy(femm) # for thread safety
+        femm1.integdomain.fes = fes
+        return stiffness(femm1, geom0, u0, Rfield0, dchi);
     end
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     partition_sizes = [partition_size(_p) for _p in partition_list]
-    meanps = Int(round(mean(partition_sizes)))
-    minps = minimum(partition_sizes)
-    maxps = maximum(partition_sizes)
-    @info "Min, Mean, Max fine partition size: $(minps), $(meanps), $(maxps)"
-    # @info "Element list lengths (noneoverlapping): $([length(_el.nonoverlapping) for _el in cpi.element_lists])"
-    # @info "Element list lengths (overlapping): $([length(_el.overlapping) for _el in cpi.element_lists])"
-    # @info "Element list lengths (all connected): $([length(_el.all_connected) for _el in cpi.element_lists])"
+    meanps = mean(partition_sizes)
+    @info "Mean fine partition size: $(meanps)"
     @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
     t1 = time()
@@ -158,25 +158,22 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
-
-    t1 = time()
-    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
-    for partition in partition_list
-        Kr_ff += (Phi' * partition.nonoverlapping_K * Phi)
-    end
-    Krfactor = lu(Kr_ff)
-    @info "Create global factor ($(round(time() - t1, digits=3)) [s])"
     
+    t1 = time()
+    M! = TwoLevelPreConditioner(partition_list, Phi)
+    @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+
     t0 = time()
-    M! = preconditioner!(Krfactor, Phi, partition_list)
+    x0 = PartitionedVector(Float64, partition_list)
+    vec_copyto!(x0, 0.0)
+    b = PartitionedVector(Float64, partition_list)
+    vec_copyto!(b, F_f)
     (u_f, stats) = pcg_seq(
-        (q, p) -> partition_multiply!(q, partition_list, p), 
-        F_f, zeros(size(F_f));
+        (q, p) -> aop!(q, p), 
+        b, x0;
         (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
-        # atol=0, rtol=relrestol, normtype = KSP_NORM_NATURAL
-        # atol=relrestol * norm(F_f), rtol=0, normtype = KSP_NORM_NATURAL
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
@@ -188,15 +185,16 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
         "number_elements" => count(fes),
         "nfreedofs" => nfreedofs(dchi),
         "Nc" => Nc,
+        "n1" => n1,
         "Np" => Np,
         "No" => No,
         "meanps" => meanps,
-        "size_Kr_ff" => size(Krfactor),
+        "size_Kr_ff" => size(M!.Kr_ff_factor),
         "stats" => stats,
         "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
-         "hyp_free" *
+         "hyp-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -205,11 +203,11 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
          filename)
     @info "Storing data in $(f * ".json")"
     DataDrop.store_json(f * ".json", data)
-    scattersysvec!(dchi, u_f)
+    # scattersysvec!(dchi, u_f)
     
     if visualize
         f = (filename == "" ?
-         "hyp_free-" *
+         "hyp-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
          "-n1=$(n1)" *
@@ -223,10 +221,80 @@ function _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrest
     true
 end
 
-function test(;filename = "", ref = 2, aspect = 10.0, Nc = 2, n1 = 6, Np = 2, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
-    ncoarse = 32
-    _execute(filename, ncoarse, ref, aspect, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+using ArgParse
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--filename"
+        help = "Use filename to name the output files"
+        arg_type = String
+        default = ""
+        "--aspect"
+        help = "Aspect ratio"
+        arg_type = Float64
+        default = 10.0
+        "--ncoarse"
+        help = "Number of edges in the coarse mesh"
+        arg_type = Int
+        default = 32
+        "--Nc"
+        help = "Number of clusters"
+        arg_type = Int
+        default = 2
+        "--n1"
+        help = "Number 1D basis functions"
+        arg_type = Int
+        default = 5
+        "--No"
+        help = "Number of overlaps"
+        arg_type = Int
+        default = 1
+        "--Np"
+        help = "Number of partitions"
+        arg_type = Int
+        default = 7
+        "--ref"
+        help = "Refinement factor"
+        arg_type = Int
+        default = 2
+        "--itmax"
+        help = "Maximum number of iterations allowed"
+        arg_type = Int
+        default = 200
+        "--relrestol"
+        help = "Relative residual tolerance"
+        arg_type = Float64
+        default = 1.0e-6
+        "--peek"
+        help = "Peek at the iterations?"
+        arg_type = Bool
+        default = true
+        "--visualize"
+        help = "Write out visualization files?"
+        arg_type = Bool
+        default = false
+    end
+    return parse_args(s)
 end
+
+p = parse_commandline()
+
+_execute_alt(
+    p["filename"],
+    p["aspect"],
+    p["ncoarse"],
+    p["ref"],
+    p["Nc"], 
+    p["n1"],
+    p["Np"], 
+    p["No"], 
+    p["itmax"], 
+    p["relrestol"],
+    p["peek"],
+    p["visualize"]
+    )
+
 
 nothing
 end # module

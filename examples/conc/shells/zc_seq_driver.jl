@@ -165,7 +165,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    @info "Create CoNCPartitioningInfo ($(round(time() - t1, digits=3)) [s])"
+    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
@@ -196,9 +196,12 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
-    t0 = time()
+    
+    t1 = time()
     M! = TwoLevelPreConditioner(partition_list, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+
+    t0 = time()
     x0 = PartitionedVector(Float64, partition_list)
     vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, partition_list)
@@ -284,7 +287,7 @@ function parse_commandline()
         "--ref"
         help = "Refinement factor"
         arg_type = Int
-        default = 2
+        default = 7
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int

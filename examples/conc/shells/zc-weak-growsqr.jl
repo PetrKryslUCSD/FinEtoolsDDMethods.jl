@@ -9,6 +9,6 @@ for ref in 4:8
     Nc = number_of_clusters(Np)
     filename = "$(prefix)-ref=$ref-Np=$Np-No=$No.json"
     run(`
-    julia --project=. conc/shells/zc.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
+    julia --project=. conc/shells/zc_seq_driver.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
     `)
 end
