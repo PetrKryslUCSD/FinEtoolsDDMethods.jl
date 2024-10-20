@@ -88,7 +88,7 @@ function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
         lod = el[NONSHARED].global_to_local[ownd]
         v[ownd] .= a.buff_ns[i][lod]
     end
-    a
+    v
 end
 
 """
