@@ -24,7 +24,6 @@ using ShellStructureTopo
 using MPI
 
 using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData
-using ..CoNCUtilitiesModule: conc_cache
 using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
 
 function partition_mult!(q, cpi, comm, rank, partition, timers, p)
