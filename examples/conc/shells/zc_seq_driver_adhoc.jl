@@ -435,6 +435,7 @@ end
 
 using ArgParse
 
+
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table! s begin
@@ -449,7 +450,7 @@ function parse_commandline()
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 1
+        default = 5
         "--No"
         help = "Number of overlaps"
         arg_type = Int
@@ -461,7 +462,7 @@ function parse_commandline()
         "--ref"
         help = "Refinement factor"
         arg_type = Int
-        default = 2
+        default = 7
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
