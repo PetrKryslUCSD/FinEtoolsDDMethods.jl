@@ -21,6 +21,17 @@ Here, the local degrees of freedom numbering is such that
 of freedom that partition `i` receives from partition `j`, and
 `p.partition_list[j].entity_list[NONSHARED].local_send_dofs[i]` are degrees of
 freedom that partition `j` sends to partition `i`.
+
+`_lhs_update!` and `_rhs_update!` are functions that update the nonshared
+degrees of freedom. The first is analogous to scatter, whereas the second is
+analogous to gather. 
+
+Scatter: owned degrees of freedom are known to be correct, but the partition
+needs to receive the values of the degrees of freedom that it doesn't own.
+
+Gather: the partition needs to update the values of the degrees of freedom that
+it owns, receiving contributions to those degrees of freedom from other
+partitions.
 """
 module DDCoNCSeqModule
 
