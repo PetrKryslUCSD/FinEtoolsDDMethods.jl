@@ -25,4 +25,5 @@ docs/site/
 
 *.vtk
 *.vtu
+*.json
 *.vscode
