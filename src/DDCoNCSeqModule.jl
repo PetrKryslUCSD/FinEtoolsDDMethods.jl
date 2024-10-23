@@ -6,15 +6,24 @@ on the Coherent Nodal Clusters.
 
 Implementation for sequential execution.
 
-The module provides the following types: PartitionedVector. The partitioned
-vector defines a mechanism for storing and communicating data for each
-partition. The data is stored in two buffers: one for the non-shared degrees of,
-and one for the extended degrees of freedom. The buffers are stored in a vector
-of vectors, one for each partition.
+The module provides the `PartitionedVector` as a mechanism for working with
+partitions. The partitioned vector defines a mechanism for storing and
+communicating data for each partition. The data is stored in two buffers: one
+for the non-shared degrees of, and one for the extended degrees of freedom. The
+buffers are stored in a vector of vectors, one for each partition.
 
 The non-shared degrees of freedom are the degrees of freedom that are owned
 exclusively by a partition. Nevertheless, the partition needs also access to
 degrees of freedom owned by other partitions.
+
+(i) Multiplication of the stiffness matrix by a vector. The non-shared
+partitioning is used. 
+
+(ii) Preparation of the two-level preconditioner. The non-shared partitioning is
+used. 
+
+(iii) Solution of the systems of equations at the level of the partitions (level
+1 of the two-level Schwarz preconditioner). The extended partitioning is used.
 
 Here, the local degrees of freedom numbering is such that
 `p.partition_list[i].entity_list[NONSHARED].local_receive_dofs[j]` are degrees
@@ -204,7 +213,6 @@ struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
     n::IT
     buff_Phis::Vector{SparseMatrixCSC{T, IT}}
     Kr_ff_factor::FACTOR
-    buffq::Vector{T}
     buffPp::Vector{T}
     buffKiPp::Vector{T}
 end
@@ -225,10 +233,9 @@ function TwoLevelPreConditioner(partition_list, Phi)
         push!(buff_Phis, P[ld, :])
     end
     Kr_ff_factor = lu(Kr_ff)
-    buffq = fill(zero(eltype(Kr_ff_factor)), n)
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
     buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
-    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Kr_ff_factor, buffq, buffPp, buffKiPp)
+    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Kr_ff_factor, buffPp, buffKiPp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
@@ -240,8 +247,8 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     end
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     for i in eachindex(q.partition_list)
-        ld = q.partition_list[i].entity_list[NONSHARED].local_own_dofs
         q.buff_ns[i] .= 0
+        ld = q.partition_list[i].entity_list[NONSHARED].local_own_dofs
         q.buff_ns[i][ld] .= pre.buff_Phis[i] * pre.buffKiPp
     end
     _lhs_update!(q)

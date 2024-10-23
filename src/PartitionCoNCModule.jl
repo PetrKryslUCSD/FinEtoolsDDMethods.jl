@@ -14,7 +14,7 @@ nodes.
 
 The communication is set up so that each partition has a list of lists of
 degrees of freedom that it needs to receive from other partitions, one per
-partition, add also list of lists of degrees of freedom that the partition needs
+partition, and also list of lists of degrees of freedom that the partition needs
 to send to other partitions (again one per partition).
 """
 module PartitionCoNCModule
@@ -309,6 +309,13 @@ function _dof_list(node_list, dofnums, fr)
     return dof_list
 end
 
+"""
+    CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL} 
+
+Partitioning info refers to the field (unknowns and data, for example
+temperature or displacements), and to a list of entity lists: for each
+partition, provide list of nodes, elements, degrees of freedom.
+"""
 struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL} 
     u::NF
     list_of_entity_lists::EL
@@ -316,7 +323,7 @@ end
 
 function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}) where {T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
-    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr) # expensive
+    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr)
     return CoNCPartitioningInfo(u, list_of_entity_lists)
 end
 
@@ -328,11 +335,21 @@ function npartitions(cpi::CoNCPartitioningInfo)
     return length(cpi.list_of_entity_lists)
 end
 
+"""
+    CoNCPartitionData{EL, T, IT, FACTOR}
+
+Data for a partition.
+"""
 mutable struct CoNCPartitionData{EL, T, IT, FACTOR}
+    # Rank of the partition (its serial number).
     rank::IT
+    # List of entities (nodes, elements, degrees of freedom).
     entity_list::EL
+    # The stiffness matrix assembled from the non-shared elements.
     Kns_ff::SparseMatrixCSC{T, IT}
+    # The factor (LU) of the stiffness matrix assembled from the extended elements.
     Kxt_ff_factor::FACTOR
+    # A buffer for the righthand side vector.
     rhs::Vector{T}
 end
 
@@ -347,6 +364,25 @@ function CoNCPartitionData(cpi::CPI, rank) where {CPI<:CoNCPartitioningInfo}
     )
 end
 
+"""
+    CoNCPartitionData(cpi::CPI, 
+    rank, 
+    fes, 
+    make_matrix, 
+    make_interior_load = nothing
+    ) where {CPI<:CoNCPartitioningInfo}
+
+Create partition data.
+
+# Arguments
+
+- `cpi`: partitioning info
+- `rank`: rank of the partition
+- `fes`: finite element set 
+- `make_matrix`: function that creates the matrix for a given finite element subset
+- `make_interior_load`: function that creates the interior load vector for a given finite element subset
+
+"""
 function CoNCPartitionData(cpi::CPI, 
     rank, 
     fes, 
