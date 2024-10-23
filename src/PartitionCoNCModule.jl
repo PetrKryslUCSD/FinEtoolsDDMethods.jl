@@ -16,6 +16,12 @@ The communication is set up so that each partition has a list of lists of
 degrees of freedom that it needs to receive from other partitions, one per
 partition, and also list of lists of degrees of freedom that the partition needs
 to send to other partitions (again one per partition).
+
+The idea is that each partition is capable of performing part of an operation
+required on the overall stiffness matrix. In particular, multiplication of the
+stiffness matrix by a vector, construction of the global reduced matrix (all on
+the non-shared partition mesh). Each partition also needs to support the local
+preconditioning solve (on the extended partition mesh).
 """
 module PartitionCoNCModule
 
