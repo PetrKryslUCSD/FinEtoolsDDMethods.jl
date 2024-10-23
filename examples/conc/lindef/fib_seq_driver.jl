@@ -17,7 +17,7 @@ using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods: mebibytes
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
-using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM

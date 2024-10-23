@@ -69,9 +69,9 @@ import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 
 function make_partitions(cpi, fes, make_matrix, make_interior_load)
-    partition_list  = [CoNCPartitionData(cpi, i) for i in 1:npartitions(cpi)]
+    partition_list  = [CoNCPartitionData(cpi, i-1) for i in 1:npartitions(cpi)]
     for i in eachindex(partition_list)
-        partition_list[i] = CoNCPartitionData(cpi, i, fes, make_matrix, make_interior_load)
+        partition_list[i] = CoNCPartitionData(cpi, i-1, fes, make_matrix, make_interior_load)
     end  
     return partition_list
 end

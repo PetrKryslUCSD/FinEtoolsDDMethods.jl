@@ -347,7 +347,7 @@ end
 Data for a partition.
 """
 mutable struct CoNCPartitionData{EL, T, IT, FACTOR}
-    # Rank of the partition (its serial number).
+    # Rank of the partition (its serial number, zero based).
     rank::IT
     # List of entities (nodes, elements, degrees of freedom).
     entity_list::EL
@@ -363,7 +363,7 @@ function CoNCPartitionData(cpi::CPI, rank) where {CPI<:CoNCPartitioningInfo}
     dummy = sparse([1],[1],[1.0],1,1)
     return CoNCPartitionData(
         rank,
-        cpi.list_of_entity_lists[rank],
+        cpi.list_of_entity_lists[rank+1],
         spzeros(eltype(cpi.u.values), 0, 0),
         lu(dummy),
         zeros(eltype(cpi.u.values), 0),
@@ -383,7 +383,7 @@ Create partition data.
 # Arguments
 
 - `cpi`: partitioning info
-- `rank`: rank of the partition
+- `rank`: rank of the partition, zero based
 - `fes`: finite element set 
 - `make_matrix`: function that creates the matrix for a given finite element subset
 - `make_interior_load`: function that creates the interior load vector for a given finite element subset
@@ -395,7 +395,7 @@ function CoNCPartitionData(cpi::CPI,
     make_matrix, 
     make_interior_load = nothing
     ) where {CPI<:CoNCPartitioningInfo}
-    entity_list = cpi.list_of_entity_lists[rank]
+    entity_list = cpi.list_of_entity_lists[rank+1]
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non shared elements
