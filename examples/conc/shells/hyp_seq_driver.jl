@@ -9,7 +9,7 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
@@ -168,7 +168,7 @@ function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, rel
     vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, partition_list)
     vec_copyto!(b, F_f)
-    (u_f, stats) = pcg_seq(
+    (u_f, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),

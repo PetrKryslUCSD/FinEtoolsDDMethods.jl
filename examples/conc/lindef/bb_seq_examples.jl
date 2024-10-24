@@ -138,7 +138,7 @@ function _execute(filename, kind, N, E, nu,
     
     t0 = time()
     M! = preconditioner!(Krfactor, Phi, partition_list)
-    (u_f, stats) = pcg_seq(
+    (u_f, stats) = pcg(
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),

@@ -27,7 +27,7 @@ function vec_dot(x, y)
 end
 
 """
-    pcg_seq(Aop!, b, x0; 
+    pcg(Aop!, b, x0; 
         M! =(q, p) -> (q .= p), 
         itmax=0, 
         atol=√eps(eltype(b)), 
@@ -41,7 +41,6 @@ method.
 
 The multiplication with the matrix `A` is accomplished with an operator `Aop!`.
 The solution with the preconditioner `M` is accomplished with an operator `M!`.
-This is a sequential version of the `pcg` function.
 
 # Arguments
 - `Aop!`: Function that applies the linear operator `A` to a vector `x` and
@@ -62,7 +61,7 @@ This is a sequential version of the `pcg` function.
 # Returns
 - (`x`, `stats`): Tuple of solution vector and solution statistics.
 """
-function pcg_seq(Aop!, b, x0; 
+function pcg(Aop!, b, x0; 
     M! =(q, p) -> (q .= p), 
     itmax=0, 
     atol=√eps(eltype(b)), 

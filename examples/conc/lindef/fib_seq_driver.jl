@@ -16,9 +16,9 @@ using FinEtools.MeshTetrahedronModule: tetv
 using FinEtoolsDeforLinear
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods: mebibytes
-using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
-using FinEtoolsDDMethods.DDCoNCSeqModule: CoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -249,7 +249,6 @@ end # fibers_mesh
 function _execute(filename, kind, ref, Em, num, Ef, nuf,
     Nc, n1, Np, No,
     mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, peek, visualize)
-    comm = 0
     CTE = 0.0
     magn = 1.0
     
@@ -337,7 +336,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    comm = CoNCSeqComm(cpi, fes, make_matrix, nothing)
+    ddcomm = DDCoNCSeqComm(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
@@ -366,15 +365,15 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     end
     
     t1 = time()
-    M! = TwoLevelPreConditioner(comm, Phi)
+    M! = TwoLevelPreConditioner(ddcomm, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, comm)
+    x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, comm)
+    b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    (T, stats) = pcg_seq(
+    (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),

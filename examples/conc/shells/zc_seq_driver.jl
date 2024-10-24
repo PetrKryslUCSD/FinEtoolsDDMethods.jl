@@ -26,10 +26,10 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
-using FinEtoolsDDMethods.DDCoNCSeqModule: CoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -167,7 +167,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    comm = CoNCSeqComm(cpi, fes, make_matrix, nothing)
+    ddcomm = DDCoNCSeqComm(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
@@ -194,18 +194,17 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
-    
-    
+        
     t1 = time()
-    M! = TwoLevelPreConditioner(comm, Phi)
+    M! = TwoLevelPreConditioner(ddcomm, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, comm)
+    x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, comm)
+    b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    (u_f, stats) = pcg_seq(
+    (u_f, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),

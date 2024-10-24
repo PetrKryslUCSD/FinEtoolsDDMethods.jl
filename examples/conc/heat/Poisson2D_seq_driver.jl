@@ -13,17 +13,15 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
-using FinEtoolsDDMethods.DDCoNCSeqModule: CoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!, rhs
+using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!, rhs
 using FinEtoolsDDMethods: set_up_timers
 using Metis
 using Test
 using LinearAlgebra
 using SparseArrays
-import Base: size, eltype
-import LinearAlgebra: mul!
-import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
+using CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using DataDrop
 using Statistics
 
@@ -84,7 +82,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    comm  = CoNCSeqComm(cpi, fes, make_matrix, make_interior_load)
+    ddcomm = DDCoNCSeqComm(cpi, fes, make_matrix, make_interior_load)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
@@ -113,18 +111,18 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     end
     
     t1 = time()
-    F_f = rhs(comm)
+    F_f = rhs(ddcomm)
 
     t1 = time()
-    M! = TwoLevelPreConditioner(comm, Phi)
+    M! = TwoLevelPreConditioner(ddcomm, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, comm)
+    x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, comm)
+    b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    (T, stats) = pcg_seq(
+    (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),
@@ -189,7 +187,7 @@ end
 
 using ArgParse
 
-function parse_commandline()
+function parse_ddandline()
     s = ArgParseSettings()
     @add_arg_table! s begin
         "--filename"
@@ -240,7 +238,7 @@ function parse_commandline()
     return parse_args(s)
 end
 
-p = parse_commandline()
+p = parse_ddandline()
 
 kind = p["kind"]
 if kind == "Q8"

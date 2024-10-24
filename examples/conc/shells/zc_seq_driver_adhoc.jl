@@ -26,7 +26,7 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
@@ -175,7 +175,7 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     
     t0 = time()
     M! = preconditioner!(Krfactor, Phi, partition_list)
-    (u_f, stats) = pcg_seq(
+    (u_f, stats) = pcg(
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
@@ -379,7 +379,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         q
     end
     b = deepcopy(F_f); x0 = zeros(size(F_f))
-    (u_f, stats) = pcg_seq(
+    (u_f, stats) = pcg(
         (q, p) -> (q .= K_ff * p), 
         b, x0;
         # (M!)=(q, p) -> vec_copyto!(q, p),
