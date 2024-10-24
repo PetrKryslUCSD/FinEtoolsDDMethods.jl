@@ -18,7 +18,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods: mebibytes
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: CoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -337,10 +337,9 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    comm = CoNCSeqComm(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
-    partition_sizes = [partition_size(_p) for _p in partition_list]
-    meanps = mean(partition_sizes)
+    meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
     @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
@@ -367,13 +366,13 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     end
     
     t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi, comm)
+    M! = TwoLevelPreConditioner(comm, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list, comm)
+    x0 = PartitionedVector(Float64, comm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list, comm)
+    b = PartitionedVector(Float64, comm)
     vec_copyto!(b, F_f)
     (T, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 

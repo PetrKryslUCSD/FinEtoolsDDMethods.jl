@@ -15,7 +15,7 @@ using FinEtoolsHeatDiff
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: CoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!, rhs
 using FinEtoolsDDMethods: set_up_timers
 using Metis
 using Test
@@ -36,7 +36,6 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     # in a grid of $(N) x $(N) x $(N) edges.
     # Version: 08/13/2024
     # """)
-    comm = 0
     A = 1.0 # dimension of the domain (length of the side of the square)
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
@@ -85,7 +84,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    partition_list  = make_partitions(cpi, fes, make_matrix, make_interior_load)
+    comm  = CoNCSeqComm(cpi, fes, make_matrix, make_interior_load)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
@@ -114,19 +113,16 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     end
     
     t1 = time()
-    F_f = zeros(nfreedofs(Temp))
-    for partition in partition_list
-        F_f .+= partition.rhs
-    end
+    F_f = rhs(comm)
 
     t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi, comm)
+    M! = TwoLevelPreConditioner(comm, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list, comm)
+    x0 = PartitionedVector(Float64, comm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list, comm)
+    b = PartitionedVector(Float64, comm)
     vec_copyto!(b, F_f)
     (T, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 

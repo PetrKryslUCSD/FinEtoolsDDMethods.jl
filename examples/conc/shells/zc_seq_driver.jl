@@ -29,7 +29,7 @@ using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg_seq, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
+using FinEtoolsDDMethods.DDCoNCSeqModule: CoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -64,7 +64,6 @@ nu = 0.3
 L = 10.0
 
 function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
-    comm = 0
     CTE = 0.0
     thickness = 0.1
     
@@ -168,7 +167,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
+    comm = CoNCSeqComm(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
@@ -198,13 +197,13 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     
     t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi, comm)
+    M! = TwoLevelPreConditioner(comm, Phi)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list, comm)
+    x0 = PartitionedVector(Float64, comm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list, comm)
+    b = PartitionedVector(Float64, comm)
     vec_copyto!(b, F_f)
     (u_f, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 
