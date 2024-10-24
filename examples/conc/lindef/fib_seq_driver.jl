@@ -336,7 +336,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    ddcomm = DDCoNCSeqComm(cpi, fes, make_matrix, nothing)
+    ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"

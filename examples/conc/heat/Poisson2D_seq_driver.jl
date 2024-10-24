@@ -82,7 +82,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
     @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
     t2 = time()
-    ddcomm = DDCoNCSeqComm(cpi, fes, make_matrix, make_interior_load)
+    ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, make_interior_load)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
