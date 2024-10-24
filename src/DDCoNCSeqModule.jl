@@ -69,17 +69,17 @@ import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 
 """
-    CoNCSeqComm{PD<:CoNCPartitionData}
+    DDCoNCSeqComm{PD<:CoNCPartitionData}
 
 Communicator for sequential execution.
 """
-struct CoNCSeqComm{PD<:CoNCPartitionData}
+struct DDCoNCSeqComm{PD<:CoNCPartitionData}
     partition_list::Vector{PD}
 end
 
-function CoNCSeqComm(cpi, fes, make_matrix, make_interior_load)
+function DDCoNCSeqComm(cpi, fes, make_matrix, make_interior_load)
     partition_list = _make_partitions(cpi, fes, make_matrix, make_interior_load)
-    return CoNCSeqComm(partition_list)
+    return DDCoNCSeqComm(partition_list)
 end
 
 function _make_partitions(cpi, fes, make_matrix, make_interior_load)
@@ -92,12 +92,12 @@ function _make_partitions(cpi, fes, make_matrix, make_interior_load)
 end
 
 struct PartitionedVector{PD<:CoNCPartitionData, T<:Number}
-    comm::CoNCSeqComm{PD}
+    comm::DDCoNCSeqComm{PD}
     buff_ns::Vector{Vector{T}}
     buff_xt::Vector{Vector{T}}
 end
 
-function PartitionedVector(::Type{T}, comm::CoNCSeqComm{PD}) where {T, PD<:CoNCPartitionData}
+function PartitionedVector(::Type{T}, comm::DDCoNCSeqComm{PD}) where {T, PD<:CoNCPartitionData}
     partition_list = comm.partition_list
     buff_ns = [fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs)) for partition in partition_list]
     buff_xt = [fill(zero(T), length(partition.entity_list[EXTENDED].global_dofs)) for partition in partition_list]
@@ -243,7 +243,7 @@ struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
     buffKiPp::Vector{T}
 end
 
-function TwoLevelPreConditioner(comm::C, Phi) where {C<:CoNCSeqComm}
+function TwoLevelPreConditioner(comm::C, Phi) where {C<:DDCoNCSeqComm}
     partition_list = comm.partition_list
     n = size(Phi, 1)
     nr = size(Phi, 2)
@@ -322,8 +322,9 @@ function lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     end
 end
 
-function rhs(comm::C) where {C<:CoNCSeqComm} 
+function rhs(comm::C) where {C<:DDCoNCSeqComm} 
     rhs = deepcopy(comm.partition_list[1].rhs)
+    rhs .= 0
     for i in eachindex(comm.partition_list)
         rhs .+= comm.partition_list[i].rhs
     end  
