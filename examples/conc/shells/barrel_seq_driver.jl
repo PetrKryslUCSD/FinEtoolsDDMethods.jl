@@ -58,6 +58,7 @@ function computetrac!(forceout, XYZ, tangents, feid, qpid)
 end
 
 function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+    comm = 0
     CTE = 0.0
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
@@ -161,8 +162,7 @@ function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
-    partition_sizes = [partition_size(_p) for _p in partition_list]
-    meanps = mean(partition_sizes)
+    meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
     @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
@@ -190,13 +190,13 @@ function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol
     
     
     t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi)
+    M! = TwoLevelPreConditioner(partition_list, Phi, comm)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
+    x0 = PartitionedVector(Float64, partition_list, comm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list)
+    b = PartitionedVector(Float64, partition_list, comm)
     vec_copyto!(b, F_f)
     (u_f, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 
@@ -267,11 +267,11 @@ function parse_commandline()
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
-        default = 8
+        default = 2
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 6
+        default = 5
         "--No"
         help = "Number of overlaps"
         arg_type = Int

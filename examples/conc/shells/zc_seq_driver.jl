@@ -64,6 +64,7 @@ nu = 0.3
 L = 10.0
 
 function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+    comm = 0
     CTE = 0.0
     thickness = 0.1
     
@@ -169,8 +170,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
-    partition_sizes = [partition_size(_p) for _p in partition_list]
-    meanps = mean(partition_sizes)
+    meanps = mean_partition_size(cpi)
     @info "Mean fine partition size: $(meanps)"
     @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
 
@@ -198,13 +198,13 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     
     t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi)
+    M! = TwoLevelPreConditioner(partition_list, Phi, comm)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
+    x0 = PartitionedVector(Float64, partition_list, comm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list)
+    b = PartitionedVector(Float64, partition_list, comm)
     vec_copyto!(b, F_f)
     (u_f, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 

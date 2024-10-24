@@ -334,7 +334,8 @@ function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}) where {T,
 end
 
 function mean_partition_size(cpi::CoNCPartitioningInfo)
-    return Int(round(mean([length(cpi.entity_lists[i].all_dof_list) for i in eachindex(cpi.entity_lists)])))
+    return Int(round(mean([length(el[EXTENDED].global_dofs) 
+        for el in cpi.list_of_entity_lists])))
 end
 
 function npartitions(cpi::CoNCPartitioningInfo)

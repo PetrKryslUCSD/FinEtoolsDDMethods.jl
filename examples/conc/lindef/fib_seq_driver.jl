@@ -249,6 +249,7 @@ end # fibers_mesh
 function _execute(filename, kind, ref, Em, num, Ef, nuf,
     Nc, n1, Np, No,
     mesh, boundary_rule, interior_rule, make_femm, itmax, relrestol, peek, visualize)
+    comm = 0
     CTE = 0.0
     magn = 1.0
     
@@ -366,13 +367,13 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     end
     
     t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi)
+    M! = TwoLevelPreConditioner(partition_list, Phi, comm)
     @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
+    x0 = PartitionedVector(Float64, partition_list, comm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list)
+    b = PartitionedVector(Float64, partition_list, comm)
     vec_copyto!(b, F_f)
     (T, stats) = pcg_seq(
         (q, p) -> aop!(q, p), 
@@ -400,7 +401,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
         "iteration_time" => t1 - t0,
     )
     f = (filename == "" ?
-         "fib2-" *
+         "fib-" *
          "$(kind)-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *
@@ -415,7 +416,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     
     if visualize
         f = (filename == "" ?
-         "fib2-" *
+         "fib-" *
          "$(kind)-" *
          "-ref=$(ref)" *
          "-Nc=$(Nc)" *

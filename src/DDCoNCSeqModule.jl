@@ -35,7 +35,7 @@ freedom that partition `j` sends to partition `i`.
 degrees of freedom. The first is analogous to scatter, whereas the second is
 analogous to gather. 
 
-Scatter: owned degrees of freedom are known to be correct, but the partition
+Scatter: owned degrees of freedom are known but the partition
 needs to receive the values of the degrees of freedom that it doesn't own.
 
 Gather: the partition needs to update the values of the degrees of freedom that
@@ -55,7 +55,7 @@ using LinearOperators
 using SparseArrays
 using LinearAlgebra
 import Base: size, eltype, deepcopy
-import LinearAlgebra: mul!, eigen
+import LinearAlgebra: mul!
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
@@ -68,10 +68,15 @@ import ..CGModule: vec_aypx!
 import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 
+# struct CoNCSeqComm{PD<:CoNCPartitionData, T}
+#     partition_list::Vector{PD}
+# end
+
 function make_partitions(cpi, fes, make_matrix, make_interior_load)
-    partition_list  = [CoNCPartitionData(cpi, i-1) for i in 1:npartitions(cpi)]
+    partition_list  = [CoNCPartitionData(cpi, rank) for rank in 0:1:npartitions(cpi)-1]
     for i in eachindex(partition_list)
-        partition_list[i] = CoNCPartitionData(cpi, i-1, fes, make_matrix, make_interior_load)
+        rank = i - 1
+        partition_list[i] = CoNCPartitionData(cpi, rank, fes, make_matrix, make_interior_load)
     end  
     return partition_list
 end
@@ -82,7 +87,7 @@ struct PartitionedVector{PD<:CoNCPartitionData, T<:Number}
     buff_xt::Vector{Vector{T}}
 end
 
-function PartitionedVector(::Type{T}, partition_list::Vector{PD}) where {T, PD<:CoNCPartitionData}
+function PartitionedVector(::Type{T}, partition_list::Vector{PD}, comm) where {T, PD<:CoNCPartitionData}
     buff_ns = [fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs)) for partition in partition_list]
     buff_xt = [fill(zero(T), length(partition.entity_list[EXTENDED].global_dofs)) for partition in partition_list]
     return PartitionedVector(partition_list, buff_ns, buff_xt)
@@ -217,7 +222,7 @@ struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
     buffKiPp::Vector{T}
 end
 
-function TwoLevelPreConditioner(partition_list, Phi)
+function TwoLevelPreConditioner(partition_list, Phi, comm)
     n = size(Phi, 1)
     nr = size(Phi, 2)
     buff_Phis = typeof(Phi)[]
