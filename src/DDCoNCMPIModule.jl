@@ -70,7 +70,7 @@ import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 
 """
-    DDCoNCMPIComm{PD<:CoNCPartitionData}
+    DDCoNCMPIComm{MPIC, EL, PD<:CoNCPartitionData}
 
 Communicator for MPI execution.
 """
@@ -98,8 +98,7 @@ function PartitionedVector(::Type{T}, ddcomm::DDC) where {T, DDC<:DDCoNCMPIComm}
     buff_ns = fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs))
     buff_xt = fill(zero(T), length(partition.entity_list[EXTENDED].global_dofs))
     Np = length(ddcomm.list_of_entity_lists)
-    temp_ns = [fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs))
-                for i in 1:Np]
+    temp_ns = [fill(zero(T), length(buff_ns)) for i in 1:Np]
     return PartitionedVector(ddcomm, buff_ns, buff_xt, temp_ns)
 end
 
@@ -157,7 +156,7 @@ end
 Create a deep copy of a partitioned vector.
 """
 function deepcopy(a::PV) where {PV<:PartitionedVector}
-    return PartitionedVector(a.ddcomm, deepcopy(a.buff_ns), deepcopy(a.buff_xt))
+    return PartitionedVector(a.ddcomm, deepcopy(a.buff_ns), deepcopy(a.buff_xt), deepcopy(a.temp_ns))
 end
 
 # Computes y = x + a y.
@@ -246,7 +245,7 @@ function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     q    
 end
 
-struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm{PD} where {PD<:CoNCPartitionData}, T, IT, FACTOR}
+struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm, T, IT, FACTOR}
     ddcomm::DDC
     n::IT
     buff_Phi::SparseMatrixCSC{T, IT}
@@ -255,19 +254,20 @@ struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm{PD} where {PD<:CoNCPartitionDat
     buffKiPp::Vector{T}
 end
 
-function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm{PD} where {PD<:CoNCPartitionData}}
+function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     partition = ddcomm.partition
     n = size(Phi, 1)
     nr = size(Phi, 2)
     Kr_ff = spzeros(nr, nr)
-    pel = partition.entity_list[NONSHARED]
+    i = ddcomm.partition.rank + 1
+    pel = ddcomm.list_of_entity_lists[i][NONSHARED]
     # First we work with all the degrees of freedom on the partition
     P = Phi[pel.global_dofs, :]
     Kr_ff += (P' * partition.Kns_ff * P)
     # the transformation matrices are now resized to only the own dofs
     ld = pel.local_own_dofs
     buff_Phi = P[ld, :]
-    Kr_ff = Allreduce(Kr_ff, MPI.SUM, ddcomm.comm)
+    Kr_ff = MPI.Allreduce(Kr_ff, MPI.SUM, ddcomm.comm)
     Kr_ff_factor = lu(Kr_ff)
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
     buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
