@@ -74,28 +74,33 @@ import ..CGModule: vec_dot
 
 Communicator for MPI execution.
 """
-struct DDCoNCMPIComm{MPIC, PD<:CoNCPartitionData}
+struct DDCoNCMPIComm{MPIC, EL, PD<:CoNCPartitionData}
     comm::MPIC
+    list_of_entity_lists::EL
     partition::PD
 end
 
 function DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
     rank = MPI.Comm_rank(comm)
     partition = CoNCPartitionData(cpi, rank, fes, make_matrix, make_interior_load)
-    return DDCoNCMPIComm(comm, partition)
+    return DDCoNCMPIComm(comm, cpi.list_of_entity_lists, partition)
 end
 
-struct PartitionedVector{DDC<:DDCoNCMPIComm, PD<:CoNCPartitionData, T<:Number}
+struct PartitionedVector{DDC<:DDCoNCMPIComm, T<:Number}
     ddcomm::DDC
     buff_ns::Vector{T}
     buff_xt::Vector{T}
+    temp_ns::Vector{Vector{T}}
 end
 
-function PartitionedVector(::Type{T}, ddcomm::DDCoNCMPIComm{PD}) where {T, PD<:CoNCPartitionData}
+function PartitionedVector(::Type{T}, ddcomm::DDC) where {T, DDC<:DDCoNCMPIComm}
     partition = ddcomm.partition
     buff_ns = fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs))
-    buff_xt = [fill(zero(T), length(partition.entity_list[EXTENDED].global_dofs)) for partition in partition_list]
-    return PartitionedVector(comm, buff_ns, buff_xt)
+    buff_xt = fill(zero(T), length(partition.entity_list[EXTENDED].global_dofs))
+    Np = length(ddcomm.list_of_entity_lists)
+    temp_ns = [fill(zero(T), length(partition.entity_list[NONSHARED].global_dofs))
+                for i in 1:Np]
+    return PartitionedVector(ddcomm, buff_ns, buff_xt, temp_ns)
 end
 
 """
@@ -104,10 +109,7 @@ end
 Copy a single value into the partitioned vector.
 """
 function vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
-    partition_list = a.comm.partition_list
-    for i in eachindex(partition_list)
-        a.buff_ns[i] .= v   
-    end
+    a.buff_ns .= v   
     a
 end
 
@@ -117,10 +119,8 @@ end
 Copy a global vector into a partitioned vector.
 """
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
-    partition_list = a.comm.partition_list
-    for i in eachindex(partition_list)
-        a.buff_ns[i] .= v[partition_list[i].entity_list[NONSHARED].global_dofs]
-    end
+    partition = a.ddcomm.partition
+    a.buff_ns .= v[partition.entity_list[NONSHARED].global_dofs]
     a
 end
 
@@ -130,13 +130,12 @@ end
 Copy a partitioned vector into a global vector.
 """
 function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
-    partition_list = a.comm.partition_list
-    for i in eachindex(partition_list)
-        el = partition_list[i].entity_list
-        ownd = el[NONSHARED].global_dofs[1:el[NONSHARED].num_own_dofs]
-        lod = el[NONSHARED].global_to_local[ownd]
-        v[ownd] .= a.buff_ns[i][lod]
-    end
+    error("Implementation under review")
+    partition = a.ddcomm.partition
+    el = partition.entity_list
+    ownd = el[NONSHARED].global_dofs[1:el[NONSHARED].num_own_dofs]
+    lod = el[NONSHARED].global_to_local[ownd]
+    v[ownd] .= a.buff_ns[lod]
     v
 end
 
@@ -148,10 +147,7 @@ Copy one partitioned vector to another.
 The contents of `x` is copied into `y`.
 """
 function vec_copyto!(y::PV, x::PV) where {PV<:PartitionedVector}
-    partition_list = y.comm.partition_list
-    for i in eachindex(partition_list)
-        @. y.buff_ns[i] = x.buff_ns[i]
-    end
+    @. y.buff_ns = x.buff_ns
     y
 end
 
@@ -161,102 +157,121 @@ end
 Create a deep copy of a partitioned vector.
 """
 function deepcopy(a::PV) where {PV<:PartitionedVector}
-    return PartitionedVector(a.comm, deepcopy(a.buff_ns), deepcopy(a.buff_xt))
+    return PartitionedVector(a.ddcomm, deepcopy(a.buff_ns), deepcopy(a.buff_xt))
 end
 
 # Computes y = x + a y.
 function vec_aypx!(y::PV, a, x::PV) where {PV<:PartitionedVector}
-    partition_list = y.comm.partition_list
-    for i in eachindex(partition_list)
-        @. y.buff_ns[i] = a * y.buff_ns[i] + x.buff_ns[i]
-    end
+    @. y.buff_ns = a * y.buff_ns + x.buff_ns
     y
 end
 
 # Computes y += a x
 function vec_ypax!(y::PV, a, x::PV) where {PV<:PartitionedVector}
-    partition_list = y.comm.partition_list
-    for i in eachindex(partition_list)
-        @. y.buff_ns[i] = y.buff_ns[i] + a * x.buff_ns[i]
-    end
+    @. y.buff_ns = y.buff_ns + a * x.buff_ns
     y
 end
 
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
-    partition_list = y.comm.partition_list
-    result = zero(eltype(x.buff_ns[1]))
-    for i in eachindex(partition_list)
-        own = 1:partition_list[i].entity_list[NONSHARED].num_own_dofs
-        result += dot(y.buff_ns[i][own], x.buff_ns[i][own])
-    end
-    return result
+    partition = y.ddcomm.partition
+    own = 1:partition.entity_list[NONSHARED].num_own_dofs
+    result = dot(y.buff_ns[own], x.buff_ns[own])
+    return MPI.Allreduce(result, MPI.SUM, y.ddcomm.comm)
 end
 
 function _rhs_update!(p::PV) where {PV<:PartitionedVector}
-    partition_list = p.comm.partition_list
-    for i in eachindex(partition_list)
-        local_receive_dofs = partition_list[i].entity_list[NONSHARED].local_receive_dofs
-        for j in eachindex(local_receive_dofs)
-            if !isempty(local_receive_dofs[j])
-                local_send_dofs = partition_list[j].entity_list[NONSHARED].local_send_dofs
-                p.buff_ns[i][local_receive_dofs[j]] .= p.buff_ns[j][local_send_dofs[i]]
-            end
+    comm = p.ddcomm.comm
+    loel = p.ddcomm.list_of_entity_lists
+    i = p.ddcomm.partition.rank + 1
+    # First I will send to other partitions
+    local_send_dofs = loel[i].entity_list[NONSHARED].local_send_dofs
+    for j in eachindex(local_send_dofs)
+        if !isempty(local_send_dofs[j])
+            req = MPI.Isend(p.buff_ns[local_send_dofs[j]], comm; dest = j)
         end
     end
+    # Next I will receive from other partitions
+    requests = MPI.Request[]
+    local_receive_dofs = loel[i].entity_list[NONSHARED].local_receive_dofs
+    for j in eachindex(local_receive_dofs)
+        if !isempty(local_receive_dofs[j])
+            push!(requests, MPI.Irecv!(p.buff_ns[local_receive_dofs[j]], comm; source = j))
+        end
+    end
+    MPI.Waitall(requests)
 end
 
 function _lhs_update!(q::PV) where {PV<:PartitionedVector}
-    partition_list = q.comm.partition_list
-    for i in eachindex(partition_list)
-        local_send_dofs = partition_list[i].entity_list[NONSHARED].local_send_dofs
-        for j in eachindex(local_send_dofs)
-            if !isempty(local_send_dofs[j])
-                local_receive_dofs = partition_list[j].entity_list[NONSHARED].local_receive_dofs
-                q.buff_ns[i][local_send_dofs[j]] .+= q.buff_ns[j][local_receive_dofs[i]]
-            end
+    comm = q.ddcomm.comm
+    loel = q.ddcomm.list_of_entity_lists
+    i = q.ddcomm.partition.rank + 1
+    # First I will send to other partitions
+    local_receive_dofs = loel[i].entity_list[NONSHARED].local_receive_dofs
+    for j in eachindex(local_receive_dofs)
+        if !isempty(local_receive_dofs[j])
+            req = MPI.Isend(q.buff_ns[local_receive_dofs[j]], comm; dest = j)
         end
     end
+    # Next I will receive from other partitions
+    requests = MPI.Request[]
+    local_send_dofs = loel[i].entity_list[NONSHARED].local_send_dofs
+    for j in eachindex(local_send_dofs)
+        if !isempty(local_send_dofs[j])
+            q.temp_ns[j] .= 0
+            push!(requests, MPI.Irecv!(q.temp_ns[j][local_send_dofs[j]], comm; source = j))
+        end
+    end
+    MPI.Waitall(requests)
+    q.buff_ns .= 0
+    for j in eachindex(q.temp_ns)
+        @. q.buff_ns += q.temp_ns
+    end
+
+    # partition_list = q.comm.partition_list
+    # for i in eachindex(partition_list)
+    #     local_send_dofs = partition_list[i].entity_list[NONSHARED].local_send_dofs
+    #     for j in eachindex(local_send_dofs)
+    #         if !isempty(local_send_dofs[j])
+    #             local_receive_dofs = partition_list[j].entity_list[NONSHARED].local_receive_dofs
+    #             q.buff_ns[i][local_send_dofs[j]] .+= q.buff_ns[j][local_receive_dofs[i]]
+    #         end
+    #     end
+    # end
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
-    partition_list = p.comm.partition_list
     _rhs_update!(p)
-    for i in eachindex(partition_list)
-        q.buff_ns[i] .= partition_list[i].Kns_ff * p.buff_ns[i]
-    end
+    q.buff_ns .= partition.Kns_ff * p.buff_ns
     _lhs_update!(q)
     q    
 end
 
-struct TwoLevelPreConditioner{PD<:CoNCPartitionData, T, IT, FACTOR}
-    partition_list::Vector{PD}
+struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm{PD} where {PD<:CoNCPartitionData}, T, IT, FACTOR}
+    ddcomm::DDC
     n::IT
-    buff_Phis::Vector{SparseMatrixCSC{T, IT}}
+    buff_Phi::SparseMatrixCSC{T, IT}
     Kr_ff_factor::FACTOR
     buffPp::Vector{T}
     buffKiPp::Vector{T}
 end
 
-function TwoLevelPreConditioner(comm::C, Phi) where {C<:DDCoNCMPIComm}
-    partition_list = comm.partition_list
+function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm{PD} where {PD<:CoNCPartitionData}}
+    partition = ddcomm.partition
     n = size(Phi, 1)
     nr = size(Phi, 2)
-    buff_Phis = typeof(Phi)[]
-    sizehint!(buff_Phis, length(partition_list))
     Kr_ff = spzeros(nr, nr)
-    for i in eachindex(partition_list)
-        pel = partition_list[i].entity_list[NONSHARED]
-        # First we work with all the degrees of freedom on the partition
-        P = Phi[pel.global_dofs, :]
-        Kr_ff += (P' * partition_list[i].Kns_ff * P)
-        # the transformation matrices are now resized to only the own dofs
-        ld = pel.local_own_dofs
-        push!(buff_Phis, P[ld, :])
-    end
+    pel = partition.entity_list[NONSHARED]
+    # First we work with all the degrees of freedom on the partition
+    P = Phi[pel.global_dofs, :]
+    Kr_ff += (P' * partition.Kns_ff * P)
+    # the transformation matrices are now resized to only the own dofs
+    ld = pel.local_own_dofs
+    buff_Phi = P[ld, :]
+    Kr_ff = Allreduce(Kr_ff, MPI.SUM, ddcomm.comm)
     Kr_ff_factor = lu(Kr_ff)
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
     buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
-    return TwoLevelPreConditioner(partition_list, n, buff_Phis, Kr_ff_factor, buffPp, buffKiPp)
+    return TwoLevelPreConditioner(ddcomm, n, buff_Phi, Kr_ff_factor, buffPp, buffKiPp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
