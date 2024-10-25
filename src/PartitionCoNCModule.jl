@@ -40,9 +40,6 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ..FinEtoolsDDMethods: allbytes
 using ShellStructureTopo
 
-const NONSHARED = 1
-const EXTENDED = 2
-
 # Node lists are constructed for the non-shared, and then by extending the
 # partitions with the shared nodes. Connected elements are identified.
 function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
@@ -297,7 +294,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
             local_send_dofs,
             global_to_local,
         )
-        push!(list_of_entity_lists, [nonshared, extended])
+        push!(list_of_entity_lists, (nonshared = nonshared, extended = extended))
     end
     return list_of_entity_lists
 end
@@ -334,7 +331,7 @@ function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}) where {T,
 end
 
 function mean_partition_size(cpi::CoNCPartitioningInfo)
-    return Int(round(mean([length(el[EXTENDED].global_dofs) 
+    return Int(round(mean([length(el.extended.global_dofs) 
         for el in cpi.list_of_entity_lists])))
 end
 
@@ -400,7 +397,7 @@ function CoNCPartitionData(cpi::CPI,
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non shared elements
-    el = entity_list[NONSHARED].elements
+    el = entity_list.nonshared.elements
     Kns = make_matrix(subset(fes, el))
     # Trim to just the free degrees of freedom
     Kns_ff = Kns[fr, fr]
@@ -414,21 +411,21 @@ function CoNCPartitionData(cpi::CPI,
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
-    el = setdiff(entity_list[EXTENDED].elements, entity_list[NONSHARED].elements)
+    el = setdiff(entity_list.extended.elements, entity_list.nonshared.elements)
     Kadd = make_matrix(subset(fes, el))
     Kxt_ff = Kns_ff + Kadd[fr, fr]
     Kadd = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
-    d = entity_list[EXTENDED].global_dofs
+    d = entity_list.extended.global_dofs
     Kxt_ff = Kxt_ff[d, d]
-    d = entity_list[NONSHARED].global_dofs
+    d = entity_list.nonshared.global_dofs
     Kns_ff = Kns[d, d]
     Kns = nothing
     return CoNCPartitionData(rank, entity_list, Kns_ff, lu(Kxt_ff), rhs)
 end
 
 function partition_size(cpd::CoNCPartitionData)
-    return length(cpd.entity_list[EXTENDED].global_dofs)
+    return length(cpd.entity_list.extended.global_dofs)
 end
 
 end # module PartitionCoNCModule

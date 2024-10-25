@@ -28,7 +28,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions, NONSHARED, EXTENDED
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
@@ -373,7 +373,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     function pre(q, p)
         q .= Phi * (M!.Kr_ff_factor \ (Phi' * p))
         for partition in partition_list
-            d = partition.entity_list[EXTENDED].global_dofs
+            d = partition.entity_listextended.global_dofs
             q[d] .+= partition.Kxt_ff_factor \ p[d]
         end
         q

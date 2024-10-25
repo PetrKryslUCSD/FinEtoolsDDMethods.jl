@@ -232,20 +232,20 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         b = PartitionedVector(Float64, partition_list)
         vec_copyto!(b, p)
         for i in eachindex(partition_list)
-            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list[NONSHARED].global_dofs]) < 1e-10
+            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list.nonshared.global_dofs]) < 1e-10
         end
         rhs_update!(b)
         for i in eachindex(partition_list)
-            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list[NONSHARED].global_dofs]) < 1e-10
+            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list.nonshared.global_dofs]) < 1e-10
         end
         for i in eachindex(partition_list)
             pie = partition_list[i].entity_list[EXTENDED]
             ld = pie.local_own_dofs
-            @test norm(b.buff_ns[i][ld] - p[partition_list[i].entity_list[NONSHARED].global_dofs[ld]]) < 1e-10
+            @test norm(b.buff_ns[i][ld] - p[partition_list[i].entity_list.nonshared.global_dofs[ld]]) < 1e-10
         end
         rhs_update_xt!(b)
         for i in eachindex(partition_list)
-            @test norm(b.buff_xt[i] - p[partition_list[i].entity_list[EXTENDED].global_dofs]) < 1e-10
+            @test norm(b.buff_xt[i] - p[partition_list[i].entity_listextended.global_dofs]) < 1e-10
         end
     end
 

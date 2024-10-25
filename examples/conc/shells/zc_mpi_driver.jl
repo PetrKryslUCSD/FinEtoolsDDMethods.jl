@@ -16,7 +16,7 @@ NAFEMS REFERENCE SOLUTION
 
 Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 """
-module zc_seq_examples
+module zc_mpi_examples
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -28,7 +28,7 @@ using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_fie
 using FinEtoolsDDMethods
 using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
-using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions, NONSHARED, EXTENDED
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
 using FinEtoolsDDMethods.DDCoNCMPIModule: DDCoNCMPIComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
@@ -161,12 +161,12 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     associategeometry!(femm, geom0)
 
-    @info("Refinement factor: $(ref)")
-    @info("Number of fine grid partitions: $(Np)")
-    @info("Number of overlaps: $(No)")
-    @info("Number of nodes: $(count(fens))")
-    @info("Number of elements: $(count(fes))")
-    @info("Number of free dofs = $(nfreedofs(dchi))")
+    rank == 0 && (@info("Refinement factor: $(ref)"))
+    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
+    rank == 0 && (@info("Number of overlaps: $(No)"))
+    rank == 0 && (@info("Number of nodes: $(count(fens))"))
+    rank == 0 && (@info("Number of elements: $(count(fes))"))
+    rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
 
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
@@ -176,31 +176,31 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])"))
     t2 = time()
-    ddcomm = DDCoNCSeqComm(cpi, fes, make_matrix, nothing)
+    ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, nothing)
     @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
     meanps = mean_partition_size(cpi)
-    @info "Mean fine partition size: $(meanps)"
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info("Mean fine partition size: $(meanps)"))
+    rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))
 
     t1 = time()
-    @info("Number of clusters (requested): $(Nc)")
-    @info("Number of 1D basis functions: $(n1)")
+    rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
+    rank == 0 && (@info("Number of 1D basis functions: $(n1)"))
     nt = n1*(n1+1)/2 
     (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
     Nepc = count(fes) ÷ Nc
     (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
-    @info("Number of elements per cluster: $(Nepc)")
+    rank == 0 && (@info("Number of elements per cluster: $(Nepc)"))
     
     cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
-    @info("Number of clusters (actual): $(Nc)")
+    rank == 0 && (@info("Number of clusters (actual): $(Nc)"))
         
     mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
     Phi = Phi[fr, :]
-    @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
+    rank == 0 && (@info("Generate clusters ($(round(time() - t1, digits=3)) [s])"))
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
@@ -208,7 +208,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
-    @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])"))
 
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)

@@ -40,9 +40,9 @@ Note the folder where the executable is installed.
  mpiexecjl -n 4 --project=. julia schur/heat/Poisson2D_cg_mpi_driver.jl
 ```
 
-On Windows 11, the following would work:
+On Windows 11, in the bash, the following would work:
 ```
-mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
+mpiexecjl -n 2 julia --project=. conc/shells/zc_mpi_driver.jl 
 ```
 
 
