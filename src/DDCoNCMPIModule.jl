@@ -69,6 +69,8 @@ import ..CGModule: vec_aypx!
 import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 
+torank(i) = i - 1
+
 """
     DDCoNCMPIComm{MPIC, EL, PD<:CoNCPartitionData}
 
@@ -96,7 +98,7 @@ end
 function PartitionedVector(::Type{T}, ddcomm::DDC) where {T, DDC<:DDCoNCMPIComm}
     partition = ddcomm.partition
     buff_ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
-    buff_xt = fill(zero(T), length(partition.entity_listextended.global_dofs))
+    buff_xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
     Np = length(ddcomm.list_of_entity_lists)
     temp_ns = [fill(zero(T), length(buff_ns)) for i in 1:Np]
     return PartitionedVector(ddcomm, buff_ns, buff_xt, temp_ns)
@@ -186,7 +188,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     local_send_dofs = loel[i].nonshared.local_send_dofs
     for j in eachindex(local_send_dofs)
         if !isempty(local_send_dofs[j])
-            req = MPI.Isend(p.buff_ns[local_send_dofs[j]], comm; dest = j - 1)
+            req = MPI.Isend(p.buff_ns[local_send_dofs[j]], comm; dest = torank(j))
         end
     end
     # Next I will receive from other partitions
@@ -194,7 +196,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     local_receive_dofs = loel[i].nonshared.local_receive_dofs
     for j in eachindex(local_receive_dofs)
         if !isempty(local_receive_dofs[j])
-            push!(requests, MPI.Irecv!(p.buff_ns[local_receive_dofs[j]], comm; source = j - 1))
+            push!(requests, MPI.Irecv!(p.buff_ns[local_receive_dofs[j]], comm; source = torank(j)))
         end
     end
     MPI.Waitall(requests)
@@ -208,7 +210,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     local_receive_dofs = loel[i].nonshared.local_receive_dofs
     for j in eachindex(local_receive_dofs)
         if !isempty(local_receive_dofs[j])
-            req = MPI.Isend(q.buff_ns[local_receive_dofs[j]], comm; dest = j)
+            req = MPI.Isend(q.buff_ns[local_receive_dofs[j]], comm; dest = torank(j))
         end
     end
     # Next I will receive from other partitions
@@ -217,7 +219,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     for j in eachindex(local_send_dofs)
         if !isempty(local_send_dofs[j])
             q.temp_ns[j] .= 0
-            push!(requests, MPI.Irecv!(q.temp_ns[j][local_send_dofs[j]], comm; source = j))
+            push!(requests, MPI.Irecv!(q.temp_ns[j][local_send_dofs[j]], comm; source = torank(j)))
         end
     end
     MPI.Waitall(requests)
@@ -227,21 +229,11 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             @. q.buff_ns += q.temp_ns[j]
         end
     end
-
-    # partition_list = q.comm.partition_list
-    # for i in eachindex(partition_list)
-    #     local_send_dofs = partition_list[i].entity_list.nonshared.local_send_dofs
-    #     for j in eachindex(local_send_dofs)
-    #         if !isempty(local_send_dofs[j])
-    #             local_receive_dofs = partition_list[j].entity_list.nonshared.local_receive_dofs
-    #             q.buff_ns[i][local_send_dofs[j]] .+= q.buff_ns[j][local_receive_dofs[i]]
-    #         end
-    #     end
-    # end
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     _rhs_update!(p)
+    partition = p.ddcomm.partition
     q.buff_ns .= partition.Kns_ff * p.buff_ns
     _lhs_update!(q)
     q    
@@ -292,7 +284,9 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
-    partition_list = p.comm.partition_list
+    comm = ddcomm.comm
+    partition = ddcomm.partition
+    rank = ddcomm.partition.rank 
     rhs_update_xt!(p)
     pre.buffPp .= zero(eltype(pre.buffPp))
     for i in eachindex(partition_list)
@@ -314,31 +308,63 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
 end
 
 function rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
-    partition_list = p.comm.partition_list
-    for i in eachindex(partition_list)
-        pin = partition_list[i].entity_list[EXTENDED]
-        ld = pin.local_own_dofs
-        p.buff_xt[i] .= 0
-        p.buff_xt[i][ld] .= p.buff_ns[i][ld]
-    end
-    for i in eachindex(partition_list)
-        local_receive_dofs = partition_list[i].entity_listextended.local_receive_dofs
-        for j in eachindex(local_receive_dofs)
-            if !isempty(local_receive_dofs[j])
-                local_send_dofs = partition_list[j].entity_listextended.local_send_dofs
-                p.buff_xt[i][local_receive_dofs[j]] .= p.buff_xt[j][local_send_dofs[i]]
-            end
+    partition = p.ddcomm.partition
+    pie = partition.entity_list.extended
+    ld = pie.local_own_dofs
+    p.buff_xt .= 0
+    p.buff_xt[ld] .= p.buff_ns[ld]
+    # First I will send to other partitions
+    local_send_dofs = loel[i].extended.local_send_dofs
+    for j in eachindex(local_send_dofs)
+        if !isempty(local_send_dofs[j])
+            req = MPI.Isend(p.buff_xt[local_send_dofs[j]], comm; dest = torank(j))
         end
     end
+    # Next I will receive from other partitions
+    requests = MPI.Request[]
+    local_receive_dofs = loel[i].extended.local_receive_dofs
+    for j in eachindex(local_receive_dofs)
+        if !isempty(local_receive_dofs[j])
+            push!(requests, MPI.Irecv!(p.buff_xt[local_receive_dofs[j]], comm; source = torank(j)))
+        end
+    end
+    MPI.Waitall(requests)
 end
 
 function lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
-    partition_list = q.comm.partition_list
+    comm = q.ddcomm.comm
+    loel = q.ddcomm.list_of_entity_lists
+    i = q.ddcomm.partition.rank + 1
+    # First I will send to other partitions
+    local_receive_dofs = loel[i].extended.local_receive_dofs
+    for j in eachindex(local_receive_dofs)
+        if !isempty(local_receive_dofs[j])
+            req = MPI.Isend(q.buff_xt[local_receive_dofs[j]], comm; dest = torank(j))
+        end
+    end
+    # Next I will receive from other partitions
+    requests = MPI.Request[]
+    local_send_dofs = loel[i].nonshared.local_send_dofs
+    for j in eachindex(local_send_dofs)
+        if !isempty(local_send_dofs[j])
+            q.temp_ns[j] .= 0
+            push!(requests, MPI.Irecv!(q.temp_ns[j][local_send_dofs[j]], comm; source = torank(j)))
+        end
+    end
+    MPI.Waitall(requests)
+    q.buff_ns .= 0
+    for j in eachindex(local_send_dofs)
+        if !isempty(local_send_dofs[j])
+            @. q.buff_ns += q.temp_ns[j]
+        end
+    end
+    #=
+    partition = q.ddcomm.partition
     for i in eachindex(partition_list)
-        local_send_dofs = partition_list[i].entity_listextended.local_send_dofs
+        local_send_dofs = partition_list[i].entity_list.extended.local_send_dofs
         for j in eachindex(local_send_dofs)
             if !isempty(local_send_dofs[j])
-                local_receive_dofs = partition_list[j].entity_listextended.local_receive_dofs
+                local_receive_dofs = partition_list[j].entity_list.extended.local_receive_dofs
                 q.buff_xt[i][local_send_dofs[j]] .+= q.buff_xt[j][local_receive_dofs[i]]
             end
         end
@@ -346,6 +372,7 @@ function lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
         ld = qin.local_own_dofs
         q.buff_ns[i][ld] .+= q.buff_xt[i][ld]
     end
+    =#
 end
 
 function rhs(comm::C) where {C<:DDCoNCMPIComm} 
