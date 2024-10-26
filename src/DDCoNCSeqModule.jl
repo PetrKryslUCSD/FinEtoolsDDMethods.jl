@@ -94,6 +94,8 @@ end
 struct _Buffers{T}
     ns::Vector{T}
     xt::Vector{T}
+    onother::Vector{Vector{T}}
+    onself::Vector{Vector{T}}
 end
 
 struct PartitionedVector{DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}, T<:Number}
@@ -102,13 +104,20 @@ struct PartitionedVector{DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}, T
 end
 
 function _make_buffers(::Type{T}, partition_list) where {T}
-    return [
-        _Buffers(
-            fill(zero(T), length(partition.entity_list.nonshared.global_dofs)),
-            fill(zero(T), length(partition.entity_list.extended.global_dofs))
-        )
-        for partition in partition_list
-    ]
+    buffers = _Buffers{T}[]
+    for partition in partition_list
+        ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
+        xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
+        elns = partition.entity_list.nonshared
+        onother = [
+            fill(zero(T), length(elns.ldofs_other[j])) for j in eachindex(elns.ldofs_other)
+        ]
+        onself = [
+            fill(zero(T), length(elns.ldofs_self[j])) for j in eachindex(elns.ldofs_self)
+        ]
+        push!(buffers, _Buffers(ns, xt, onother, onself))
+    end
+    return buffers
 end
 
 function PartitionedVector(::Type{T}, ddcomm::DDC) where {T, DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}}
