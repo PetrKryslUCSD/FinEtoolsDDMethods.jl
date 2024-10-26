@@ -94,8 +94,8 @@ end
 struct _Buffers{T}
     ns::Vector{T}
     xt::Vector{T}
-    onother::Vector{Vector{T}}
-    onself::Vector{Vector{T}}
+    recv::Vector{Vector{T}}
+    send::Vector{Vector{T}}
 end
 
 struct PartitionedVector{DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}, T<:Number}
@@ -109,13 +109,13 @@ function _make_buffers(::Type{T}, partition_list) where {T}
         ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
         xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
         elns = partition.entity_list.nonshared
-        onother = [
+        recv = [
             fill(zero(T), length(elns.ldofs_other[j])) for j in eachindex(elns.ldofs_other)
         ]
-        onself = [
+        send = [
             fill(zero(T), length(elns.ldofs_self[j])) for j in eachindex(elns.ldofs_self)
         ]
-        push!(buffers, _Buffers(ns, xt, onother, onself))
+        push!(buffers, _Buffers(ns, xt, recv, send))
     end
     return buffers
 end
@@ -221,15 +221,48 @@ end
 
 function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     partition_list = p.ddcomm.partition_list
+    # Start all sends
     for self in eachindex(partition_list)
-        ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
-        for other in eachindex(ldofs_other)
-            if !isempty(ldofs_other[other])
-                ldofs_self = partition_list[other].entity_list.nonshared.ldofs_self
-                p.buffers[self].ns[ldofs_other[other]] .= p.buffers[other].ns[ldofs_self[self]]
+        ldofs_self = partition_list[self].entity_list.nonshared.ldofs_self
+        bs = p.buffers[self]
+        for other in eachindex(ldofs_self)
+            if !isempty(ldofs_self[other])
+                bs.send[other] .= bs.ns[ldofs_self[other]]
             end
         end
     end
+    # Start all receives
+    for self in eachindex(partition_list)
+        ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+        bs = p.buffers[self]
+        for other in eachindex(ldofs_other)
+            bo = p.buffers[other]
+            if !isempty(ldofs_other[other])
+                bs.recv[other] .= bo.send[self]
+            end
+        end
+    end
+    # Wait for all receives
+    # Unpack from buffers
+    for self in eachindex(partition_list)
+        ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+        bs = p.buffers[self]
+        for other in eachindex(ldofs_other)
+            if !isempty(ldofs_other[other])
+                bs.ns[ldofs_other[other]] .= bs.recv[other]
+            end
+        end
+    end
+    # original
+    # for self in eachindex(partition_list)
+    #     ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+    #     for other in eachindex(ldofs_other)
+    #         if !isempty(ldofs_other[other])
+    #             ldofs_self = partition_list[other].entity_list.nonshared.ldofs_self
+    #             p.buffers[self].ns[ldofs_other[other]] .= p.buffers[other].ns[ldofs_self[self]]
+    #         end
+    #     end
+    # end
 end
 
 function _lhs_update!(q::PV) where {PV<:PartitionedVector}
