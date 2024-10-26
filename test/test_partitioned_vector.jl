@@ -240,7 +240,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         end
         for i in eachindex(partition_list)
             pie = partition_list[i].entity_list[EXTENDED]
-            ld = pie.local_own_dofs
+            ld = pie.ldofs_own_only
             @test norm(b.buff_ns[i][ld] - p[partition_list[i].entity_list.nonshared.global_dofs[ld]]) < 1e-10
         end
         rhs_update_xt!(b)

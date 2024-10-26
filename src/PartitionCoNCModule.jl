@@ -186,28 +186,18 @@ struct EntityListsContainer{IT<:Integer}
     nodes::Vector{IT}
     # All elements that constitute the partition.
     elements::Vector{IT}
-    # Nodes for which dofs are received from other partitions.
-    receive_nodes::Vector{Vector{IT}}
-    # Nodes for which dofs are sent to other partitions.
-    send_nodes::Vector{Vector{IT}}
     # All global dofs for the partition.
     global_dofs::Vector{IT}
     # Number of own dofs.
     num_own_dofs::IT
-    # Global own dofs.
-    global_own_dofs::Vector{IT}
     # Local own dofs.
-    local_own_dofs::Vector{IT}
-    # Global dofs received from other partitions.
-    global_receive_dofs::Vector{Vector{IT}}
-    # Global dofs sent to other partitions.
-    global_send_dofs::Vector{Vector{IT}}
+    ldofs_own_only::Vector{IT}
     # Local numbers of dofs received from other partitions.
-    local_receive_dofs::Vector{Vector{IT}}
+    ldofs_other::Vector{Vector{IT}}
     # Local numbers of dofs sent to other partitions.
-    local_send_dofs::Vector{Vector{IT}}
+    ldofs_self::Vector{Vector{IT}}
     # Mapping from global to local dofs.
-    global_to_local::Vector{IT}
+    dof_glob2loc::Vector{IT}
 end
 
 function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
@@ -226,73 +216,63 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
         # nonshared
         nodes = node_lists[i].nonshared_nodes
         elements = element_lists[i].nonshared_elements
-        receive_nodes = nonshared_comm.receive_nodes[i]
-        send_nodes = nonshared_comm.send_nodes[i]
+        receive_nodes_i = nonshared_comm.receive_nodes[i]
+        send_nodes_i = nonshared_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
-        global_own_dofs = deepcopy(global_dofs)
-        num_own_dofs = length(global_own_dofs)
-        global_receive_dofs = [_dof_list(nonshared_comm.receive_nodes[i][j], dofnums, fr)
-                        for j in eachindex(nonshared_comm.receive_nodes[i])]
-        for j in eachindex(global_receive_dofs)
-            global_dofs = vcat(global_dofs, global_receive_dofs[j])
+        gdofs_own = deepcopy(global_dofs)
+        num_own_dofs = length(gdofs_own)
+        gdofs_other = [_dof_list(receive_nodes_i[j], dofnums, fr)
+                        for j in eachindex(receive_nodes_i)]
+        for j in eachindex(gdofs_other)
+            global_dofs = vcat(global_dofs, gdofs_other[j])
         end
-        global_to_local = fill(0, prod(size(dofnums)))
+        dof_glob2loc = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
-            global_to_local[global_dofs[j]] = j
+            dof_glob2loc[global_dofs[j]] = j
         end
-        local_own_dofs = global_to_local[global_own_dofs]
-        global_send_dofs = [_dof_list(nonshared_comm.send_nodes[i][j], dofnums, fr)
-                     for j in eachindex(nonshared_comm.send_nodes[i])]
-        local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
-        local_send_dofs = [global_to_local[global_send_dofs[j]] for j in eachindex(global_send_dofs)]
+        ldofs_own_only = dof_glob2loc[gdofs_own]
+        gdofs_self = [_dof_list(send_nodes_i[j], dofnums, fr)
+                     for j in eachindex(send_nodes_i)]
+        ldofs_other = [dof_glob2loc[gdofs_other[j]] for j in eachindex(gdofs_other)]
+        ldofs_self = [dof_glob2loc[gdofs_self[j]] for j in eachindex(gdofs_self)]
         nonshared = EntityListsContainer(
             nodes,
             elements,
-            receive_nodes,
-            send_nodes,
             global_dofs,
             num_own_dofs,
-            global_own_dofs,
-            local_own_dofs,
-            global_receive_dofs,
-            global_send_dofs,
-            local_receive_dofs,
-            local_send_dofs,
-            global_to_local,
+            ldofs_own_only,
+            ldofs_other,
+            ldofs_self,
+            dof_glob2loc,
         )
         # extended
         nodes = node_lists[i].extended_nodes
         elements = element_lists[i].extended_elements
-        receive_nodes = extended_comm.receive_nodes[i]
-        send_nodes = extended_comm.send_nodes[i]
+        receive_nodes_i = extended_comm.receive_nodes[i]
+        send_nodes_i = extended_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
         num_own_dofs = nonshared.num_own_dofs # the partitions own the same nodes
-        global_own_dofs = deepcopy(global_dofs[1:num_own_dofs])
-        global_receive_dofs = [_dof_list(extended_comm.receive_nodes[i][j], dofnums, fr)
-                        for j in eachindex(extended_comm.receive_nodes[i])]
-        global_to_local = fill(0, prod(size(dofnums)))
+        gdofs_own = deepcopy(global_dofs[1:num_own_dofs])
+        dof_glob2loc = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
-            global_to_local[global_dofs[j]] = j
+            dof_glob2loc[global_dofs[j]] = j
         end
-        local_own_dofs = global_to_local[global_own_dofs]
-        global_send_dofs = [_dof_list(extended_comm.send_nodes[i][j], dofnums, fr)
-                            for j in eachindex(extended_comm.send_nodes[i])]
-        local_receive_dofs = [global_to_local[global_receive_dofs[j]] for j in eachindex(global_receive_dofs)]
-        local_send_dofs = [global_to_local[global_send_dofs[j]] for j in eachindex(global_send_dofs)]
+        ldofs_own_only = dof_glob2loc[gdofs_own]
+        gdofs_other = [_dof_list(receive_nodes_i[j], dofnums, fr)
+                        for j in eachindex(receive_nodes_i)]
+        gdofs_self = [_dof_list(send_nodes_i[j], dofnums, fr)
+                            for j in eachindex(send_nodes_i)]
+        ldofs_other = [dof_glob2loc[gdofs_other[j]] for j in eachindex(gdofs_other)]
+        ldofs_self = [dof_glob2loc[gdofs_self[j]] for j in eachindex(gdofs_self)]
         extended = EntityListsContainer(
             nodes,
             elements,
-            receive_nodes,
-            send_nodes,
             global_dofs,
             num_own_dofs,
-            global_own_dofs,
-            local_own_dofs,
-            global_receive_dofs,
-            global_send_dofs,
-            local_receive_dofs,
-            local_send_dofs,
-            global_to_local,
+            ldofs_own_only,
+            ldofs_other,
+            ldofs_self,
+            dof_glob2loc,
         )
         push!(list_of_entity_lists, (nonshared = nonshared, extended = extended))
     end
