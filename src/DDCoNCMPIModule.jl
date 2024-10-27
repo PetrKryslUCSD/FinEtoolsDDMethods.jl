@@ -54,8 +54,6 @@ using Metis
 using LinearOperators
 using SparseArrays
 using LinearAlgebra
-import Base: size, eltype
-import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
@@ -88,20 +86,41 @@ function DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
     return DDCoNCMPIComm(comm, cpi.list_of_entity_lists, partition)
 end
 
+struct _Buffers{T}
+    ns::Vector{T}
+    xt::Vector{T}
+    recv::Vector{Vector{T}}
+    send::Vector{Vector{T}}
+end
+
 struct PartitionedVector{DDC<:DDCoNCMPIComm, T<:Number}
     ddcomm::DDC
-    buff_ns::Vector{T}
-    buff_xt::Vector{T}
-    temp_ns::Vector{Vector{T}}
+    buffers::_Buffers{T}
+end
+
+function _make_buffers(::Type{T}, partition) where {T}
+    ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
+    xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
+    elns = partition.entity_list.nonshared
+    elxt = partition.entity_list.extended
+    lengths = [
+        max(length(elns.ldofs_other[j]), length(elns.ldofs_self[j]),
+            length(elxt.ldofs_other[j]), length(elxt.ldofs_self[j]))
+        for j in eachindex(elns.ldofs_other)
+    ]
+    recv = [
+        fill(zero(T), lengths[j]) for j in eachindex(elns.ldofs_other)
+    ]
+    send = [
+        fill(zero(T), lengths[j]) for j in eachindex(elns.ldofs_self)
+    ]
+    return _Buffers(ns, xt, recv, send)
 end
 
 function PartitionedVector(::Type{T}, ddcomm::DDC) where {T, DDC<:DDCoNCMPIComm}
     partition = ddcomm.partition
-    buff_ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
-    buff_xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
-    Np = length(ddcomm.list_of_entity_lists)
-    temp_ns = [fill(zero(T), length(buff_ns)) for i in 1:Np]
-    return PartitionedVector(ddcomm, buff_ns, buff_xt, temp_ns)
+    buffers = _make_buffers(T, partition)
+    return PartitionedVector(ddcomm, buffers) 
 end
 
 """
@@ -110,7 +129,7 @@ end
 Copy a single value into the partitioned vector.
 """
 function vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
-    a.buff_ns .= v   
+    a.buffers.ns .= v   
     a
 end
 
@@ -121,7 +140,7 @@ Copy a global vector into a partitioned vector.
 """
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     partition = a.ddcomm.partition
-    a.buff_ns .= v[partition.entity_list.nonshared.global_dofs]
+    a.buffers.ns .= v[partition.entity_list.nonshared.global_dofs]
     a
 end
 
@@ -136,7 +155,7 @@ function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
     el = partition.entity_list
     ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
     lod = el.nonshared.dof_glob2loc[ownd]
-    v[ownd] .= a.buff_ns[lod]
+    v[ownd] .= a.buffers.ns[lod]
     v
 end
 
@@ -148,7 +167,7 @@ Copy one partitioned vector to another.
 The contents of `x` is copied into `y`.
 """
 function vec_copyto!(y::PV, x::PV) where {PV<:PartitionedVector}
-    @. y.buff_ns = x.buff_ns
+    @. y.buffers.ns = x.buffers.ns
     y
 end
 
@@ -158,25 +177,25 @@ end
 Create a deep copy of a partitioned vector.
 """
 function deepcopy(a::PV) where {PV<:PartitionedVector}
-    return PartitionedVector(a.ddcomm, deepcopy(a.buff_ns), deepcopy(a.buff_xt), deepcopy(a.temp_ns))
+    return PartitionedVector(a.ddcomm, deepcopy(a.buffers))
 end
 
 # Computes y = x + a y.
 function vec_aypx!(y::PV, a, x::PV) where {PV<:PartitionedVector}
-    @. y.buff_ns = a * y.buff_ns + x.buff_ns
+    @. y.buffers.ns = a * y.buffers.ns + x.buffers.ns
     y
 end
 
 # Computes y += a x
 function vec_ypax!(y::PV, a, x::PV) where {PV<:PartitionedVector}
-    @. y.buff_ns = y.buff_ns + a * x.buff_ns
+    @. y.buffers.ns = y.buffers.ns + a * x.buffers.ns
     y
 end
 
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     partition = y.ddcomm.partition
     own = 1:partition.entity_list.nonshared.num_own_dofs
-    result = dot(y.buff_ns[own], x.buff_ns[own])
+    result = dot(y.buffers.ns[own], x.buffers.ns[own])
     return MPI.Allreduce(result, MPI.SUM, y.ddcomm.comm)
 end
 
