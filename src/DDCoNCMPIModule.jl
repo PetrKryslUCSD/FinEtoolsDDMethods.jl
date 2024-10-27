@@ -324,7 +324,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     ld = partition.entity_list.nonshared.ldofs_own_only
     pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
     # Communicate
-    pre.buffPp = MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
+    pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
     # Solve the reduced problem
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     # Expand by the transformation 
@@ -391,7 +391,6 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     # Start all receives
     requests = MPI.Request[]
     ldofs_self = partition.entity_list.extended.ldofs_self
-    bs = p.buffers
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
