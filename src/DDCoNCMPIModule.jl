@@ -322,7 +322,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     # Narrow by the transformation 
     partition = p.ddcomm.partition
     ld = partition.entity_list.nonshared.ldofs_own_only
-    pre.buffPp .= pre.buff_Phis[i]' * p.buff_ns[i][ld]
+    pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
     # Communicate
     pre.buffPp = MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
     # Solve the reduced problem
