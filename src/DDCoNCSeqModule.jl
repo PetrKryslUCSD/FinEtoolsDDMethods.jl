@@ -369,19 +369,19 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     partition_list = p.ddcomm.partition_list
     _rhs_update_xt!(p)
     pre.buffPp .= zero(eltype(pre.buffPp))
-    for i in eachindex(partition_list)
-        ld = partition_list[i].entity_list.nonshared.ldofs_own_only
-        pre.buffPp .+= pre.buff_Phis[i]' * p.buffers[i].ns[ld]
+    for self in eachindex(partition_list)
+        ld = partition_list[self].entity_list.nonshared.ldofs_own_only
+        pre.buffPp .+= pre.buff_Phis[self]' * p.buffers[self].ns[ld]
     end
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
-    for i in eachindex(partition_list)
-        q.buffers[i].ns .= 0
-        ld = partition_list[i].entity_list.nonshared.ldofs_own_only
-        q.buffers[i].ns[ld] .= pre.buff_Phis[i] * pre.buffKiPp
+    for self in eachindex(partition_list)
+        q.buffers[self].ns .= 0
+        ld = partition_list[self].entity_list.nonshared.ldofs_own_only
+        q.buffers[self].ns[ld] .= pre.buff_Phis[self] * pre.buffKiPp
     end
     _lhs_update!(q)
-    for i in eachindex(partition_list)
-        q.buffers[i].xt .= partition_list[i].Kxt_ff_factor \ p.buffers[i].xt
+    for self in eachindex(partition_list)
+        q.buffers[self].xt .= partition_list[self].Kxt_ff_factor \ p.buffers[self].xt
     end
     _lhs_update_xt!(q)
     q
