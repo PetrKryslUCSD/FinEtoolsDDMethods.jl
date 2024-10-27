@@ -383,7 +383,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     for i in eachindex(partition_list)
         q.buffers[i].xt .= partition_list[i].Kxt_ff_factor \ p.buffers[i].xt
     end
-    lhs_update_xt!(q)
+    _lhs_update_xt!(q)
     q
 end
 
@@ -443,20 +443,58 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     # end
 end
 
-function lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
+function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     partition_list = q.ddcomm.partition_list
+    # Start all sends
     for self in eachindex(partition_list)
-        ldofs_self = partition_list[self].entity_list.extended.ldofs_self
-        for other in eachindex(ldofs_self)
-            if !isempty(ldofs_self[other])
-                ldofs_other = partition_list[other].entity_list.extended.ldofs_other
-                q.buffers[self].xt[ldofs_self[other]] .+= q.buffers[other].xt[ldofs_other[self]]
+        ldofs_other = partition_list[self].entity_list.extended.ldofs_other
+        bs = q.buffers[self]
+        for other in eachindex(ldofs_other)
+            if !isempty(ldofs_other[other])
+                n = length(ldofs_other[other])
+                bs.send[other][1:n] .= bs.xt[ldofs_other[other]]
             end
         end
-        qin = partition_list[self].entity_list.nonshared
-        ld = qin.ldofs_own_only
+    end
+    # Start all receives
+    for self in eachindex(partition_list)
+        ldofs_self = partition_list[self].entity_list.extended.ldofs_self
+        bs = q.buffers[self]
+        for other in eachindex(ldofs_self)
+            bo = q.buffers[other]
+            if !isempty(ldofs_self[other])
+                n = length(ldofs_self[other])
+                bs.recv[other][1:n] .= bo.send[self][1:n]
+            end
+        end
+    end
+    # Wait for all receives
+    # Unpack from buffers
+    for self in eachindex(partition_list)
+        ldofs_self = partition_list[self].entity_list.extended.ldofs_self
+        bs = q.buffers[self]
+        for other in eachindex(ldofs_self)
+            if !isempty(ldofs_self[other])
+                n = length(ldofs_self[other])
+                bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
+            end
+        end
+        ld = partition_list[self].entity_list.nonshared.ldofs_own_only
         q.buffers[self].ns[ld] .+= q.buffers[self].xt[ld]
     end
+    # Original _lhs_update_xt!
+    # for self in eachindex(partition_list)
+    #     ldofs_self = partition_list[self].entity_list.extended.ldofs_self
+    #     for other in eachindex(ldofs_self)
+    #         if !isempty(ldofs_self[other])
+    #             ldofs_other = partition_list[other].entity_list.extended.ldofs_other
+    #             q.buffers[self].xt[ldofs_self[other]] .+= q.buffers[other].xt[ldofs_other[self]]
+    #         end
+    #     end
+    #     qin = partition_list[self].entity_list.nonshared
+    #     ld = qin.ldofs_own_only
+    #     q.buffers[self].ns[ld] .+= q.buffers[self].xt[ld]
+    # end
 end
 
 function rhs(ddcomm::DDC) where {DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}}
