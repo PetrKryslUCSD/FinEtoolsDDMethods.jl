@@ -153,14 +153,14 @@ end
 Copy a partitioned vector into a global vector.
 """
 function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
-    
+    error("Not implemented")
     v
 end
 
 """
-    vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
+    vec_collect(a::PV) where {PV<:PartitionedVector}
 
-Copy a partitioned vector into a global vector.
+Collect a partitioned vector into a global vector.
 """
 function vec_collect(a::PV) where {PV<:PartitionedVector}
     comm = a.ddcomm.comm
@@ -169,12 +169,14 @@ function vec_collect(a::PV) where {PV<:PartitionedVector}
     loel = a.ddcomm.list_of_entity_lists
     gdim = a.ddcomm.gdim
     v = zeros(gdim)
-    if rank == 0
-        v .= 0
-    else
+    if rank > 0
         MPI.send(a.buffers.ns, comm; dest=0)
     end
     if rank == 0
+        el = loel[1]
+        ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
+        lod = el.nonshared.dof_glob2loc[ownd]
+        v[ownd] .= a.buffers.ns[lod]
         for r in 1:Np-1
             ns = MPI.recv(comm; source=r)
             i = r + 1

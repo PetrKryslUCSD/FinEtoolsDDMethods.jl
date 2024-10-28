@@ -75,11 +75,13 @@ Communicator for sequential execution.
 """
 struct DDCoNCSeqComm{PD<:CoNCPartitionData}
     partition_list::Vector{PD}
+    gdim::Int
 end
 
 function DDCoNCSeqComm(comm, cpi, fes, make_matrix, make_interior_load)
     partition_list = _make_partitions(cpi, fes, make_matrix, make_interior_load)
-    return DDCoNCSeqComm(partition_list)
+    gdim = nfreedofs(cpi.u)
+    return DDCoNCSeqComm(partition_list, gdim)
 end
 
 function _make_partitions(cpi, fes, make_matrix, make_interior_load)
@@ -171,6 +173,16 @@ function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
         v[ownd] .= a.buffers[i].ns[lod]
     end
     v
+end
+
+"""
+    vec_collect(a::PV) where {PV<:PartitionedVector}
+
+Collect the partitioned vector into a global vector.
+"""
+function vec_collect(a::PV) where {PV<:PartitionedVector}
+    v = zeros(eltype(a.buffers[1].ns), a.ddcomm.gdim)
+    return vec_copyto!(v, a)
 end
 
 """
