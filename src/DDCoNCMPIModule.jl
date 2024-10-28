@@ -66,6 +66,7 @@ import ..CGModule: vec_copyto!
 import ..CGModule: vec_aypx!
 import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
+import Base: deepcopy
 
 torank(i) = i - 1
 
@@ -78,12 +79,14 @@ struct DDCoNCMPIComm{MPIC, EL, PD<:CoNCPartitionData}
     comm::MPIC
     list_of_entity_lists::EL
     partition::PD
+    gdim::Int
 end
 
 function DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
     rank = MPI.Comm_rank(comm)
     partition = CoNCPartitionData(cpi, rank, fes, make_matrix, make_interior_load)
-    return DDCoNCMPIComm(comm, cpi.list_of_entity_lists, partition)
+    gdim = nfreedofs(cpi.u)
+    return DDCoNCMPIComm(comm, cpi.list_of_entity_lists, partition, gdim)
 end
 
 struct _Buffers{T}
@@ -150,13 +153,38 @@ end
 Copy a partitioned vector into a global vector.
 """
 function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
-    error("Implementation under review")
-    partition = a.ddcomm.partition
-    el = partition.entity_list
-    ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
-    lod = el.nonshared.dof_glob2loc[ownd]
-    v[ownd] .= a.buffers.ns[lod]
+    
     v
+end
+
+"""
+    vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
+
+Copy a partitioned vector into a global vector.
+"""
+function vec_collect(a::PV) where {PV<:PartitionedVector}
+    comm = a.ddcomm.comm
+    Np = MPI.Comm_size(comm)
+    rank = MPI.Comm_rank(comm)
+    loel = a.ddcomm.list_of_entity_lists
+    gdim = a.ddcomm.gdim
+    v = zeros(gdim)
+    if rank == 0
+        v .= 0
+    else
+        MPI.send(a.buffers.ns, comm; dest=0)
+    end
+    if rank == 0
+        for r in 1:Np-1
+            ns = MPI.recv(comm; source=r)
+            i = r + 1
+            el = loel[i]
+            ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
+            lod = el.nonshared.dof_glob2loc[ownd]
+            v[ownd] .= ns[lod]
+        end
+    end
+    return MPI.bcast(v, comm; root=0)
 end
 
 """
@@ -269,7 +297,7 @@ function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     _rhs_update!(p)
     partition = p.ddcomm.partition
     q.buffers.ns .= partition.Kns_ff * p.buffers.ns
-    _lhs_update!(q)
+    _lhs_update!(q)    
     q    
 end
 
@@ -410,12 +438,23 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     bs.ns[ld] .+= bs.xt[ld]
 end
 
-function rhs(comm::C) where {C<:DDCoNCMPIComm} 
-    rhs = deepcopy(comm.partition_list[1].rhs)
-    rhs .= 0
-    for i in eachindex(comm.partition_list)
-        rhs .+= comm.partition_list[i].rhs
-    end  
+function rhs(ddcomm::DDC) where {DDC<:DDCoNCMPIComm} 
+    comm = ddcomm.comm
+    partition = ddcomm.partition
+    rank = partition.rank
+    rhss = MPI.gather(partition.rhs, comm; root=0)
+    if rank == 0
+        rhs = deepcopy(rhss[1])
+        for r in rhss
+            rhs += r
+        end
+        for i in 1:MPI.Comm_size(comm)-1
+            MPI.send(rhs, comm; dest=i)
+        end
+    end
+    if rank > 0
+        rhs = MPI.recv(comm; source=0)
+    end
     return rhs
 end
 
