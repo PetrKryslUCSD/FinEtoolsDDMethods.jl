@@ -444,7 +444,7 @@ function rhs(ddcomm::DDC) where {DDC<:DDCoNCMPIComm}
     rank = partition.rank
     rhss = MPI.gather(partition.rhs, comm; root=0)
     if rank == 0
-        rhs = deepcopy(rhss[1])
+        rhs = zeros(eltype(rhss[1]), length(rhss[1]))
         for r in rhss
             rhs += r
         end
