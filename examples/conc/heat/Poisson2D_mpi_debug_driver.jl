@@ -155,8 +155,8 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
-        (M!)=(q, p) -> vec_copyto!(q, p), 
-        # (M!)=(q, p) -> M!(q, p),
+        # (M!)=(q, p) -> vec_copyto!(q, p), 
+        (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED

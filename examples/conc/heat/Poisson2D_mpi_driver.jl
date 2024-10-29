@@ -130,7 +130,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     end
     
     t1 = time()
-    @show F_f = rhs(ddcomm)
+    F_f = rhs(ddcomm)
 
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
@@ -145,6 +145,10 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     vec_copyto!(b, F_f)
     bc = vec_collect(b)
     @show norm(bc - F_f)
+    
+    aop!(x0, b)
+    @show vec_collect(x0) 
+
     (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
