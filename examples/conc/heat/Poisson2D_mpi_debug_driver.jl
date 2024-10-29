@@ -139,14 +139,15 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
-    xc = vec_collect(x0)
+    # xc = vec_collect(x0)
     # @show norm(xc)
     b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    bc = vec_collect(b)
+    # @show bc = vec_collect(b)
     # @show norm(bc - F_f)
     
     # aop!(x0, b)
+    # @show(vec_collect(x0) )
     # MPI.Finalize()
     # return
     # rank == 0 && display(vec_collect(x0))
@@ -154,7 +155,8 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
-        (M!)=(q, p) -> M!(q, p),
+        (M!)=(q, p) -> vec_copyto!(q, p), 
+        # (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED

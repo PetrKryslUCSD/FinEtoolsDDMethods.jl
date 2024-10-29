@@ -163,7 +163,8 @@ end
 
 Collect a partitioned vector into a global vector.
 """
-function vec_collect(a::PV) where {PV<:PartitionedVector}
+function vec_collect(inp::PV) where {PV<:PartitionedVector}
+    a = deepcopy(inp)
     comm = a.ddcomm.comm
     Np = MPI.Comm_size(comm)
     rank = MPI.Comm_rank(comm)
@@ -242,6 +243,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
             n = length(ldofs_self[other])
             bs.send[other][1:n] .= bs.ns[ldofs_self[other]]
             push!(requests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
+            # println("rhs $(partition.rank): To $(torank(other)), $(bs.send[other][1:n])")
         end
     end
     MPI.Waitall(requests)
@@ -256,12 +258,17 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     end
     # Wait for all receives, unpack. Option: # MPI.Waitall(requests) + unpack
     MPI.Waitall(requests)
-    for other in eachindex(ldofs_self)
-        if !isempty(ldofs_self[other])
-            n = length(ldofs_self[other])
-            bs.ns[ldofs_self[other]] .= bs.recv[other][1:n]
+    # println("$(partition.rank): before bs ns = $(bs.ns)")
+    ldofs_other = partition.entity_list.nonshared.ldofs_other
+    for other in eachindex(ldofs_other)
+        if !isempty(ldofs_other[other])
+            n = length(ldofs_other[other])
+            bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
+            # println("ldofs_other[other]=$(ldofs_other[other])")
+            # println("rhs $(partition.rank): From $(torank(other)), $(bs.recv[other][1:n])")
         end
     end
+    # println("$(partition.rank): after bs ns = $(bs.ns)")
     # while true
     #     other = MPI.Waitany(requests)
     #     if other === nothing
@@ -284,6 +291,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             n = length(ldofs_other[other])
             bs.send[other][1:n] .= bs.ns[ldofs_other[other]]
             push!(requests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
+            # println("lhs $(partition.rank): To $(torank(other)), $(bs.send[other][1:n])")
         end
     end
     MPI.Waitall(requests)
@@ -302,6 +310,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
             bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
+            # println("lhs $(partition.rank): From $(torank(other)), $(bs.recv[other][1:n])")
         end
     end
     # while true
@@ -321,8 +330,11 @@ function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     # @show(vec_collect(p))
     partition = p.ddcomm.partition
     q.buffers.ns .= partition.Kns_ff * p.buffers.ns
+    # println("$(partition.rank): p ns = $(p.buffers.ns)")
+    # println("$(partition.rank): q ns = $(q.buffers.ns)")
     _lhs_update!(q)  
     # @show(vec_collect(q))
+    sleep(1)
     q    
 end
 
@@ -371,6 +383,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
+    vec_copyto!(q, 0.0)
     _rhs_update_xt!(p)
     # Narrow by the transformation 
     partition = p.ddcomm.partition
@@ -378,6 +391,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
     # Communicate
     pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
+    @show pre.buffPp
     # Solve the reduced problem
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     # Expand by the transformation 

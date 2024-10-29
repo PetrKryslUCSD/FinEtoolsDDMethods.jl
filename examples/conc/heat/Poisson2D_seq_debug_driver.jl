@@ -127,13 +127,14 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     # @show norm(bc - F_f)
     
     # aop!(x0, b)
-    # # @show(vec_collect(x0) )
+    # @show(vec_collect(x0) )
     # return
 
     (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
-        (M!)=(q, p) -> M!(q, p),
+        (M!)=(q, p) -> vec_copyto!(q, p), 
+        # (M!)=(q, p) -> M!(q, p),
         peeksolution=peeksolution,
         itmax=itmax, 
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED

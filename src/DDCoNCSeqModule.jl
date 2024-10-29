@@ -249,6 +249,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
                 bs.send[other][1:n] .= bs.ns[ldofs_self[other]]
+                # println("rhs $(partition_list[self].rank): To $(torank(other)), $(bs.send[other][1:n])")
             end
         end
     end
@@ -269,12 +270,16 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     for self in eachindex(partition_list)
         ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
         bs = p.buffers[self]
+        # println("$(partition_list[self].rank): before bs ns = $(bs.ns)")
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
                 bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
+                # println("ldofs_other[other]=$(ldofs_other[other])")
+                # println("rhs $(partition_list[self].rank): From $(torank(other)), $(bs.recv[other][1:n])")
             end
         end
+        # println("$(partition_list[self].rank): after bs ns = $(bs.ns)")
     end
     # original _rhs_update!
     # for self in eachindex(partition_list)
@@ -298,6 +303,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
                 bs.send[other][1:n] .= bs.ns[ldofs_other[other]]
+                # println("lhs $(partition_list[self].rank): To $(torank(other)), $(bs.send[other][1:n])")
             end
         end
     end
@@ -324,6 +330,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
                 bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
+                # println("lhs $(partition_list[self].rank): From $(torank(other)), $(bs.recv[other][1:n])")
             end
         end
     end
@@ -343,10 +350,15 @@ end
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     partition_list = p.ddcomm.partition_list
     _rhs_update!(p)
+    # @show(vec_collect(p))
     for i in eachindex(partition_list)
         q.buffers[i].ns .= partition_list[i].Kns_ff * p.buffers[i].ns
+        # println("$(i-1): p ns = $(p.buffers[i].ns)")
+        # println("$(i-1): q ns = $(q.buffers[i].ns)")
     end
     _lhs_update!(q)
+    # @show(vec_collect(q))
+    sleep(1)
     q    
 end
 
@@ -389,6 +401,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
         ld = partition_list[self].entity_list.nonshared.ldofs_own_only
         pre.buffPp .+= pre.buff_Phis[self]' * p.buffers[self].ns[ld]
     end
+    @show pre.buffPp
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     for self in eachindex(partition_list)
         q.buffers[self].ns .= 0
