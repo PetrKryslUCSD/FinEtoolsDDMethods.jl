@@ -68,6 +68,8 @@ import ..CGModule: vec_aypx!
 import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 
+torank(i) = i - 1
+
 """
     DDCoNCSeqComm{PD<:CoNCPartitionData}
 
@@ -300,6 +302,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         end
     end
     # Start all receives
+    requests = []
     for self in eachindex(partition_list)
         ldofs_self = partition_list[self].entity_list.nonshared.ldofs_self
         bs = q.buffers[self]
@@ -308,6 +311,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
                 bs.recv[other][1:n] .= bo.send[self][1:n]
+                push!(requests, 1)
             end
         end
     end

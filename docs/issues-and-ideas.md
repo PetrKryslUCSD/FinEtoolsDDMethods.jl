@@ -487,4 +487,6 @@ The vector z could then also be held only locally.
 -- How should the global solver be structured to avoid all-reduce?
   Perhaps if I cannot avoid it, it might be overlapped with computation?
 
--- I think I need to allow for rank to be zero-based.
+-- I think I need to allow for rank to be zero-based. Done.
+
+"terminal.integrated.defaultProfile.windows": "Git Bash"
