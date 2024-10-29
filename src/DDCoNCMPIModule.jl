@@ -379,7 +379,6 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
-    vec_copyto!(q, 0.0)
     _rhs_update_xt!(p)
     # Narrow by the transformation 
     partition = p.ddcomm.partition
