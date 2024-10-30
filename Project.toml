@@ -1,7 +1,7 @@
 name = "FinEtoolsDDMethods"
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
 authors = ["Petr Krysl <pkrysl@ucsd.edu>"]
-version = "0.6.6"
+version = "0.7.0"
 
 [deps]
 CoNCMOR = "3a989f29-cff0-4f1c-87be-5dcdd41bd240"
