@@ -360,6 +360,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     # partitions.
     ks = MPI.gather(Kr_ff, comm; root=0)
     if rank == 0
+        Kr_ff = spzeros(nr, nr)
         for k in ks
             Kr_ff += k
         end
@@ -379,9 +380,9 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
+    partition = p.ddcomm.partition
     _rhs_update_xt!(p)
     # Narrow by the transformation 
-    partition = p.ddcomm.partition
     ld = partition.entity_list.nonshared.ldofs_own_only
     pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
     # Communicate
