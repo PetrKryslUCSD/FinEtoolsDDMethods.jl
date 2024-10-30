@@ -245,9 +245,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
             push!(requests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
         end
     end
-    MPI.Waitall(requests)
     # Start all receives
-    requests = MPI.Request[]
     ldofs_other = partition.entity_list.nonshared.ldofs_other
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
@@ -290,9 +288,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             # println("lhs $(partition.rank): To $(torank(other)), $(bs.send[other][1:n])")
         end
     end
-    MPI.Waitall(requests)
     # Start all receives
-    requests = MPI.Request[]
     ldofs_self = partition.entity_list.nonshared.ldofs_self
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
@@ -418,9 +414,7 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
             push!(requests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
         end
     end
-    MPI.Waitall(requests)
     # Start all receives
-    requests = MPI.Request[]
     ldofs_other = partition.entity_list.extended.ldofs_other
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
@@ -460,9 +454,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
             push!(requests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
         end
     end
-    MPI.Waitall(requests)
     # Start all receives
-    requests = MPI.Request[]
     ldofs_self = partition.entity_list.extended.ldofs_self
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
