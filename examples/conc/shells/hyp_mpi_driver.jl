@@ -1,22 +1,5 @@
-"""
-MODEL DESCRIPTION
 
-Z-section cantilever under torsional loading.
-
-Linear elastic analysis, Young's modulus = 210 GPa, Poisson's ratio = 0.3.
-
-All displacements are fixed at X=0.
-
-Torque of 1.2 MN-m applied at X=10. The torque is applied by two 
-uniformly distributed shear loads of 0.6 MN at each flange surface.
-
-Objective of the analysis is to compute the axial stress at X = 2.5 from fixed end.
-
-NAFEMS REFERENCE SOLUTION
-
-Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
-"""
-module zc_mpi_examples
+module hyp_mpi_examples
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -48,41 +31,29 @@ using Statistics
 using ShellStructureTopo: create_partitions
 using MPI
 
-# using MatrixSpy
-
-function zcant!(csmatout, XYZ, tangents, feid, qpid)
-    r = vec(XYZ); 
-    cross3!(r, view(tangents, :, 1), view(tangents, :, 2))
-    csmatout[:, 3] .= vec(r)/norm(vec(r))
-    csmatout[:, 1] .= (1.0, 0.0, 0.0)
-    cross3!(view(csmatout, :, 2), view(csmatout, :, 3), view(csmatout, :, 1))
-    return csmatout
-end
-
-
-
-function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     # Parameters:
-    E = 210e9
-    nu = 0.3
-    L = 10.0
+    E = 2.0e11
+    nu = 1 / 3
+    pressure = 1.0e3
+    Length = 2.0
     CTE = 0.0
-    thickness = 0.1
-    tolerance = thickness / 1000
-    xyz = Float64[
-        0 -1 -1;
-        2.5 -1 -1;
-        10 -1 -1;
-        0 -1 0;
-        2.5 -1 0;
-        10 -1 0;
-        0 1 0;
-        2.5 1 0;
-        10 1 0;
-        0 1 1;
-        2.5 1 1;
-        10 1 1
-    ]
+    distortion = 0.0
+    n = ncoarse  * ref    # number of elements along the edge of the block
+    tolerance = Length / n/ 100
+    thickness = Length/2/aspect
+
+    function computetrac!(forceout, XYZ, tangents, feid, qpid)
+        r = vec(XYZ); r[2] = 0.0
+        r .= vec(r)/norm(vec(r))
+        theta = atan(r[3], r[1])
+        n = cross(tangents[:, 1], tangents[:, 2]) 
+        n = n/norm(n)
+        forceout[1:3] = n*pressure*cos(2*theta)
+        forceout[4:6] .= 0.0
+        # @show dot(n, forceout[1:3])
+        return forceout
+    end
     
     to = time()
     MPI.Init()
@@ -97,36 +68,16 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     rank == 0 && (@info "Number of processes/partitions: $Np")
 
-    fens1, fes1 = Q4quadrilateral(xyz[[1, 2, 5, 4], :], ref * 2, ref * 1) 
-    fens2, fes2 = Q4quadrilateral(xyz[[4, 5, 8, 7], :], ref * 2, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
-
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[7, 8, 11, 10], :], ref * 2, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
-
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[2, 3, 6, 5], :], ref * 6, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
-
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[5, 6, 9, 8], :], ref * 6, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
-
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[8, 9, 12, 11], :], ref * 6, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
-
-    fens, fes = Q4toT3(fens, fes)
+    fens, fes = distortblock(T3block, 90/360*2*pi, Length/2, n, n, distortion, distortion);
+    fens.xyz = xyz3(fens)
+    for i in 1:count(fens)
+        a=fens.xyz[i, 1]; y=fens.xyz[i, 2];
+        R = sqrt(1 + y^2)
+        fens.xyz[i, :] .= (R*sin(a), y, R*cos(a))
+    end
     
     MR = DeforModelRed3D
     mater = MatDeforElastIso(MR, 0.0, E, nu, CTE)
-    ocsys = CSys(3, 3, zcant!)
 
     sfes = FESetShellT3()
     accepttodelegate(fes, sfes)
@@ -143,34 +94,45 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     # Apply EBC's
     # plane of symmetry perpendicular to Z
-    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf -Inf Inf], inflate = tolerance)
-    for i in [1,2,3,]
+    l1 = selectnode(fens; box = Float64[-Inf Inf -Inf Inf 0 0], inflate = tolerance)
+    for i in [3,4,5]
         setebc!(dchi, l1, true, i)
     end
+    # plane of symmetry perpendicular to Y
+    l1 = selectnode(fens; box = Float64[-Inf Inf 0 0 -Inf Inf], inflate = tolerance)
+    for i in [2,4,6]
+        setebc!(dchi, l1, true, i)
+    end
+    # plane of symmetry perpendicular to X
+    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf -Inf Inf], inflate = tolerance)
+    for i in [1,5,6]
+        setebc!(dchi, l1, true, i)
+    end
+    # clamped edge perpendicular to Y
+    # l1 = selectnode(fens; box = Float64[-Inf Inf L/2 L/2 -Inf Inf], inflate = tolerance)
+    # for i in [1,2,3,4,5,6]
+    #     setebc!(dchi, l1, true, i)
+    # end
     applyebc!(dchi)
     numberdofs!(dchi);
 
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    bfes = meshboundary(fes)
-    el = selectelem(fens, bfes, box = Float64[10.0 10.0 1.0 1.0 -1 1], tolerance = tolerance)
-    lfemm1 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
-    fi1 = ForceIntensity(Float64[0, 0, +0.6e6, 0, 0, 0]);
-    el = selectelem(fens, bfes, box = Float64[10.0 10.0 -1.0 -1.0 -1 1], tolerance = tolerance)
-    lfemm2 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
-    fi2 = ForceIntensity(Float64[0, 0, -0.6e6, 0, 0, 0]);
-    F = distribloads(lfemm1, geom0, dchi, fi1, 1) + distribloads(lfemm2, geom0, dchi, fi2, 1);
-    F_f = F[fr]
-
-    associategeometry!(femm, geom0)
-
+    rank == 0 && (@info("Aspect ratio: $(aspect)"))
     rank == 0 && (@info("Refinement factor: $(ref)"))
+    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
     rank == 0 && (@info("Number of overlaps: $(No)"))
-    rank == 0 && (@info("Number of nodes: $(count(fens))"))
     rank == 0 && (@info("Number of elements: $(count(fes))"))
     rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
 
+    lfemm = FEMMBase(IntegDomain(fes, TriRule(3)))
+    fi = ForceIntensity(Float64, 6, computetrac!);
+    F = distribloads(lfemm, geom0, dchi, fi, 2);
+    F_f = F[fr]
+
+    associategeometry!(femm, geom0)
+    
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
         femm1.integdomain.fes = fes
@@ -245,7 +207,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
             "iteration_time" => t1 - t0,
         )
         f = (filename == "" ?
-             "zc-" *
+             "hyp-" *
              "-ref=$(ref)" *
              "-Nc=$(Nc)" *
              "-n1=$(n1)" *
@@ -257,11 +219,11 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     end
     dchi_f = vec_collect(sol)
     scattersysvec!(dchi, dchi_f, DOF_KIND_FREE)
-
+    
     if rank == 0
         if visualize
             f = (filename == "" ?
-                 "zc-" *
+                 "hyp-" *
                  "-ref=$(ref)" *
                  "-Nc=$(Nc)" *
                  "-n1=$(n1)" *
@@ -273,9 +235,6 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         end
     end
 
-    MPI.Finalize()
-    rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))
-    
     true
 end
 
@@ -288,6 +247,14 @@ function parse_commandline()
         help = "Use filename to name the output files"
         arg_type = String
         default = ""
+        "--aspect"
+        help = "Aspect ratio"
+        arg_type = Float64
+        default = 10.0
+        "--ncoarse"
+        help = "Number of edges in the coarse mesh"
+        arg_type = Int
+        default = 32
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
@@ -307,7 +274,7 @@ function parse_commandline()
         "--ref"
         help = "Refinement factor"
         arg_type = Int
-        default = 7
+        default = 2
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
@@ -332,6 +299,8 @@ p = parse_commandline()
 
 _execute_alt(
     p["filename"],
+    p["aspect"],
+    p["ncoarse"],
     p["ref"],
     p["Nc"], 
     p["n1"],

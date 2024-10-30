@@ -147,14 +147,14 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    #@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    #@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     t2 = time()
     partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
     #@info "make_partitions ($(round(time() - t2, digits=3)) [s])"
     partition_sizes = [partition_size(_p) for _p in partition_list]
     meanps = mean(partition_sizes)
-    #@info "Mean fine partition size: $(meanps)"
-    #@info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    #@info("Mean fine partition size: $(meanps)")
+    #@info("Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     #@info("Number of clusters (requested): $(Nc)")
@@ -172,7 +172,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
     Phi = Phi[fr, :]
     #@info("Size of the reduced problem: $(size(Phi, 2))")
-    #@info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    #@info("Generate clusters ($(round(time() - t1, digits=3)) [s])")
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
@@ -205,7 +205,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     t0 = time()
     M! = TwoLevelPreConditioner(partition_list, Phi)
-    #@info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+    #@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
 
     p = 1000 * rand(Float64, size(Krfactor, 1))
     q = Krfactor \ p

@@ -19,8 +19,8 @@ using FinEtoolsDDMethods: mebibytes
 using FinEtoolsDDMethods.CGModule: pcg
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
-using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner
-using FinEtoolsDDMethods.DDCoNCSeqModule:  vec_copyto!, vec_collect
+using FinEtoolsDDMethods.DDCoNCMPIModule: DDCoNCMPIComm, PartitionedVector, aop!, TwoLevelPreConditioner
+using FinEtoolsDDMethods.DDCoNCMPIModule:  vec_copyto!, vec_collect
 using SymRCM
 using Metis
 using Test
@@ -35,6 +35,7 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
+using MPI
 
 function rotate(fens)
     Q = [cos(pi/2) -sin(pi/2); sin(pi/2) cos(pi/2)]
@@ -256,9 +257,23 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     function getfrcL!(forceout, XYZ, tangents, feid, qpid)
         copyto!(forceout, [0.0; magn; 0.0])
     end
+
+    to = time()
+    MPI.Init()
+    comm = MPI.COMM_WORLD
+    rank = MPI.Comm_rank(comm)
+    Np = MPI.Comm_size(comm)
+    rank == 0 && (@info "$(MPI.Get_library_version())")
+
+    BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
+    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    BLAS.set_num_threads(BLAS_THREADS)
+
+    rank == 0 && (@info "Number of processes/partitions: $Np")
+
     fens, fes = mesh(ref)
 
-    if visualize
+    if visualize && rank == 0
         f = (filename == "" ? 
             "fib-$(string(kind))" *
             "-ref=$(ref)" : 
@@ -302,14 +317,14 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     fr = dofrange(u, DOF_KIND_FREE)
     dr = dofrange(u, DOF_KIND_DATA)
     
-    @info("Kind: $(string(kind))")
-    @info("Refinement factor: $(ref)")
-    @info("Materials: $(Ef), $(nuf), $(Em), $(num)")
+    rank == 0 && (@info("Kind: $(string(kind))"))
+    rank == 0 && (@info("Refinement factor: $(ref)"))
+    rank == 0 && (@info("Materials: $(Ef), $(nuf), $(Em), $(num)"))
     
-    @info("Number of fine grid partitions: $(Np)")
-    @info("Number of overlaps: $(No)")
-    @info("Number of elements: $(count(fes))")
-    @info("Number of free dofs = $(nfreedofs(u))")
+    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
+    rank == 0 && (@info("Number of overlaps: $(No)"))
+    rank == 0 && (@info("Number of elements: $(count(fes))"))
+    rank == 0 && (@info("Number of free dofs = $(nfreedofs(u))"))
 
     fi = ForceIntensity(Float64, 3, getfrcL!)
     el2femm = FEMMBase(IntegDomain(loadfes, boundary_rule))
@@ -326,40 +341,40 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
         return stiffness(_femmm, geom, u) + stiffness(_femmf, geom, u)
     end
 
-    @info("Refinement level: $(ref)")
-    @info("Number of fine grid partitions: $(Np)")
-    @info("Number of overlaps: $(No)")
-    @info("Number of nodes: $(count(fens))")
-    @info("Number of elements: $(count(fes))")
-    @info("Number of free dofs = $(nfreedofs(u))")
+    rank == 0 && (@info("Refinement level: $(ref)"))
+    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
+    rank == 0 && (@info("Number of overlaps: $(No)"))
+    rank == 0 && (@info("Number of nodes: $(count(fens))"))
+    rank == 0 && (@info("Number of elements: $(count(fes))"))
+    rank == 0 && (@info("Number of free dofs = $(nfreedofs(u))"))
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
-    @info("Create partitioning info ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])"))
     t2 = time()
-    ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, nothing)
-    @info("Make partitions ($(round(time() - t2, digits=3)) [s])")
+    ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, nothing)
+    rank == 0 && (@info("Make partitions ($(round(time() - t2, digits=3)) [s])"))
     meanps = mean_partition_size(cpi)
-    @info("Mean fine partition size: $(meanps)")
-    @info("Create partitions ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Mean fine partition size: $(meanps)"))
+    rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))
 
     t1 = time()
-    @info("Number of clusters (requested): $(Nc)")
-    @info("Number of 1D basis functions: $(n1)")
+    rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
+    rank == 0 && (@info("Number of 1D basis functions: $(n1)"))
     nt = n1*(n1+1)/2 
     (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(u))))
     Nepc = count(fes) ÷ Nc
     (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
-    @info("Number of elements per cluster: $(Nepc)")
+    rank == 0 && (@info("Number of elements per cluster: $(Nepc)"))
     cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
-    @info("Number of clusters (actual): $(Nc)")
+    rank == 0 && (@info("Number of clusters (actual): $(Nc)"))
     @info "Create clusters ($(round(time() - t1, digits=3)) [s])"
         
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, u)
     Phi = Phi[fr, :]
-    @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info("Generate clusters ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
+    rank == 0 && (@info("Generate clusters ($(round(time() - t1, digits=3)) [s])"))
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
@@ -367,7 +382,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
-    @info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])"))
 
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)
@@ -427,6 +442,9 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
             vectors=[("u", deepcopy(u.values),)])
     end
 
+    MPI.Finalize()
+    rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))
+    
     true
 end
 

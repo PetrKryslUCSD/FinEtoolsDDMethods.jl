@@ -179,7 +179,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     rank == 0 && (@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])"))
     t2 = time()
     ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, nothing)
-    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
+    @info("Make partitions ($(round(time() - t2, digits=3)) [s])")
     meanps = mean_partition_size(cpi)
     rank == 0 && (@info("Mean fine partition size: $(meanps)"))
     rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))

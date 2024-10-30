@@ -1,22 +1,13 @@
 """
-MODEL DESCRIPTION
+Free vibration of steel barrel
 
-Z-section cantilever under torsional loading.
+The structure represents a barrel container with spherical caps, two T
+stiffeners, and edge stiffener. This example tests the ability to represent
+creases in the surface, and junctions with more than two shell faces joined
+along a an intersection.
 
-Linear elastic analysis, Young's modulus = 210 GPa, Poisson's ratio = 0.3.
-
-All displacements are fixed at X=0.
-
-Torque of 1.2 MN-m applied at X=10. The torque is applied by two 
-uniformly distributed shear loads of 0.6 MN at each flange surface.
-
-Objective of the analysis is to compute the axial stress at X = 2.5 from fixed end.
-
-NAFEMS REFERENCE SOLUTION
-
-Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
 """
-module zc_mpi_examples
+module barrel_mpi_examples
 
 using FinEtools
 using FinEtools.MeshExportModule: VTK
@@ -45,45 +36,29 @@ import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
 using Statistics
-using ShellStructureTopo: create_partitions
+using ShellStructureTopo: make_topo_faces, create_partitions
 using MPI
 
 # using MatrixSpy
 
-function zcant!(csmatout, XYZ, tangents, feid, qpid)
-    r = vec(XYZ); 
-    cross3!(r, view(tangents, :, 1), view(tangents, :, 2))
-    csmatout[:, 3] .= vec(r)/norm(vec(r))
-    csmatout[:, 1] .= (1.0, 0.0, 0.0)
-    cross3!(view(csmatout, :, 2), view(csmatout, :, 3), view(csmatout, :, 1))
-    return csmatout
-end
-
-
-
-function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     # Parameters:
-    E = 210e9
+    E = 200e3 * phun("MPa")
     nu = 0.3
-    L = 10.0
+    rho = 7850 * phun("KG/M^3")
+    thickness = 2.0 * phun("mm")
+    pressure = 100.0 * phun("kilo*Pa")
     CTE = 0.0
-    thickness = 0.1
-    tolerance = thickness / 1000
-    xyz = Float64[
-        0 -1 -1;
-        2.5 -1 -1;
-        10 -1 -1;
-        0 -1 0;
-        2.5 -1 0;
-        10 -1 0;
-        0 1 0;
-        2.5 1 0;
-        10 1 0;
-        0 1 1;
-        2.5 1 1;
-        10 1 1
-    ]
-    
+    input = "barrel_w_stiffeners-s3.h5mesh"
+
+    function computetrac!(forceout, XYZ, tangents, feid, qpid)
+        n = cross(tangents[:, 1], tangents[:, 2])
+        n = n / norm(n)
+        forceout[1:3] = n * pressure
+        forceout[4:6] .= 0.0
+        return forceout
+    end
+
     to = time()
     MPI.Init()
     comm = MPI.COMM_WORLD
@@ -97,37 +72,47 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     rank == 0 && (@info "Number of processes/partitions: $Np")
 
-    fens1, fes1 = Q4quadrilateral(xyz[[1, 2, 5, 4], :], ref * 2, ref * 1) 
-    fens2, fes2 = Q4quadrilateral(xyz[[4, 5, 8, 7], :], ref * 2, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
+    if !isfile(joinpath(dirname(@__FILE__()), input))
+        success(run(`unzip -qq -d $(dirname(@__FILE__())) $(joinpath(dirname(@__FILE__()), "barrel_w_stiffeners-s3-mesh.zip"))`; wait = false))
+    end
+    output = FinEtools.MeshImportModule.import_H5MESH(joinpath(dirname(@__FILE__()), input))
+    fens, fes  = output["fens"], output["fesets"][1]
+    fens.xyz .*= phun("mm");
 
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[7, 8, 11, 10], :], ref * 2, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
+    box = boundingbox(fens.xyz)
+    middle = [(box[2] + box[1])/2, (box[4] + box[3])/2, (box[6] + box[5])/2]
+    fens.xyz[:, 1] .-= middle[1]
+    fens.xyz[:, 2] .-= middle[2]
+    fens.xyz[:, 3] .-= middle[3]
 
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[2, 3, 6, 5], :], ref * 6, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
+    # output = import_ABAQUS(joinpath(dirname(@__FILE__()), input))
+    # fens = output["fens"]
+    # fes = output["fesets"][1]
 
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[5, 6, 9, 8], :], ref * 6, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
+    connected = findunconnnodes(fens, fes);
+    fens, new_numbering = compactnodes(fens, connected);
+    fes = renumberconn!(fes, new_numbering);
 
-    fens1, fes1 = fens, fes 
-    fens2, fes2 = Q4quadrilateral(xyz[[8, 9, 12, 11], :], ref * 6, ref * 1) 
-    fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
-    fes = cat(fes1, fes2)
+    fens, fes = make_topo_faces(fens, fes)
+    unique_surfaces =  unique(fes.label)
+    # for i in 1:length(unique_surfaces)
+    #     el = selectelem(fens, fes, label = unique_surfaces[i])
+    #     VTKWrite.vtkwrite("surface-$(unique_surfaces[i]).vtk", fens, subset(fes, el))
+    # end
+    # return
+    vessel = []
+    for i in [1, 2, 6, 7, 8]
+        el = selectelem(fens, fes, label = unique_surfaces[i])
+        append!(vessel, el)
+    end
 
-    fens, fes = Q4toT3(fens, fes)
+    # for r in 1:ref
+    #     fens, fes = T3refine(fens, fes)
+    # end
     
     MR = DeforModelRed3D
     mater = MatDeforElastIso(MR, 0.0, E, nu, CTE)
-    ocsys = CSys(3, 3, zcant!)
-
+    
     sfes = FESetShellT3()
     accepttodelegate(fes, sfes)
     femm = FEMMShellT3FFModule.make(IntegDomain(fes, TriRule(1), thickness), mater)
@@ -142,10 +127,19 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     dchi = NodalField(zeros(size(fens.xyz,1), 6))
 
     # Apply EBC's
-    # plane of symmetry perpendicular to Z
-    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf -Inf Inf], inflate = tolerance)
-    for i in [1,2,3,]
-        setebc!(dchi, l1, true, i)
+    l1 = selectnode(fens; box = Float64[0 0 -Inf Inf 0 0], inflate = 0.01)
+    for i in [1, 3, 4, 5, 6]
+        setebc!(dchi, [l1[1], l1[end]], true, i)
+    end
+    l1 = selectnode(fens; box = Float64[-Inf Inf 0 0 -Inf Inf], inflate = 0.01)
+    for i in [2]
+        setebc!(dchi, l1[1:1], true, i)
+    end
+    if stabilize
+        l1 = selectnode(fens; box = Float64[0 0 0 0 -Inf Inf], inflate = 0.02)
+        for i in [1, ]
+            setebc!(dchi, l1[1:1], true, i)
+        end
     end
     applyebc!(dchi)
     numberdofs!(dchi);
@@ -153,18 +147,13 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    bfes = meshboundary(fes)
-    el = selectelem(fens, bfes, box = Float64[10.0 10.0 1.0 1.0 -1 1], tolerance = tolerance)
-    lfemm1 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
-    fi1 = ForceIntensity(Float64[0, 0, +0.6e6, 0, 0, 0]);
-    el = selectelem(fens, bfes, box = Float64[10.0 10.0 -1.0 -1.0 -1 1], tolerance = tolerance)
-    lfemm2 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
-    fi2 = ForceIntensity(Float64[0, 0, -0.6e6, 0, 0, 0]);
-    F = distribloads(lfemm1, geom0, dchi, fi1, 1) + distribloads(lfemm2, geom0, dchi, fi2, 1);
+    lfemm = FEMMBase(IntegDomain(subset(fes, vessel), TriRule(3)))
+    fi = ForceIntensity(Float64, 6, computetrac!);
+    F = distribloads(lfemm, geom0, dchi, fi, 2);
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
-
+    
     rank == 0 && (@info("Refinement factor: $(ref)"))
     rank == 0 && (@info("Number of overlaps: $(No)"))
     rank == 0 && (@info("Number of nodes: $(count(fens))"))
@@ -208,7 +197,8 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     function peeksolution(iter, x, resnorm)
         rank == 0 && peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
-        
+    
+    
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
     rank == 0 && (@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])"))
@@ -245,14 +235,14 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
             "iteration_time" => t1 - t0,
         )
         f = (filename == "" ?
-             "zc-" *
+             "barrel-" *
              "-ref=$(ref)" *
              "-Nc=$(Nc)" *
              "-n1=$(n1)" *
              "-Np=$(Np)" *
              "-No=$(No)" :
              filename)
-        @info("Storing data in $(f * ".json")")
+        rank == 0 && (@info("Storing data in $(f * ".json")"))
         DataDrop.store_json(f * ".json", data)
     end
     dchi_f = vec_collect(sol)
@@ -261,7 +251,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     if rank == 0
         if visualize
             f = (filename == "" ?
-                 "zc-" *
+                 "barrel-" *
                  "-ref=$(ref)" *
                  "-Nc=$(Nc)" *
                  "-n1=$(n1)" *
@@ -288,6 +278,10 @@ function parse_commandline()
         help = "Use filename to name the output files"
         arg_type = String
         default = ""
+        "--stabilize"
+        help = "Stabilize rotation about axis?"
+        arg_type = Bool
+        default = true
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
@@ -307,7 +301,7 @@ function parse_commandline()
         "--ref"
         help = "Refinement factor"
         arg_type = Int
-        default = 7
+        default = 1
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
@@ -333,6 +327,7 @@ p = parse_commandline()
 _execute_alt(
     p["filename"],
     p["ref"],
+    p["stabilize"],
     p["Nc"], 
     p["n1"],
     p["Np"], 
@@ -340,7 +335,7 @@ _execute_alt(
     p["itmax"], 
     p["relrestol"],
     p["peek"],
-    p["visualize"]
+    p["visualize"],
     )
 
 

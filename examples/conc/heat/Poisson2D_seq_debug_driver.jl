@@ -81,13 +81,13 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
-    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    @info("Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     t2 = time()
     ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, make_interior_load)
-    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
+    @info("Make partitions ($(round(time() - t2, digits=3)) [s])")
     meanps = mean_partition_size(cpi)
-    @info "Mean fine partition size: $(meanps)"
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    @info("Mean fine partition size: $(meanps)")
+    @info("Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     @info("Number of clusters (requested): $(Nc)")
@@ -105,7 +105,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     Phi = transfmatrix(mor, LegendreBasis, n1, Temp)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    @info("Generate clusters ($(round(time() - t1, digits=3)) [s])")
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
@@ -116,7 +116,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
-    @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+    @info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
 
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)
@@ -130,7 +130,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     # @show(vec_collect(x0) )
     # return
 
-    (T, stats) = pcg(
+    (sol, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         # (M!)=(q, p) -> vec_copyto!(q, p), 
@@ -141,7 +141,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
-    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
+    @info("Iterations ($(round(t1 - t0, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "number_nodes" => count(fens),
@@ -165,10 +165,10 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
          "-Np=$(Np)" *
          "-No=$(No)" :
          filename)
-    @info "Storing data in $(f * ".json")"
+    @info("Storing data in $(f * ".json")")
     DataDrop.store_json(f * ".json", data)
-    T_f = deepcopy(F_f); T_f .= 0.0
-    scattersysvec!(Temp, vec_copyto!(T_f, T), DOF_KIND_FREE)
+    T_f = vec_collect(sol)
+    scattersysvec!(Temp, T_f, DOF_KIND_FREE)
     
     if visualize
         f = (filename == "" ?

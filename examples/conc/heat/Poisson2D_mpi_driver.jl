@@ -13,11 +13,10 @@ using FinEtools
 using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions
-using FinEtoolsDDMethods.DDCoNCMPIModule: DDCoNCMPIComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!, rhs
-using FinEtoolsDDMethods.DDCoNCMPIModule: vec_collect
-using FinEtoolsDDMethods: set_up_timers
+using FinEtoolsDDMethods.DDCoNCMPIModule: DDCoNCMPIComm, PartitionedVector, aop!, TwoLevelPreConditioner, rhs
+using FinEtoolsDDMethods.DDCoNCMPIModule: vec_collect, vec_copyto!
 using Metis
 using Test
 using LinearAlgebra
@@ -95,13 +94,13 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
-    rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])"))
     t2 = time()
     ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
-    rank == 0 && (@info "Make partitions ($(round(time() - t2, digits=3)) [s])")
+    rank == 0 && (@info("Make partitions ($(round(time() - t2, digits=3)) [s])"))
     meanps = mean_partition_size(cpi)
-    rank == 0 && (@info "Mean fine partition size: $(meanps)")
-    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Mean fine partition size: $(meanps)"))
+    rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))
 
     t1 = time()
     rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
@@ -119,7 +118,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     Phi = transfmatrix(mor, LegendreBasis, n1, Temp)
     Phi = Phi[fr, :]
     rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
-    rank == 0 && (@info "Generate clusters ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Generate clusters ($(round(time() - t1, digits=3)) [s])"))
 
     function peeksolution(iter, x, resnorm)
         peek && rank == 0 && ((@info("it $(iter): residual norm =  $(resnorm)")))
@@ -130,14 +129,14 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
-    rank == 0 && (@info "Create preconditioner ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])"))
 
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    (T, stats) = pcg(
+    (sol, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),
@@ -147,7 +146,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
         )
     t1 = time()
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
-    rank == 0 && (@info "Iterations ($(round(t1 - t0, digits=3)) [s])")
+    rank == 0 && (@info("Iterations ($(round(t1 - t0, digits=3)) [s])"))
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     if rank == 0
         data = Dict(
@@ -172,10 +171,10 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
              "-Np=$(Np)" *
              "-No=$(No)" :
              filename)
-        @info "Storing data in $(f * ".json")"
+        @info("Storing data in $(f * ".json")")
         DataDrop.store_json(f * ".json", data)
     end
-    T_f = vec_collect(T)
+    T_f = vec_collect(sol)
     scattersysvec!(Temp, T_f, DOF_KIND_FREE)
 
     if rank == 0

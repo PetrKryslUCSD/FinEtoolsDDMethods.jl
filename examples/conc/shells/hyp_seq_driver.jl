@@ -9,11 +9,11 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
-using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
-using FinEtoolsDDMethods: set_up_timers
+using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner
+using FinEtoolsDDMethods.DDCoNCSeqModule:  vec_copyto!, vec_collect
 using SymRCM
 using Metis
 using Test
@@ -30,31 +30,31 @@ using DataDrop
 using Statistics
 using ShellStructureTopo: create_partitions
 
-# Parameters:
-E = 2.0e11
-nu = 1/3;
-pressure = 1.0e3;
-Length = 2.0;
-
-function computetrac!(forceout, XYZ, tangents, feid, qpid)
-    r = vec(XYZ); r[2] = 0.0
-    r .= vec(r)/norm(vec(r))
-    theta = atan(r[3], r[1])
-    n = cross(tangents[:, 1], tangents[:, 2]) 
-    n = n/norm(n)
-    forceout[1:3] = n*pressure*cos(2*theta)
-    forceout[4:6] .= 0.0
-    # @show dot(n, forceout[1:3])
-    return forceout
-end
-
 function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+    # Parameters:
+    E = 2.0e11
+    nu = 1/3;
+    pressure = 1.0e3;
+    Length = 2.0;
     CTE = 0.0
     distortion = 0.0
     n = ncoarse  * ref    # number of elements along the edge of the block
     tolerance = Length / n/ 100
     thickness = Length/2/aspect
-    
+
+    function computetrac!(forceout, XYZ, tangents, feid, qpid)
+        r = vec(XYZ)
+        r[2] = 0.0
+        r .= vec(r) / norm(vec(r))
+        theta = atan(r[3], r[1])
+        n = cross(tangents[:, 1], tangents[:, 2])
+        n = n / norm(n)
+        forceout[1:3] = n * pressure * cos(2 * theta)
+        forceout[4:6] .= 0.0
+        # @show dot(n, forceout[1:3])
+        return forceout
+    end
+
     fens, fes = distortblock(T3block, 90/360*2*pi, Length/2, n, n, distortion, distortion);
     fens.xyz = xyz3(fens)
     for i in 1:count(fens)
@@ -128,14 +128,13 @@ function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, rel
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    @info("Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     t2 = time()
-    partition_list  = make_partitions(cpi, fes, make_matrix, nothing)
-    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
-    partition_sizes = [partition_size(_p) for _p in partition_list]
-    meanps = mean(partition_sizes)
-    @info "Mean fine partition size: $(meanps)"
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, nothing)
+    @info("Make partitions ($(round(time() - t2, digits=3)) [s])")
+    meanps = mean_partition_size(cpi)
+    @info("Mean fine partition size: $(meanps)")
+    @info("Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     @info("Number of clusters (requested): $(Nc)")
@@ -153,22 +152,22 @@ function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, rel
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    @info("Generate clusters ($(round(time() - t1, digits=3)) [s])")
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
-    
-    t1 = time()
-    M! = TwoLevelPreConditioner(partition_list, Phi)
-    @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
 
+    t1 = time()
+    M! = TwoLevelPreConditioner(ddcomm, Phi)
+    @info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
+    
     t0 = time()
-    x0 = PartitionedVector(Float64, partition_list)
+    x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
-    b = PartitionedVector(Float64, partition_list)
+    b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    (u_f, stats) = pcg(
+    (sol, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),
@@ -178,7 +177,7 @@ function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, rel
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
-    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
+    @info("Iterations ($(round(t1 - t0, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "number_nodes" => count(fens),
@@ -201,9 +200,10 @@ function _execute_alt(filename, aspect, ncoarse, ref, Nc, n1, Np, No, itmax, rel
          "-Np=$(Np)" *
          "-No=$(No)" :
          filename)
-    @info "Storing data in $(f * ".json")"
+    @info("Storing data in $(f * ".json")")
     DataDrop.store_json(f * ".json", data)
-    # scattersysvec!(dchi, u_f)
+    dchi_f = vec_collect(sol)
+    scattersysvec!(dchi, dchi_f, DOF_KIND_FREE)
     
     if visualize
         f = (filename == "" ?

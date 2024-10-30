@@ -26,11 +26,11 @@ using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg, vec_copyto!
+using FinEtoolsDDMethods.CGModule: pcg
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
-using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner, vec_copyto!
-using FinEtoolsDDMethods: set_up_timers
+using FinEtoolsDDMethods.DDCoNCSeqModule: DDCoNCSeqComm, PartitionedVector, aop!, TwoLevelPreConditioner
+using FinEtoolsDDMethods.DDCoNCSeqModule:  vec_copyto!, vec_collect
 using SymRCM
 using Metis
 using Test
@@ -58,12 +58,11 @@ function zcant!(csmatout, XYZ, tangents, feid, qpid)
     return csmatout
 end
 
-# Parameters:
-E = 210e9
-nu = 0.3
-L = 10.0
-
 function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+    # Parameters:
+    E = 210e9
+    nu = 0.3
+    L = 10.0
     CTE = 0.0
     thickness = 0.1
     
@@ -165,13 +164,13 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    @info("Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     t2 = time()
     ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, nothing)
-    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
+    @info("Make partitions ($(round(time() - t2, digits=3)) [s])")
     meanps = mean_partition_size(cpi)
-    @info "Mean fine partition size: $(meanps)"
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    @info("Mean fine partition size: $(meanps)")
+    @info("Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     @info("Number of clusters (requested): $(Nc)")
@@ -189,7 +188,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
     Phi = Phi[fr, :]
     @info("Size of the reduced problem: $(size(Phi, 2))")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    @info("Generate clusters ($(round(time() - t1, digits=3)) [s])")
 
     function peeksolution(iter, x, resnorm)
         peek && (@info("it $(iter): residual norm =  $(resnorm)"))
@@ -197,14 +196,14 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
-    @info "Create preconditioner ($(round(time() - t1, digits=3)) [s])"
+    @info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
 
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
     b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    (u_f, stats) = pcg(
+    (sol, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
         (M!)=(q, p) -> M!(q, p),
@@ -214,7 +213,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
-    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
+    @info("Iterations ($(round(t1 - t0, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "number_nodes" => count(fens),
@@ -237,9 +236,10 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
          "-Np=$(Np)" *
          "-No=$(No)" :
          filename)
-    @info "Storing data in $(f * ".json")"
+    @info("Storing data in $(f * ".json")")
     DataDrop.store_json(f * ".json", data)
-    # scattersysvec!(dchi, u_f)
+    dchi_f = vec_collect(sol)
+    scattersysvec!(dchi, dchi_f, DOF_KIND_FREE)
     
     if visualize
         f = (filename == "" ?
