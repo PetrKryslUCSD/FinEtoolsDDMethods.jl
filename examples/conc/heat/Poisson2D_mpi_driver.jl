@@ -41,17 +41,14 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     MPI.Init()
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
-    nprocs = MPI.Comm_size(comm)
+    Np = MPI.Comm_size(comm)
     rank == 0 && (@info "$(MPI.Get_library_version())")
 
     BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
     rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
     BLAS.set_num_threads(BLAS_THREADS)
 
-    Np = nprocs
-
-    rank == 0 && (@info "Number of processes: $nprocs")
-    rank == 0 && (@info "Number of partitions: $Np")
+    rank == 0 && (@info "Number of processes/partitions: $Np")
 
     A = 1.0 # dimension of the domain (length of the side of the square)
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
@@ -62,7 +59,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     tempf(x) = (1.0 .+ x[:, 1] .^ 2 + 2.0 .* x[:, 2] .^ 2)#the exact distribution of temperature1
     t0 = time()
     fens, fes = mesher(A, A, N, N)
-    @info("Mesh generation ($(round(time() - t0, digits=3)) [s])")
+    rank == 0 && (@info("Mesh generation ($(round(time() - t0, digits=3)) [s])"))
     t0 = time()
     geom = NodalField(fens.xyz)
     Temp = NodalField(zeros(size(fens.xyz, 1), 1))
@@ -81,7 +78,6 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     material = MatHeatDiff(thermal_conductivity)
     
     rank == 0 && (@info("Number of edges: $(N)"))
-    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
     rank == 0 && (@info("Number of overlaps: $(No)"))
     rank == 0 && (@info("Number of nodes: $(count(fens))"))
     rank == 0 && (@info("Number of elements: $(count(fes))"))
@@ -99,13 +95,13 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
-    @info "Create partitioning info ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     t2 = time()
     ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
-    @info "Make partitions ($(round(time() - t2, digits=3)) [s])"
+    rank == 0 && (@info "Make partitions ($(round(time() - t2, digits=3)) [s])")
     meanps = mean_partition_size(cpi)
-    @info "Mean fine partition size: $(meanps)"
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info "Mean fine partition size: $(meanps)")
+    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
@@ -139,16 +135,8 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     t0 = time()
     x0 = PartitionedVector(Float64, ddcomm)
     vec_copyto!(x0, 0.0)
-    xc = vec_collect(x0)
-    @show norm(xc)
     b = PartitionedVector(Float64, ddcomm)
     vec_copyto!(b, F_f)
-    bc = vec_collect(b)
-    @show norm(bc - F_f)
-    
-    aop!(x0, b)
-    @show vec_collect(x0) 
-
     (T, stats) = pcg(
         (q, p) -> aop!(q, p), 
         b, x0;
@@ -189,27 +177,31 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     end
     T_f = vec_collect(T)
     scattersysvec!(Temp, T_f, DOF_KIND_FREE)
-    
-    if visualize
-        f = (filename == "" ?
-         "Poisson2D-" *
-         "$(kind)-" *
-         "-N=$(N)" *
-         "-Nc=$(Nc)" *
-         "-n1=$(n1)" *
-         "-Np=$(Np)" *
-         "-No=$(No)" :
-         filename) * "-cg-sol"
-        VTK.vtkexportmesh(f * ".vtk", fens, fes;
-            scalars=[("T", deepcopy(Temp.values),)])
+
+    if rank == 0
+        if visualize
+            f = (filename == "" ?
+                 "Poisson2D-" *
+                 "$(kind)-" *
+                 "-N=$(N)" *
+                 "-Nc=$(Nc)" *
+                 "-n1=$(n1)" *
+                 "-Np=$(Np)" *
+                 "-No=$(No)" :
+                 filename) * "-cg-sol"
+            VTK.vtkexportmesh(f * ".vtk", fens, fes;
+                scalars=[("T", deepcopy(Temp.values),)])
+        end
     end
 
-    t0 = time()
-    Error = 0.0
-    for k in axes(fens.xyz, 1)
-        Error = Error + abs.(Temp.values[k, 1] - tempf(reshape(fens.xyz[k, :], (1, 2)))[1])
+    if rank == 0
+        t0 = time()
+        Error = 0.0
+        for k in axes(fens.xyz, 1)
+            Error = Error + abs.(Temp.values[k, 1] - tempf(reshape(fens.xyz[k, :], (1, 2)))[1])
+        end
+        @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
     end
-    @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
 
     MPI.Finalize()
     rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))
@@ -233,11 +225,11 @@ function parse_commandline()
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
-        default = 2
+        default = 8
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 2
+        default = 3
         "--No"
         help = "Number of overlaps"
         arg_type = Int
@@ -245,15 +237,15 @@ function parse_commandline()
         "--Np"
         help = "Number of partitions"
         arg_type = Int
-        default = 2
+        default = 7
         "--N"
         help = "How many edges per side?"
         arg_type = Int
-        default = 5
+        default = 32
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
-        default = 2
+        default = 200
         "--relrestol"
         help = "Relative residual tolerance"
         arg_type = Float64

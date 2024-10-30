@@ -193,27 +193,31 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
     end
     T_f = vec_collect(T)
     scattersysvec!(Temp, T_f, DOF_KIND_FREE)
-    
-    if visualize
-        f = (filename == "" ?
-         "Poisson2D-" *
-         "$(kind)-" *
-         "-N=$(N)" *
-         "-Nc=$(Nc)" *
-         "-n1=$(n1)" *
-         "-Np=$(Np)" *
-         "-No=$(No)" :
-         filename) * "-cg-sol"
-        VTK.vtkexportmesh(f * ".vtk", fens, fes;
-            scalars=[("T", deepcopy(Temp.values),)])
+
+    if rank == 0
+        if visualize
+            f = (filename == "" ?
+                 "Poisson2D-" *
+                 "$(kind)-" *
+                 "-N=$(N)" *
+                 "-Nc=$(Nc)" *
+                 "-n1=$(n1)" *
+                 "-Np=$(Np)" *
+                 "-No=$(No)" :
+                 filename) * "-cg-sol"
+            VTK.vtkexportmesh(f * ".vtk", fens, fes;
+                scalars=[("T", deepcopy(Temp.values),)])
+        end
     end
 
-    t0 = time()
-    Error = 0.0
-    for k in axes(fens.xyz, 1)
-        Error = Error + abs.(Temp.values[k, 1] - tempf(reshape(fens.xyz[k, :], (1, 2)))[1])
+    if rank == 0
+        t0 = time()
+        Error = 0.0
+        for k in axes(fens.xyz, 1)
+            Error = Error + abs.(Temp.values[k, 1] - tempf(reshape(fens.xyz[k, :], (1, 2)))[1])
+        end
+        @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
     end
-    @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
 
     MPI.Finalize()
     rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))

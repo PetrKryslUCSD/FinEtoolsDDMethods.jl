@@ -187,7 +187,7 @@ end
 
 using ArgParse
 
-function parse_ddandline()
+function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table! s begin
         "--filename"
@@ -238,7 +238,7 @@ function parse_ddandline()
     return parse_args(s)
 end
 
-p = parse_ddandline()
+p = parse_commandline()
 
 kind = p["kind"]
 if kind == "Q8"
