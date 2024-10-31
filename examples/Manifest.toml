@@ -245,7 +245,7 @@ version = "8.0.25"
 deps = ["CoNCMOR", "DataDrop", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "OrderedCollections", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
 path = ".."
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
-version = "0.6.5"
+version = "0.6.6"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "SuiteSparse", "Test"]
@@ -411,9 +411,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[deps.LinearOperators]]
 deps = ["FastClosures", "LinearAlgebra", "Printf", "Requires", "SparseArrays", "TimerOutputs"]
-git-tree-sha1 = "ae5d90280094348c32fda8bc8b5a88bb16514d43"
+git-tree-sha1 = "f55281226cdae8edea2c850fda88d8f5a03485b6"
 uuid = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
-version = "2.8.0"
+version = "2.9.0"
 
     [deps.LinearOperators.extensions]
     LinearOperatorsCUDAExt = "CUDA"
@@ -795,9 +795,9 @@ version = "0.5.2"
 
 [[deps.TimerOutputs]]
 deps = ["ExprTools", "Printf"]
-git-tree-sha1 = "5a13ae8a41237cff5ecf34f73eb1b8f42fff6531"
+git-tree-sha1 = "3a6f063d690135f5c1ba351412c82bae4d1402bf"
 uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-version = "0.5.24"
+version = "0.5.25"
 
 [[deps.TranscodingStreams]]
 git-tree-sha1 = "0c45878dcfdcfa8480052b6ab162cdd138781742"

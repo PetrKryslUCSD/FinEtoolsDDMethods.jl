@@ -35,7 +35,6 @@ using .PartitionCoNCModule: partition_size, mean_partition_size
 export partition_size, mean_partition_size
 
 include("DDCoNCSeqModule.jl")
-include("DDCoNCThrModule.jl")
 include("DDCoNCMPIModule.jl")
 
 end # module FinEtoolsDDMethods

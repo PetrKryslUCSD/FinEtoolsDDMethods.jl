@@ -102,7 +102,7 @@ function _execute(filename, kind, N, E, nu,
     _b = mean([mebibytes(_p) for _p in partition_list])
     @info "Mean partition allocations: $(Int(round(_b, digits=0))) [MiB]" 
     @info "Total partition allocations: $(sum([mebibytes(_p) for _p in partition_list])) [MiB]" 
-    @info "Create partitions ($(round(time() - t1, digits=3)) [s])"
+    @info("Create partitions ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     @info("Number of 1D basis functions: $(n1)")
@@ -118,7 +118,7 @@ function _execute(filename, kind, N, E, nu,
     @info("Number of clusters (actual): $(Nc)")
     @info("Size of the reduced problem: $(size(Phi, 2))")
     @info("Transformation matrix: $(mebibytes(Phi)) [MiB]")
-    @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
+    @info("Generate clusters ($(round(time() - t1, digits=3)) [s])")
 
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
@@ -138,7 +138,7 @@ function _execute(filename, kind, N, E, nu,
     
     t0 = time()
     M! = preconditioner!(Krfactor, Phi, partition_list)
-    (u_f, stats) = pcg_seq(
+    (u_f, stats) = pcg(
         (q, p) -> partition_multiply!(q, partition_list, p), 
         F_f, zeros(size(F_f));
         (M!)=(q, p) -> M!(q, p),
@@ -150,7 +150,7 @@ function _execute(filename, kind, N, E, nu,
         )
     t1 = time()
     @info("Number of iterations:  $(stats.niter)")
-    @info "Iterations ($(round(t1 - t0, digits=3)) [s])"
+    @info("Iterations ($(round(t1 - t0, digits=3)) [s])")
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     data = Dict(
         "nfreedofs" => nfreedofs(u),

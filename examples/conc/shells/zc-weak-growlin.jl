@@ -13,7 +13,7 @@ for Nepp in [5000, 1000, 200]
         n = sqrt(Ne / Np) / 2
         @show nd = (2 * n^2 + 4 * (5 - 1) * 2 * n) * 6
         run(`
-        julia --project=. conc/shells/zc.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
+        julia --project=. conc/shells/zc_seq_driver.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
         `)
     end
 end

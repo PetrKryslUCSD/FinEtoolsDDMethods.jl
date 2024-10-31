@@ -1,28 +1,23 @@
-# Take the examples from the paper and pace them through the default test.
-include(raw"lindef/fibers_examples.jl")
-fibers_examples.test()
+cmd = `julia --project=. ./conc/heat/Poisson2D_seq_driver.jl`
+run(cmd)
+@info "======================================\nExpected 13 iterations, nearly zero error"
 
-include(raw"lindef/fibers_examples.jl")
-fibers_examples.test(kind="tet")
+cmd = `julia --project=. ./conc/shells/zc_seq_driver.jl`
+run(cmd)
+@info "======================================\nExpected 37 iterations"
 
-include(raw"lindef/fibers_seq_examples.jl")
-fibers_seq_examples.test()
 
-include(raw"lindef/fibers_seq_examples.jl")
-fibers_seq_examples.test(kind="tet")
+cmd = `julia --project=. ./conc/shells/barrel_seq_driver.jl`
+run(cmd)
+@info "======================================\nExpected 68 iterations"
 
-include(raw"lindef/fibers_thr_examples.jl")
-fibers_thr_examples.test()
 
-include(raw"lindef/fibers_thr_examples.jl")
-fibers_thr_examples.test(kind="tet")
+cmd = `julia --project=. ./conc/shells/hyp_seq_driver.jl`
+run(cmd)
+@info "======================================\nExpected 68 iterations"
 
-include(raw"shells/barrel_examples.jl")
-barrel_examples.test(stabilize=false)
-barrel_examples.test(stabilize=true)
 
-include(raw"shells/cos_2t_p_hyp_free_examples.jl")
-cos_2t_p_hyp_free_examples.test()
+cmd = `julia --project=. ./conc/lindef/fib_seq_driver.jl`
+run(cmd)
+@info "======================================\nExpected 36 iterations"
 
-include(raw"shells/LE5_Z_cantilever_examples.jl")
-LE5_Z_cantilever_examples.test()

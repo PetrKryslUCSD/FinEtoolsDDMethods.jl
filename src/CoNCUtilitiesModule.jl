@@ -173,40 +173,4 @@ function fine_grid_node_lists(fens, fes, npartitions, overlap)
     nodelists
 end
 
-function preconditioner(fpartitions, Phi, K)
-    PhiT = transpose(Phi)
-    Kr = PhiT * K * Phi
-    Krfactor = lu(Kr)
-    __partitions = []
-    for i in eachindex(fpartitions)
-        part  =  fpartitions[i]
-        pK = K[part.doflist, part.doflist]
-        pKfactor = lu(pK)
-        __part = (factor = pKfactor, doflist = part.doflist)
-        push!(__partitions, __part)
-    end
-    function M!(q, p)
-        q .= Phi * (Krfactor \ (PhiT * p))
-        for part in __partitions
-            q[part.doflist] .+= (part.factor \ p[part.doflist])
-        end
-        q
-    end
-    M!
-end
-
-function conc_cache(Krfactor, Phi)
-    # q .= Phi * (Krfactor \ (Phi' * p))
-    # mul!(cache.PhiTp, cache.Phi', p)
-    # ldiv!(cache.KrfactorPhiTp, cache.Krfactor, cache.PhiTp)
-    # q .= mul!(cache.q, cache.Phi, cache.KrfactorPhiTp)
-    return (
-        Krfactor = Krfactor,
-        Phi = Phi,
-        PhiTp = zeros(eltype(Phi), size(Phi, 2)), 
-        q = zeros(eltype(Phi), size(Phi, 1)), 
-        KrfactorPhiTp = zeros(eltype(Phi), size(Phi, 2))
-    )
-end
-
 end # module PartitionCoNCDDModule

@@ -452,7 +452,7 @@ so that the average during iteration matches the iteration timer.
 Answer: It could be compilation.
 
 -- Alternative data distribution strategy:
-```
+```julia
 initial residual is distributed to partitions
 initial solution is distributed to partitions
 while iter < itmax
@@ -484,3 +484,9 @@ transform the residual, all-broadcast to the other partitions.
 All partitions could solve the global problem concurrently.
 The vector z could then also be held only locally.
 
+-- How should the global solver be structured to avoid all-reduce?
+  Perhaps if I cannot avoid it, it might be overlapped with computation?
+
+-- I think I need to allow for rank to be zero-based. Done.
+
+"terminal.integrated.defaultProfile.windows": "Git Bash"

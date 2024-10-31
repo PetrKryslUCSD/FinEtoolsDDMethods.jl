@@ -25,4 +25,7 @@ docs/site/
 
 *.vtk
 *.vtu
+*.json
+*.h5mesh
+*.bak
 *.vscode

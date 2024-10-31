@@ -20,7 +20,7 @@ Please do:
 using MPIPreferences
 MPIPreferences.use_jll_binary("OpenMPI_jll")
 ```
-or
+or `MPICH`
 ```
 using MPIPreferences
 MPIPreferences.use_jll_binary("MPICH_jll")
@@ -37,12 +37,12 @@ MPI.install_mpiexecjl()
 Note the folder where the executable is installed.
 - Run the example. `mpiexecjl` likely needs to be specified using the path of the folder in which it was installed.
 ```
- mpiexecjl -n 4 --project=. julia schur/heat/Poisson2D_cg_mpi_driver.jl
+mpiexecjl -n 4julia  --project=. schur/heat/Poisson2D_cg_mpi_driver.jl
 ```
 
-On Windows 11, the following would work:
+On Windows 11, in the bash, the following would work:
 ```
-mpiexec -n 3 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
+mpiexecjl -n 2 julia --project=. conc/shells/zc_mpi_driver.jl 
 ```
 
 

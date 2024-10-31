@@ -15,23 +15,22 @@ Objective of the analysis is to compute the axial stress at X = 2.5 from fixed e
 NAFEMS REFERENCE SOLUTION
 
 Axial stress at X = 2.5 from fixed end (point A) at the midsurface is -108 MPa.
-
-Parallel simulation with MPI.
 """
-module zc_mpi_driver
+module zc_mpi_examples
+
 using FinEtools
-using FinEtools.MeshExportModule: VTK, VTKWrite
+using FinEtools.MeshExportModule: VTK
 using FinEtoolsDeforLinear
 using FinEtoolsFlexStructures.FESetShellT3Module: FESetShellT3
 using FinEtoolsFlexStructures.FESetShellQ4Module: FESetShellQ4
 using FinEtoolsFlexStructures.FEMMShellT3FFModule
 using FinEtoolsFlexStructures.RotUtilModule: initial_Rfield, update_rotation_field!
-using MPI
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
-using FinEtoolsDDMethods.DDCoNCMPIModule: partition_mult!, precond_2level!, MPIAOperator, MPITwoLevelPreconditioner
-using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates, conc_cache
-using FinEtoolsDDMethods: set_up_timers
+using FinEtoolsDDMethods.CGModule: pcg
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions
+using FinEtoolsDDMethods.DDCoNCMPIModule: DDCoNCMPIComm, PartitionedVector, aop!, TwoLevelPreConditioner, rhs
+using FinEtoolsDDMethods.DDCoNCMPIModule: vec_collect, vec_copyto!
+using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using SymRCM
 using Metis
 using Test
@@ -45,9 +44,9 @@ import LinearAlgebra: mul!
 import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using Targe2
 using DataDrop
-using ILUZero
 using Statistics
-using ShellStructureTopo: make_topo_faces, create_partitions
+using ShellStructureTopo: create_partitions
+using MPI
 
 # using MatrixSpy
 
@@ -60,43 +59,43 @@ function zcant!(csmatout, XYZ, tangents, feid, qpid)
     return csmatout
 end
 
-function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
+
+
+function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+    # Parameters:
     E = 210e9
     nu = 0.3
     L = 10.0
     CTE = 0.0
     thickness = 0.1
-    tolerance = thickness/1000
+    tolerance = thickness / 1000
     xyz = Float64[
-    0 -1 -1;
-    2.5 -1 -1;
-    10 -1 -1;
-    0 -1 0;
-    2.5 -1 0;
-    10 -1 0;
-    0 1 0;
-    2.5 1 0;
-    10 1 0;
-    0 1 1;
-    2.5 1 1;
-    10 1 1;
+        0 -1 -1;
+        2.5 -1 -1;
+        10 -1 -1;
+        0 -1 0;
+        2.5 -1 0;
+        10 -1 0;
+        0 1 0;
+        2.5 1 0;
+        10 1 0;
+        0 1 1;
+        2.5 1 1;
+        10 1 1
     ]
-
+    
     to = time()
     MPI.Init()
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
-    nprocs = MPI.Comm_size(comm)
+    Np = MPI.Comm_size(comm)
     rank == 0 && (@info "$(MPI.Get_library_version())")
 
     BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
     rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
     BLAS.set_num_threads(BLAS_THREADS)
 
-    Np = nprocs - 1
-
-    rank == 0 && (@info "Number of processes: $nprocs")
-    rank == 0 && (@info "Number of partitions: $Np")
+    rank == 0 && (@info "Number of processes/partitions: $Np")
 
     fens1, fes1 = Q4quadrilateral(xyz[[1, 2, 5, 4], :], ref * 2, ref * 1) 
     fens2, fes2 = Q4quadrilateral(xyz[[4, 5, 8, 7], :], ref * 2, ref * 1) 
@@ -154,12 +153,6 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     fr = dofrange(dchi, DOF_KIND_FREE)
     dr = dofrange(dchi, DOF_KIND_DATA)
     
-    rank == 0 && (@info("Refinement factor: $(ref)"))
-    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
-    rank == 0 && (@info("Number of overlaps: $(No)"))
-    rank == 0 && (@info("Number of elements: $(count(fes))"))
-    rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
-
     bfes = meshboundary(fes)
     el = selectelem(fens, bfes, box = Float64[10.0 10.0 1.0 1.0 -1 1], tolerance = tolerance)
     lfemm1 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
@@ -171,7 +164,13 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     F_f = F[fr]
 
     associategeometry!(femm, geom0)
-          
+
+    rank == 0 && (@info("Refinement factor: $(ref)"))
+    rank == 0 && (@info("Number of overlaps: $(No)"))
+    rank == 0 && (@info("Number of nodes: $(count(fens))"))
+    rank == 0 && (@info("Number of elements: $(count(fes))"))
+    rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
+
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
         femm1.integdomain.fes = fes
@@ -179,130 +178,58 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
     end
 
     t1 = time()
-    cpi = nothing
-    if rank == 0
-        cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
-    end
-    cpi = MPI.bcast(cpi, 0, comm)
-    rank == 0 && (@info "Create partitioning info ($(round(time() - t1, digits=3)) [s])")
-    
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, dchi) 
+    rank == 0 && (@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])"))
+    t2 = time()
+    ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, nothing)
+    rank == 0 && (@info("Make partitions ($(round(time() - t2, digits=3)) [s])"))
+    meanps = mean_partition_size(cpi)
+    rank == 0 && (@info("Mean fine partition size: $(meanps)"))
+    rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))
+
     t1 = time()
-    partition = nothing
-    Phi = nothing
-    if rank > 0
-        partition = CoNCPartitionData(cpi, rank, fes, make_matrix, nothing)
-    else
-        @info("Number of clusters (requested): $(Nc)")
-        @info("Number of 1D basis functions: $(n1)")
-        nt = n1*(n1+1)/2 
-        (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
-        Nepc = count(fes) ÷ Nc
-        (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
-        @info("Number of elements per cluster: $(Nepc)")
+    rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
+    rank == 0 && (@info("Number of 1D basis functions: $(n1)"))
+    nt = n1*(n1+1)/2 
+    (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(dchi))))
+    Nepc = count(fes) ÷ Nc
+    (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
+    rank == 0 && (@info("Number of elements per cluster: $(Nepc)"))
     
-        cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
-        @info("Number of clusters (actual): $(Nc)")
+    cpartitioning, Nc = shell_cluster_partitioning(fens, fes, Nepc)
+    rank == 0 && (@info("Number of clusters (actual): $(Nc)"))
         
-        mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
-        Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
-        Phi = Phi[fr, :]
-        @info("Size of the reduced problem: $(size(Phi, 2))")
-        @info "Generate clusters ($(round(time() - t1, digits=3)) [s])"
-    end  
-    meanps = 0 
-    if rank == 0
-        partition_sizes = Int[]
-        for i in 1:Np
-            push!(partition_sizes, MPI.recv(comm; source=i))
-        end
-        meanps = Int(round(mean(partition_sizes)))
-        @info "Mean fine partition size: $(meanps)"
-    else
-        MPI.send(partition_size(partition), comm; dest=0)
-    end
-    MPI.Barrier(comm)
-    Phi = MPI.bcast(Phi, 0, comm)
-    rank == 0 && (@info "Create partitions and clusters ($(round(time() - t1, digits=3)) [s])")
+    mor = CoNCData(list -> patch_coordinates(fens.xyz, list), cpartitioning)
+    Phi = transfmatrix(mor, LegendreBasis, n1, dchi)
+    Phi = Phi[fr, :]
+    rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
+    rank == 0 && (@info("Generate clusters ($(round(time() - t1, digits=3)) [s])"))
 
-    t1 = time()
-    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
-    if rank > 0
-        Kr_ff = (Phi' * partition.nonoverlapping_K * Phi)
-    end
-    Krfactor = nothing
-    ks = MPI.gather(Kr_ff, comm; root=0)
-    if rank == 0
-        for k in ks
-            Kr_ff += k
-        end
-        Krfactor = lu(Kr_ff)
-    end
-    ccache = conc_cache(Krfactor, Phi)
-    rank == 0 && (@info "Create global factor ($(round(time() - t1, digits=3)) [s])")
-    
     function peeksolution(iter, x, resnorm)
-        (rank == 0 && peek) && (@info("it $(iter): residual norm =  $(resnorm)"))
+        rank == 0 && peek && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
-    
+        
     t1 = time()
-    aop = MPIAOperator(comm, rank, partition, cpi)
-    pre = MPITwoLevelPreconditioner(comm, rank, partition, cpi, ccache)
-    (u_f, stats) = pcg_mpi_2level_Schwarz(
-        comm, 
-        rank,
-        (q, p) -> partition_mult!(q, aop, p),
-        F_f,
-        zeros(size(F_f)),
-        (q, p) -> precond_2level!(q, pre, p);
-        itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
-        peeksolution=peeksolution)
+    M! = TwoLevelPreConditioner(ddcomm, Phi)
+    rank == 0 && (@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])"))
+
+    t0 = time()
+    x0 = PartitionedVector(Float64, ddcomm)
+    vec_copyto!(x0, 0.0)
+    b = PartitionedVector(Float64, ddcomm)
+    vec_copyto!(b, F_f)
+    (sol, stats) = pcg(
+        (q, p) -> aop!(q, p), 
+        b, x0;
+        (M!)=(q, p) -> M!(q, p),
+        peeksolution=peeksolution,
+        itmax=itmax, 
+        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+        )
+    t1 = time()
     rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
-    rank == 0 && (@info "Iterations ($(round(time() - t1, digits=3)) [s])")
-    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f), timers = stats.timers)
-
-    if rank > 0
-        MPI.send(stats.timers, comm; dest = 0)
-    end
-    root_timers = stats.timers
-    pavg_timers = Dict([(k, 0.0) for k in keys(root_timers)])
-    if rank == 0
-        ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
-        for k in keys(root_timers)
-            root_timers[k] = root_timers[k] / stats.niter
-            pavg_timers[k] = median([t[k] for t in ptimers]) / stats.niter 
-        end
-    end
-
-    if rank > 0
-        MPI.send(aop.timers, comm; dest = 0)
-    end
-    aop_pavg_timers = nothing
-    if rank == 0
-        ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
-        aop_pavg_timers = Dict([(k, 0.0) for k in keys(ptimers[1])])
-        for k in keys(ptimers[1])
-            aop_pavg_timers[k] = median([t[k] for t in ptimers]) / stats.niter
-        end
-        for k in keys(aop.timers)
-            aop.timers[k] = aop.timers[k] / stats.niter
-        end
-    end
-
-    if rank > 0
-        MPI.send(pre.timers, comm; dest = 0)
-    end
-    pre_pavg_timers = nothing
-    if rank == 0
-        ptimers = [MPI.recv(comm; source=i) for i in 1:Np]
-        pre_pavg_timers = Dict([(k, 0.0) for k in keys(ptimers[1])])
-        for k in keys(ptimers[1])
-            pre_pavg_timers[k] = median([t[k] for t in ptimers]) / stats.niter
-        end
-        for k in keys(pre.timers)
-            pre.timers[k] = pre.timers[k] / stats.niter
-        end
-    end
-
+    rank == 0 && (@info("Iterations ($(round(t1 - t0, digits=3)) [s])"))
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     if rank == 0
         data = Dict(
             "number_nodes" => count(fens),
@@ -313,17 +240,9 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
             "Np" => Np,
             "No" => No,
             "meanps" => meanps,
-            "size_Kr_ff" => size(Krfactor),
+            "size_Kr_ff" => size(M!.Kr_ff_factor),
             "stats" => stats,
-            "iteration_time" => time() - t1,
-            "timers" => [
-                "aop_root", aop.timers,
-                "aop_pavg", aop_pavg_timers,
-                "pre_root", pre.timers,
-                "pre_pavg", pre_pavg_timers,
-                "ite_root", root_timers,
-                "ite_pavg", pavg_timers,
-            ]
+            "iteration_time" => t1 - t0,
         )
         f = (filename == "" ?
              "zc-" *
@@ -333,20 +252,32 @@ function _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
              "-Np=$(Np)" *
              "-No=$(No)" :
              filename)
-        @info "Storing data in $(f * ".json")"
+        @info("Storing data in $(f * ".json")")
         DataDrop.store_json(f * ".json", data)
     end
-    
+    dchi_f = vec_collect(sol)
+    scattersysvec!(dchi, dchi_f, DOF_KIND_FREE)
+
+    if rank == 0
+        if visualize
+            f = (filename == "" ?
+                 "zc-" *
+                 "-ref=$(ref)" *
+                 "-Nc=$(Nc)" *
+                 "-n1=$(n1)" *
+                 "-Np=$(Np)" *
+                 "-No=$(No)" :
+                 filename) * "-cg-sol"
+            VTK.vtkexportmesh(f * ".vtk", fens, fes;
+                vectors=[("u", deepcopy(dchi.values[:, 1:3]),)])
+        end
+    end
+
     MPI.Finalize()
     rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))
     
     true
 end
-
-function test(;filename = "", ref = 3, Nc = 2, n1 = 6, No = 1, itmax = 2000, relrestol = 1e-6, peek = false, visualize = false) 
-    _execute(filename, ref, Nc, n1, No, itmax, relrestol, peek, visualize)
-end
-
 
 using ArgParse
 
@@ -369,14 +300,18 @@ function parse_commandline()
         help = "Number of overlaps"
         arg_type = Int
         default = 1
-        "--ref"
-        help = "Refinement factor (increment by 1 increases the number of triangles by a factor of 4)"
+        "--Np"
+        help = "Number of partitions"
         arg_type = Int
-        default = 5
+        default = 7
+        "--ref"
+        help = "Refinement factor"
+        arg_type = Int
+        default = 7
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
-        default = 2000
+        default = 200
         "--relrestol"
         help = "Relative residual tolerance"
         arg_type = Float64
@@ -384,7 +319,7 @@ function parse_commandline()
         "--peek"
         help = "Peek at the iterations?"
         arg_type = Bool
-        default = false
+        default = true
         "--visualize"
         help = "Write out visualization files?"
         arg_type = Bool
@@ -395,11 +330,12 @@ end
 
 p = parse_commandline()
 
-_execute(
+_execute_alt(
     p["filename"],
     p["ref"],
     p["Nc"], 
     p["n1"],
+    p["Np"], 
     p["No"], 
     p["itmax"], 
     p["relrestol"],

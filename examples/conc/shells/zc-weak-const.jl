@@ -11,7 +11,7 @@ for Nepp in [5000, 1000, 200]
         Nc = number_of_clusters(Np)
         filename = "$(prefix)-ref=$ref-Np=$Np-No=$No-Nepp=$Nepp.json"
         run(`
-        julia --project=. conc/shells/zc.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
+        julia --project=. conc/shells/zc_seq_driver.jl --filename "$filename" --ref $ref --Nc $Nc --n1 $n1 --Np $Np --No $No
         `)
     end
 end

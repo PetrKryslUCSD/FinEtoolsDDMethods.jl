@@ -4,31 +4,29 @@ http://www.codeproject.com/Articles/579983/Finite-Element-programming-in-Julia:
 Unit cube, with known temperature distribution along the boundary,
 and uniform heat generation rate inside.
 
-Solution with domain decomposition and MPI.
+Solution with domain decomposition. Sequential execution.
 Version: 08/19/2024
 """
-module Poisson2D_mpi_driver
+module Poisson2D_seq_driver
+
 using FinEtools
-using FinEtools.AlgoBaseModule: solve_blocked!, matrix_blocked, vector_blocked
-using FinEtools.AssemblyModule
-using FinEtools.MeshExportModule
+using FinEtools.MeshExportModule: VTK
 using FinEtoolsHeatDiff
-using LinearAlgebra
-using DataDrop
-using SparseArrays
-using SymRCM
-import CoNCMOR: CoNCData, transfmatrix, LegendreBasis
 using FinEtoolsDDMethods
-using FinEtoolsDDMethods.CGModule: pcg_mpi_2level_Schwarz
-using FinEtoolsDDMethods.DDCoNCMPIModule: partition_multiply!, precondition_global_solve!, precondition_local_solve!
+using FinEtoolsDDMethods.CGModule: pcg
+using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, npartitions
+using FinEtoolsDDMethods.DDCoNCMPIModule: DDCoNCMPIComm, PartitionedVector, aop!, TwoLevelPreConditioner, rhs
+using FinEtoolsDDMethods.DDCoNCMPIModule: vec_collect, vec_copyto!
+using Metis
+using Test
+using LinearAlgebra
+using SparseArrays
+using CoNCMOR: CoNCData, transfmatrix, LegendreBasis
+using DataDrop
 using Statistics
 using MPI
 
-function peeksolution(iter, x, resnorm)
-    @info("Iteration $(iter): residual norm $(resnorm)")
-end
-
-function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relrestol, visualize)
+function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
     # @info("""
     # Heat conduction example described by Amuthan A. Ramabathiran
     # http://www.codeproject.com/Articles/579983/Finite-Element-programming-in-Julia:
@@ -37,32 +35,31 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     # in a grid of $(N) x $(N) x $(N) edges.
     # Version: 08/13/2024
     # """)
+
+    to = time()
+    MPI.Init()
+    comm = MPI.COMM_WORLD
+    rank = MPI.Comm_rank(comm)
+    Np = MPI.Comm_size(comm)
+    rank == 0 && (@info "$(MPI.Get_library_version())")
+
+    BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
+    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    BLAS.set_num_threads(BLAS_THREADS)
+
+    rank == 0 && (@info "Number of processes/partitions: $Np")
+
     A = 1.0 # dimension of the domain (length of the side of the square)
     thermal_conductivity = [i == j ? one(Float64) : zero(Float64) for i = 1:2, j = 1:2] # conductivity matrix
     Q = -6.0 # internal heat generation rate
     function getsource!(forceout, XYZ, tangents, feid, qpid)
         forceout[1] = Q #heat source
     end
-    tempf(x) = (1.0 .+ x[:, 1] .^ 2 + 2.0 .* x[:, 2] .^ 2)#the exact distribution of temperature
-    
-    MPI.Init()
-    comm = MPI.COMM_WORLD
-    rank = MPI.Comm_rank(comm)
-    nprocs = MPI.Comm_size(comm)
-
-    BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
-    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
-    BLAS.set_num_threads(BLAS_THREADS)
-
-    nfpartitions = nprocs - 1
-
-    rank == 0 && (@info "Number of processes: $nprocs")
-    rank == 0 && (@info "Number of partitions: $nfpartitions")
-
-    t1 = time()
+    tempf(x) = (1.0 .+ x[:, 1] .^ 2 + 2.0 .* x[:, 2] .^ 2)#the exact distribution of temperature1
+    t0 = time()
     fens, fes = mesher(A, A, N, N)
-    rank == 0 && @info("Mesh generation ($(round(time() - t1, digits=3)) [s])")
-    t1 = time()
+    rank == 0 && (@info("Mesh generation ($(round(time() - t0, digits=3)) [s])"))
+    t0 = time()
     geom = NodalField(fens.xyz)
     Temp = NodalField(zeros(size(fens.xyz, 1), 1))
     Tolerance = 1.0 / N / 100.0
@@ -73,23 +70,22 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     List = vcat(l1, l2, l3, l4, )
     setebc!(Temp, List, true, 1, tempf(geom.values[List, :])[:])
     numberdofs!(Temp)
-
+    fr = dofrange(Temp, DOF_KIND_FREE)
+    dr = dofrange(Temp, DOF_KIND_DATA)
+    rank == 0 && (@info("Number of free degrees of freedom: $(nfreedofs(Temp)) ($(round(time() - t0, digits=3)) [s])"))
+    t0 = time()
     material = MatHeatDiff(thermal_conductivity)
-
-    t1 = time()
-    cpartitioning, ncpartitions = FinEtoolsDDMethods.cluster_partitioning(fens, fes, fes.label, nelperpart)
-    rank == 0 && @info("Number of clusters (coarse grid partitions): $(ncpartitions)")
-    mor = CoNCData(fens, cpartitioning)
-    Phi = transfmatrix(mor, LegendreBasis, nbf1max, Temp)
-    Phi = Phi[freedofs(Temp), :]
-    rank == 0 && @info("Size of the reduced problem: $(size(Phi, 2))")
-    rank == 0 && @info "Clustering ($(round(time() - t1, digits=3)) [s])"
+    
+    rank == 0 && (@info("Number of edges: $(N)"))
+    rank == 0 && (@info("Number of overlaps: $(No)"))
+    rank == 0 && (@info("Number of nodes: $(count(fens))"))
+    rank == 0 && (@info("Number of elements: $(count(fes))"))
+    rank == 0 && (@info("Number of free dofs = $(nfreedofs(Temp))"))
 
     function make_matrix(fes)
         femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
         return conductivity(femm2, geom, Temp)
     end
-
     function make_interior_load(fes)
         femm2 = FEMMHeatDiff(IntegDomain(fes, volrule, 1.0), material)
         fi = ForceIntensity(Float64[Q])
@@ -97,93 +93,211 @@ function _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relre
     end
 
     t1 = time()
-    partition = nothing
-    if rank > 0
-        cpi = CoNCPartitioningInfo(fens, fes, nfpartitions, overlap, Temp) 
-        partition = CoNCPartitionData(cpi, rank, fes, make_matrix, make_interior_load)
-    end    
-    MPI.Barrier(comm)
-    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
+    cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
+    rank == 0 && (@info("Create partitioning info ($(round(time() - t1, digits=3)) [s])"))
+    t2 = time()
+    ddcomm = DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
+    rank == 0 && (@info("Make partitions ($(round(time() - t2, digits=3)) [s])"))
+    meanps = mean_partition_size(cpi)
+    rank == 0 && (@info("Mean fine partition size: $(meanps)"))
+    rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))
 
     t1 = time()
-    F_f = zeros(nfreedofs(Temp))
-    if rank > 0
-        F_f .= partition.rhs
+    rank == 0 && (@info("Number of clusters (requested): $(Nc)"))
+    rank == 0 && (@info("Number of 1D basis functions: $(n1)"))
+    nt = n1*(n1+1)/2 
+    (Nc == 0) && (Nc = Int(floor(meanps / nt / ndofs(Temp))))
+    Nepc = count(fes) ÷ Nc
+    (n1 > (Nepc/2)^(1/2)) && @error "Not enough elements per cluster"
+    rank == 0 && (@info("Number of elements per cluster: $(Nepc)"))
+    cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
+    rank == 0 && (@info("Number of clusters (actual): $(Nc)"))
+    rank == 0 && (@info "Create clusters ($(round(time() - t1, digits=3)) [s])")
+        
+    mor = CoNCData(fens, cpartitioning)
+    Phi = transfmatrix(mor, LegendreBasis, n1, Temp)
+    Phi = Phi[fr, :]
+    rank == 0 && (@info("Size of the reduced problem: $(size(Phi, 2))"))
+    rank == 0 && (@info("Generate clusters ($(round(time() - t1, digits=3)) [s])"))
+
+    function peeksolution(iter, x, resnorm)
+        peek && rank == 0 && ((@info("it $(iter): residual norm =  $(resnorm)")))
     end
-    MPI.Reduce!(F_f, MPI.SUM, comm; root=0) # Reduce the data-determined rhs
-    rank == 0 && (@info "Compute RHS ($(round(time() - t1, digits=3)) [s])")
     
     t1 = time()
-    Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
-    if rank > 0
-        Kr_ff = (Phi' * partition.nonoverlapping_K * Phi)
-    end
-    ks = MPI.gather(Kr_ff, comm; root=0)
+    F_f = rhs(ddcomm)
+
+    t1 = time()
+    M! = TwoLevelPreConditioner(ddcomm, Phi)
+    rank == 0 && (@info("Create preconditioner ($(round(time() - t1, digits=3)) [s])"))
+
+    t0 = time()
+    x0 = PartitionedVector(Float64, ddcomm)
+    vec_copyto!(x0, 0.0)
+    b = PartitionedVector(Float64, ddcomm)
+    vec_copyto!(b, F_f)
+    (sol, stats) = pcg(
+        (q, p) -> aop!(q, p), 
+        b, x0;
+        (M!)=(q, p) -> M!(q, p),
+        peeksolution=peeksolution,
+        itmax=itmax, 
+        atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
+        )
+    t1 = time()
+    rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
+    rank == 0 && (@info("Iterations ($(round(t1 - t0, digits=3)) [s])"))
+    stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
     if rank == 0
-        for k in ks
-            Kr_ff += k
+        data = Dict(
+            "number_nodes" => count(fens),
+            "number_elements" => count(fes),
+            "nfreedofs" => nfreedofs(Temp),
+            "Nc" => Nc,
+            "n1" => n1,
+            "Np" => Np,
+            "No" => No,
+            "meanps" => meanps,
+            "size_Kr_ff" => size(M!.Kr_ff_factor),
+            "stats" => stats,
+            "iteration_time" => t1 - t0,
+        )
+        f = (filename == "" ?
+             "Poisson2D-" *
+             "$(kind)-" *
+             "-N=$(N)" *
+             "-Nc=$(Nc)" *
+             "-n1=$(n1)" *
+             "-Np=$(Np)" *
+             "-No=$(No)" :
+             filename)
+        @info("Storing data in $(f * ".json")")
+        DataDrop.store_json(f * ".json", data)
+    end
+    T_f = vec_collect(sol)
+    scattersysvec!(Temp, T_f, DOF_KIND_FREE)
+
+    if rank == 0
+        if visualize
+            f = (filename == "" ?
+                 "Poisson2D-" *
+                 "$(kind)-" *
+                 "-N=$(N)" *
+                 "-Nc=$(Nc)" *
+                 "-n1=$(n1)" *
+                 "-Np=$(Np)" *
+                 "-No=$(No)" :
+                 filename) * "-cg-sol"
+            VTK.vtkexportmesh(f * ".vtk", fens, fes;
+                scalars=[("T", deepcopy(Temp.values),)])
         end
-        Krfactor = lu(Kr_ff)
     end
-    rank == 0 && (@info "Create global factor ($(round(time() - t1, digits=3)) [s])")
-    
-    t1 = time()
-    norm_F_f = norm(F_f) 
-    (u_f, stats) = pcg_mpi_2level_Schwarz(
-        comm, 
-        rank,
-        (q, p) -> partition_multiply!(q, partition, p),
-        F_f,
-        zeros(size(F_f)),
-        (q, p) -> precondition_global_solve!(q, Krfactor, Phi, p), 
-        (q, p) -> precondition_local_solve!(q, partition, p);
-        itmax=itmax, atol=0.0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED,
-        peeksolution=peeksolution)
-
-    rank == 0 && @info("Number of iterations:  $(stats.niter)")
-    stats = (niter=stats.niter, resnorm=stats.resnorm ./ norm_F_f)
-    scattersysvec!(Temp, u_f, DOF_KIND_FREE)
-    rank == 0 && @info("Solution ($(round(time() - t1, digits=3)) [s])")
 
     if rank == 0
-        t1 = time()
+        t0 = time()
         Error = 0.0
         for k in axes(fens.xyz, 1)
             Error = Error + abs.(Temp.values[k, 1] - tempf(reshape(fens.xyz[k, :], (1, 2)))[1])
         end
-        Error = Error / count(fens)
-        @info("Error =$Error ($(round(time() - t1, digits=3)) [s])")
-        if visualize
-            geometry = xyz3(fens)
-            geometry[:, 3] .= Temp.values
-            fens.xyz = geometry
-            File = "Poisson2D_examples-sol.vtk"
-            MeshExportModule.VTK.vtkexportmesh(File, fens, fes; scalars=[("Temp", Temp.values)])
-        end
+        @info("Error =$Error ($(round(time() - t0, digits=3)) [s])")
     end
 
     MPI.Finalize()
+    rank == 0 && (@info("Total time: $(round(time() - to, digits=3)) [s]"))
     
     true
-end # _execute
-
-function test(; kind = "Q8", N = 253, nbf1max = 2, nelperpart = 2*(nbf1max+1)^2, overlap = 1, itmax = 1000, relrestol = 1e-6, visualize = false)
-    if kind == "Q8"
-        mesher = Q8block
-        volrule = GaussRule(2, 3)
-    elseif kind == "T6"
-        mesher = T6block
-        volrule = TriRule(3)
-    elseif kind == "T3"
-        mesher = T3block
-        volrule = TriRule(1)
-    else
-        error("Unknown kind of element")
-    end
-    _execute(N, mesher, volrule, nelperpart, nbf1max, overlap, itmax, relrestol, visualize)
 end
 
-test()
+using ArgParse
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--filename"
+        help = "Use filename to name the output files"
+        arg_type = String
+        default = ""
+        "--kind"
+        help = "Kind of element (T3, T6, Q4, Q8)"
+        arg_type = String
+        default = "T3"
+        "--Nc"
+        help = "Number of clusters"
+        arg_type = Int
+        default = 8
+        "--n1"
+        help = "Number 1D basis functions"
+        arg_type = Int
+        default = 3
+        "--No"
+        help = "Number of overlaps"
+        arg_type = Int
+        default = 1
+        "--Np"
+        help = "Number of partitions"
+        arg_type = Int
+        default = 7
+        "--N"
+        help = "How many edges per side?"
+        arg_type = Int
+        default = 32
+        "--itmax"
+        help = "Maximum number of iterations allowed"
+        arg_type = Int
+        default = 200
+        "--relrestol"
+        help = "Relative residual tolerance"
+        arg_type = Float64
+        default = 1.0e-6
+        "--peek"
+        help = "Peek at the iterations?"
+        arg_type = Bool
+        default = true
+        "--visualize"
+        help = "Write out visualization files?"
+        arg_type = Bool
+        default = false
+    end
+    return parse_args(s)
+end
+
+p = parse_commandline()
+
+kind = p["kind"]
+if kind == "Q8"
+    mesher = Q8block
+    volrule = GaussRule(2, 3)
+elseif kind == "Q4"
+    mesher = Q4block
+    volrule = GaussRule(2, 2)
+elseif kind == "T6"
+    mesher = T6block
+    volrule = TriRule(3)
+elseif kind == "T3"
+    mesher = T3block
+    volrule = TriRule(1)
+else
+    error("Unknown kind of element")
+end
+
+_execute_alt(
+    p["filename"],
+    kind,
+    mesher,
+    volrule,
+    p["N"],
+    p["Nc"], 
+    p["n1"],
+    p["Np"], 
+    p["No"], 
+    p["itmax"], 
+    p["relrestol"],
+    p["peek"],
+    p["visualize"],
+    )
+
 
 nothing
-end # module Poisson2D_mpi_driver
+end # module
+
+

@@ -114,7 +114,7 @@ function test()
                 )
     end
     
-    rank == 0 && (@info "Create partitions ($(round(time() - t1, digits=3)) [s])")
+    rank == 0 && (@info("Create partitions ($(round(time() - t1, digits=3)) [s])"))
 
     t1 = time()
     rank == 0 && (@info "Building the right hand side")
