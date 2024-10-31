@@ -37,7 +37,7 @@ MPI.install_mpiexecjl()
 Note the folder where the executable is installed.
 - Run the example. `mpiexecjl` likely needs to be specified using the path of the folder in which it was installed.
 ```
-mpiexecjl -n 4julia  --project=. schur/heat/Poisson2D_cg_mpi_driver.jl
+mpiexecjl -n 4 julia  --project=. schur/heat/Poisson2D_cg_mpi_driver.jl
 ```
 
 On Windows 11, in the bash, the following would work:
@@ -47,6 +47,12 @@ mpiexecjl -n 2 julia --project=. conc/shells/zc_mpi_driver.jl
 
 
 ## How to run a Schur-complement CG parallel example
+
+Only a few examples are provided.
+```
+mpiexecjl -n 4 julia  --project=. schur/heat/Poisson2D_cg_mpi_driver.jl
+```
+
 
 
 ## How to run a CoNC-preconditioned CG (sequential) example
@@ -69,6 +75,8 @@ For the shells, there are scripts for strong and weak scaling:
 
 - Z-section cantilever under torsional loading. Driver `zc-***S***-***X***.jl`
 
+
+
 Here `***S***` stands for the scaling type (`strong` or `weak`), 
 and `***X***`
 stands for the coarse-grid evolution strategy: `const`, `growlin`, `growlin2`, `growlog`, `growsqr`, `match`.
@@ -87,59 +95,28 @@ To run one particular example with just selected input parameters, first change 
 ```
 PS C:\temp\FinEtoolsDDMethods.jl> cd .\examples\
 ```
-Then fire up Julia 
+Then fire up Julia giving it the name of the driver:
 ```
-PS C:\temp\FinEtoolsDDMethods.jl\examples> julia
-               _
-   _       _ _(_)_     |  Documentation: https://docs.julialang.org
-  (_)     | (_) (_)    |
-   _ _   _| |_  __ _   |  Type "?" for help, "]?" for Pkg help.
-  | | | | | | |/ _` |  |
-  | | |_| | | | (_| |  |  Version 1.10.4 (2024-06-04)
- _/ |\__'_|_|_|\__'_|  |  Official https://julialang.org/ release
-|__/                   |
+julia --project=. conc/shells/zc_seq_driver.jl
 ```
-and run
-```
-julia> using Pkg; Pkg.activate("."); Pkg.instantiate();
-  Activating project at `C:\temp\FinEtoolsDDMethods.jl\examples`
+There are also `hyp_seq_driver.jl` (hyperbolic paraboloid shell with varying thickness), and
+`barrel_seq_driver.jl` (internally pressurized barrel).
 
-julia> include("conc/shells/hyp.jl")
-Current folder: C:\temp\FinEtoolsDDMethods.jl\examples
-  Activating project at `C:\temp\FinEtoolsDDMethods.jl\examples`
-Refinement factor: 2
-Number of elements per partition: 200
-Number of 1D basis functions: 5
-Number of fine grid partitions: 2
-Overlap: 1
-Number of elements: 8192
-Number of free dofs = 24767
-Number coarse grid partitions: 41
-Size of the reduced problem: (3690, 3690)
-Mean fine partition size: 1.29775e+04
-Number of iterations:  11
-true
-```
-
-Alternatively, a top level script may be run as
-```
-$ julia conc/shells/barrel.jl --nfpartitions 32
-```
 Run
 ```
-$ julia conc/shells/barrel.jl --help
+$ julia conc/shells/barrel_seq_driver.jl --help
 ```
 to see the available options.
 
 ## How to run a CoNC-preconditioned CG (MPI-parallel) example
 
-At the moment only the heat conduction and shell analysis examples have been cast in this form. In an interactive run on Windows, try
+At the moment  the heat conduction, linear elasticity,  and shell analysis examples have been cast in this form. In an interactive run on Windows, try
 ```
-mpiexec -n 5 julia --project=. .\conc\heat\Poisson2D_mpi_driver.jl
+mpiexecjl -n 5 julia --project=. ./conc/heat/Poisson2D_mpi_driver.jl
 ```
 or
 ```
-mpiexec -n 5 julia --project=. .\conc\shells\zc_mpi_driver.jl
+mpiexec -n 5 julia --project=. ./conc/shells/zc_mpi_driver.jl
 ```
 
 Batch execution on the Ookami A64FX nodes is described with the following `sbatch` script
