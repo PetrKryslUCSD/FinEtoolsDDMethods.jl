@@ -377,7 +377,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     rank == 0 && (@info("Generate clusters ($(round(time() - t1, digits=3)) [s])"))
 
     function peeksolution(iter, x, resnorm)
-        peek && (@info("it $(iter): residual norm =  $(resnorm)"))
+        peek && rank == 0 && (@info("it $(iter): residual norm =  $(resnorm)"))
     end
     
     t1 = time()
@@ -398,37 +398,39 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
         atol= 0, rtol=relrestol, normtype = KSP_NORM_UNPRECONDITIONED
         )
     t1 = time()
-    @info("Number of iterations:  $(stats.niter)")
-    @info("Iterations ($(round(t1 - t0, digits=3)) [s])")
+    rank == 0 && (@info("Number of iterations:  $(stats.niter)"))
+    rank == 0 && (@info("Iterations ($(round(t1 - t0, digits=3)) [s])"))
     stats = (niter = stats.niter, residuals = stats.residuals ./ norm(F_f))
-    data = Dict(
-        "number_nodes" => count(fens),
-        "number_elements" => count(fes),
-        "nfreedofs" => nfreedofs(u),
-        "Nc" => Nc,
-        "n1" => n1,
-        "Np" => Np,
-        "No" => No,
-        "meanps" => meanps,
-        "size_Kr_ff" => size(M!.Kr_ff_factor),
-        "stats" => stats,
-        "iteration_time" => t1 - t0,
-    )
-    f = (filename == "" ?
-         "fib-" *
-         "$(kind)-" *
-         "-ref=$(ref)" *
-         "-Nc=$(Nc)" *
-         "-n1=$(n1)" *
-         "-Np=$(Np)" *
-         "-No=$(No)" :
-         filename)
-    @info("Storing data in $(f * ".json")")
-    DataDrop.store_json(f * ".json", data)
+    if rank == 0
+        data = Dict(
+            "number_nodes" => count(fens),
+            "number_elements" => count(fes),
+            "nfreedofs" => nfreedofs(u),
+            "Nc" => Nc,
+            "n1" => n1,
+            "Np" => Np,
+            "No" => No,
+            "meanps" => meanps,
+            "size_Kr_ff" => size(M!.Kr_ff_factor),
+            "stats" => stats,
+            "iteration_time" => t1 - t0,
+        )
+        f = (filename == "" ?
+             "fib-" *
+             "$(kind)-" *
+             "-ref=$(ref)" *
+             "-Nc=$(Nc)" *
+             "-n1=$(n1)" *
+             "-Np=$(Np)" *
+             "-No=$(No)" :
+             filename)
+        @info("Storing data in $(f * ".json")")
+        DataDrop.store_json(f * ".json", data)
+    end
     u_f = vec_collect(sol)
     scattersysvec!(u, u_f, DOF_KIND_FREE)
     
-    if visualize
+    if visualize && rank == 0
         f = (filename == "" ?
          "fib-" *
          "$(kind)-" *
