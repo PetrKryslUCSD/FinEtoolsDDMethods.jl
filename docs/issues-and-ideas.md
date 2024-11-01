@@ -490,3 +490,7 @@ The vector z could then also be held only locally.
 -- I think I need to allow for rank to be zero-based. Done.
 
 "terminal.integrated.defaultProfile.windows": "Git Bash"
+
+-- Could one do the global solve only every few iterations?
+
+-- Is there any penalty involved in waiting for Isend? Could we use only a "free" instead?
