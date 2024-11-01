@@ -14,7 +14,7 @@ run(cmd)
 
 cmd = `julia --project=. ./conc/shells/hyp_seq_driver.jl`
 run(cmd)
-@info "======================================\nExpected 68 iterations"
+@info "======================================\nExpected 28 iterations"
 
 
 cmd = `julia --project=. ./conc/lindef/fib_seq_driver.jl`
