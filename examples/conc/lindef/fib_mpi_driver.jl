@@ -321,8 +321,10 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     rank == 0 && (@info("Refinement factor: $(ref)"))
     rank == 0 && (@info("Materials: $(Ef), $(nuf), $(Em), $(num)"))
     
+    rank == 0 && (@info("Refinement level: $(ref)"))
     rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
     rank == 0 && (@info("Number of overlaps: $(No)"))
+    rank == 0 && (@info("Number of nodes: $(count(fens))"))
     rank == 0 && (@info("Number of elements: $(count(fes))"))
     rank == 0 && (@info("Number of free dofs = $(nfreedofs(u))"))
 
@@ -341,12 +343,6 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
         return stiffness(_femmm, geom, u) + stiffness(_femmf, geom, u)
     end
 
-    rank == 0 && (@info("Refinement level: $(ref)"))
-    rank == 0 && (@info("Number of fine grid partitions: $(Np)"))
-    rank == 0 && (@info("Number of overlaps: $(No)"))
-    rank == 0 && (@info("Number of nodes: $(count(fens))"))
-    rank == 0 && (@info("Number of elements: $(count(fes))"))
-    rank == 0 && (@info("Number of free dofs = $(nfreedofs(u))"))
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, u) 
@@ -368,7 +364,7 @@ function _execute(filename, kind, ref, Em, num, Ef, nuf,
     rank == 0 && (@info("Number of elements per cluster: $(Nepc)"))
     cpartitioning, Nc = cluster_partitioning(fens, fes, fes.label, Nepc)
     rank == 0 && (@info("Number of clusters (actual): $(Nc)"))
-    @info "Create clusters ($(round(time() - t1, digits=3)) [s])"
+    rank == 0 && (@info "Create clusters ($(round(time() - t1, digits=3)) [s])")
         
     mor = CoNCData(fens, cpartitioning)
     Phi = transfmatrix(mor, LegendreBasis, n1, u)

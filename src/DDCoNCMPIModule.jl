@@ -247,10 +247,12 @@ end
 function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     comm = p.ddcomm.comm
     partition = p.ddcomm.partition
+    # Start all sends
     bs = p.buffers
+    ldofs_self = partition.entity_list.nonshared.ldofs_self
+    ldofs_other = partition.entity_list.nonshared.ldofs_other
     # Start all receives
     requests = MPI.Request[]
-    ldofs_other = partition.entity_list.nonshared.ldofs_other
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
@@ -258,7 +260,6 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
         end
     end
     # Start all sends
-    ldofs_self = partition.entity_list.nonshared.ldofs_self
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
@@ -268,22 +269,31 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     end
     # Wait for all receives, unpack. 
     MPI.Waitall(requests)
-    ldofs_other = partition.entity_list.nonshared.ldofs_other
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
             bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
         end
     end
+    # println("$(partition.rank): after bs ns = $(bs.ns)")
+    # while true
+    #     other = MPI.Waitany(requests)
+    #     if other === nothing
+    #         break
+    #     end
+    #     n = length(ldofs_other[other])
+    #     bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
+    # end
 end
 
 function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     comm = q.ddcomm.comm
     partition = q.ddcomm.partition    
     bs = q.buffers
+    ldofs_other = partition.entity_list.nonshared.ldofs_other
+    ldofs_self = partition.entity_list.nonshared.ldofs_self
     # Start all receives
     requests = MPI.Request[]
-    ldofs_self = partition.entity_list.nonshared.ldofs_self
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
@@ -291,7 +301,6 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         end
     end
     # Start all sends
-    ldofs_other = partition.entity_list.nonshared.ldofs_other
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
@@ -307,15 +316,23 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
         end
     end
+    # while true
+    #     other = MPI.Waitany(requests)
+    #     println("$(partition.rank): Got $(torank(other)), $(requests)")
+    #     if other === nothing
+    #         break
+    #     end
+    #     n = length(ldofs_self[other])
+    #     bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
+    #     println("$(partition.rank) received from $(torank(other)): $(bs.recv[other][1:n])")
+    # end
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     _rhs_update!(p)
-    # @show(vec_collect(p))
     partition = p.ddcomm.partition
     q.buffers.ns .= partition.Kns_ff * p.buffers.ns
     _lhs_update!(q)  
-    sleep(1)
     q    
 end
 
@@ -388,6 +405,8 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     comm = p.ddcomm.comm
     partition = p.ddcomm.partition
     bs = p.buffers
+    ldofs_self = partition.entity_list.extended.ldofs_self
+    ldofs_other = partition.entity_list.extended.ldofs_other
     # Copy data from nonshared to extended
     psx = partition.entity_list.extended
     bs.xt .= 0
@@ -395,7 +414,6 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     bs.xt[ld] .= bs.ns[ld]
     # Start all receives
     requests = MPI.Request[]
-    ldofs_other = partition.entity_list.extended.ldofs_other
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
@@ -403,7 +421,6 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
         end
     end
     # Start all sends
-    ldofs_self = partition.entity_list.extended.ldofs_self
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
@@ -419,17 +436,24 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
             bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
         end
     end
+    # while true
+    #     other = MPI.Waitany(requests)
+    #     if other === nothing
+    #         break
+    #     end
+    #     n = length(ldofs_other[other])
+    #     bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
+    # end
 end
 
 function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     comm = q.ddcomm.comm
     partition = q.ddcomm.partition
-    # Start all sends
-    ldofs_other = partition.entity_list.extended.ldofs_other
     bs = q.buffers
+    ldofs_other = partition.entity_list.extended.ldofs_other
+    ldofs_self = partition.entity_list.extended.ldofs_self
     # Start all receives
     requests = MPI.Request[]
-    ldofs_self = partition.entity_list.extended.ldofs_self
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
@@ -452,6 +476,14 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
             bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
         end
     end
+    # while true
+    #     other = MPI.Waitany(requests)
+    #     if other === nothing
+    #         break
+    #     end
+    #     n = length(ldofs_other[other])
+    #     bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
+    # end
     ld = partition.entity_list.nonshared.ldofs_own_only
     bs.ns[ld] .+= bs.xt[ld]
 end
