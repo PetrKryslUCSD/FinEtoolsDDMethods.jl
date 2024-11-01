@@ -494,3 +494,15 @@ The vector z could then also be held only locally.
 -- Could one do the global solve only every few iterations?
 
 -- Is there any penalty involved in waiting for Isend? Could we use only a "free" instead?
+
+-- Could this pattern be beneficial?
+```julia
+while true
+  other = MPI.Waitany(requests)
+  if other === nothing
+    break
+  end
+  n = length(ldofs_other[other])
+  bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
+end
+```
