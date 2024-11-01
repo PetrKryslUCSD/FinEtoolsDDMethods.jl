@@ -119,42 +119,25 @@ or
 mpiexec -n 5 julia --project=. ./conc/shells/zc_mpi_driver.jl
 ```
 
-Batch execution on the Ookami A64FX nodes is described with the following `sbatch` script
-for MPICH:
+Batch execution on the Ookami A64FX nodes is described with a `sbatch` script.
+The batch file may be generated with the script `make_zc.sh`
 ```
-#!/usr/bin/env bash
-
-#SBATCH --job-name=job_barrel
-#SBATCH --output=job_barrel.log
-#SBATCH --ntasks-per-node=1
-#SBATCH --ntasks=24
-#SBATCH --time=00:15:00
-#SBATCH -p short
-
-export JULIA_DEPOT_PATH="~/a64fx/depot"
-module load julia
-module load gcc/13.1.0
-module load slurm
-module load openmpi/gcc8/4.1.2
-
-export JULIA_NUM_THREADS=1
-export BLAS_THREADS=2
-
-cd FinEtoolsDDMethods.jl/examples
-/lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl julia --project=. conc/shells/barrel_mpi_driver.jl
-```
-The above executes on 24 nodes (root + 23 partitions), using 2 BLAS threads per process.
-
-And this one for OpenMPI:
-```
+n=$1
+q=$2
+cat <<EOF
 #!/usr/bin/env bash
 
 #SBATCH --job-name=job_zc
-#SBATCH --output=job_zc_Np=8.log
 #SBATCH --ntasks-per-node=1
-#SBATCH --ntasks=9
-#SBATCH --time=00:15:00
-#SBATCH -p short
+#SBATCH --ntasks=$n
+#SBATCH --time=01:45:00
+#SBATCH -p $q
+
+# specify message size threshold for using the UCX Rendevous Protocol
+#export UCX_RNDV_THRESH=65536
+
+# use high-performance rc transports where possible
+#export UCX_TLS=rc
 
 # Load OpenMPI and Julia
 export JULIA_DEPOT_PATH="~/a64fx/depot"
@@ -168,5 +151,13 @@ export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
 export BLAS_THREADS=2
 
 cd FinEtoolsDDMethods.jl/examples
-mpiexec julia --project=. conc/shells/zc_mpi_driver.jl --n1 6 --Nc 100 --ref 100
+mpiexec julia --project=. conc/shells/zc_mpi_driver.jl --n1 6 --Nc 200 --ref 200
+EOF
+
+```
+and submitted with `bash make_zc.sh 4 short > zc.sh ; sbatch zc.sh`. For OpenMPI replace `mpiexec` with `/lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl `.;
+
+In order to precompile Julia, use interactive command line:
+```
+srun -N 1 -n 48 -t 00:30:00 -p short --pty bash
 ```
