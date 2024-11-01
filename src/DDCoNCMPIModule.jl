@@ -212,18 +212,31 @@ function deepcopy(a::PV) where {PV<:PartitionedVector}
     return PartitionedVector(a.ddcomm, deepcopy(a.buffers))
 end
 
-# Computes y = x + a y.
+"""
+    vec_aypx!(y::PV, a, x::PV) where {PV<:PartitionedVector}
+
+Compute `y = a y + x`.
+"""
 function vec_aypx!(y::PV, a, x::PV) where {PV<:PartitionedVector}
     @. y.buffers.ns = a * y.buffers.ns + x.buffers.ns
     y
 end
 
-# Computes y += a x
+"""
+    vec_ypax!(y::PV, a, x::PV) where {PV<:PartitionedVector}
+
+Compute `y = y + a x`.
+"""
 function vec_ypax!(y::PV, a, x::PV) where {PV<:PartitionedVector}
     @. y.buffers.ns = y.buffers.ns + a * x.buffers.ns
     y
 end
 
+"""
+    vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
+
+Compute the dot product of two partitioned vectors.
+"""
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     partition = y.ddcomm.partition
     own = 1:partition.entity_list.nonshared.num_own_dofs
