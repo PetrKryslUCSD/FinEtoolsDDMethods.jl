@@ -493,7 +493,7 @@ The vector z could then also be held only locally.
 
 -- Could one do the global solve only every few iterations?
 
--- Is there any penalty involved in waiting for Isend? Could we use only a "free" instead?
+-- Is there any penalty involved in waiting for Isend? Could we use only a "free" instead? Done: free is used for the sends. 
 
 -- Could this pattern be beneficial?
 ```julia
@@ -506,3 +506,4 @@ while true
   bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
 end
 ```
+Done. Replaced all waitalls.
