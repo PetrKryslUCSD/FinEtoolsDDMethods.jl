@@ -280,7 +280,6 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
         n = length(ldofs_other[other])
         bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
     end
-    # MPI.free.(sendrequests)
 end
 
 function _lhs_update!(q::PV) where {PV<:PartitionedVector}
@@ -318,7 +317,6 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         n = length(ldofs_self[other])
         bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
     end
-    # MPI.free.(sendrequests)
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
@@ -434,7 +432,6 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
         n = length(ldofs_other[other])
         bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
     end
-    # MPI.free.(sendrequests)
 end
 
 function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
@@ -472,7 +469,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
         n = length(ldofs_self[other])
         bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
     end
-    # MPI.free.(sendrequests)
+    # Update the nonshared
     ld = partition.entity_list.nonshared.ldofs_own_only
     bs.ns[ld] .+= bs.xt[ld]
 end
