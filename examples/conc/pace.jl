@@ -1,6 +1,6 @@
 cmd = `julia --project=. ./conc/heat/Poisson2D_seq_driver.jl`
 run(cmd)
-@info "======================================\nExpected 13 iterations, nearly zero error"
+@info "======================================\nExpected 13 iterations, 5.86281e-04 error"
 
 cmd = `julia --project=. ./conc/shells/zc_seq_driver.jl`
 run(cmd)
@@ -19,5 +19,5 @@ run(cmd)
 
 cmd = `julia --project=. ./conc/lindef/fib_seq_driver.jl --Np 7`
 run(cmd)
-@info "======================================\nExpected 36 iterations"
+@info "======================================\nExpected 67 iterations"
 

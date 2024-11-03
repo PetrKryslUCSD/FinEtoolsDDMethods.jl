@@ -493,7 +493,7 @@ The vector z could then also be held only locally.
 
 -- Could one do the global solve only every few iterations?
 
--- Is there any penalty involved in waiting for Isend? Could we use only a "free" instead? Done: free is used for the sends. 
+-- Is there any penalty involved in waiting for Isend? Could we use only a "free" instead? Done: free is used for the sends. But: it seems not waiting for sends may introduce non-determinacy!? Put the wait back in 11/2/2024.
 
 -- Could this pattern be beneficial?
 ```julia
