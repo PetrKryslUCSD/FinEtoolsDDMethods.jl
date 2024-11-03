@@ -441,13 +441,11 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     ldofs_other = partition.entity_list.extended.ldofs_other
     ldofs_self = partition.entity_list.extended.ldofs_self
     # Start all receives
-    others = Int[]
     recvrequests = MPI.Request[]
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
             push!(recvrequests, MPI.Irecv!(view(bs.recv[other], 1:n), comm; source=torank(other)))
-            push!(others, other)
         end
     end
     # Start all sends
