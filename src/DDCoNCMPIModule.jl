@@ -343,7 +343,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     n = size(Phi, 1)
     nr = size(Phi, 2)
     Kr_ff = spzeros(nr, nr)
-    i = rank + 1
+    i = topartitionnumber(rank)
     pel = ddcomm.list_of_entity_lists[i].nonshared
     # First we work with all the degrees of freedom on the partition
     P = Phi[pel.global_dofs, :]
@@ -386,7 +386,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     q.buffers.ns .= 0
     ld = partition.entity_list.nonshared.ldofs_own_only
     q.buffers.ns[ld] .= pre.buff_Phi * pre.buffKiPp
-    _lhs_update!(q)
+    # _lhs_update!(q)
     q.buffers.xt .= partition.Kxt_ff_factor \ p.buffers.xt
     _lhs_update_xt!(q)
     q
