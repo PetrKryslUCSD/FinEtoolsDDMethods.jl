@@ -40,25 +40,35 @@ using ShellStructureTopo: make_topo_faces, create_partitions
 
 # using MatrixSpy
 
-# Parameters:
-E = 200e3 * phun("MPa")
-nu = 0.3
-rho = 7850 * phun("KG/M^3")
-thickness = 2.0 * phun("mm")
-pressure = 100.0 * phun("kilo*Pa")
-
-input = "barrel_w_stiffeners-s3.h5mesh"
-
-function computetrac!(forceout, XYZ, tangents, feid, qpid)
-    n = cross(tangents[:, 1], tangents[:, 2]) 
-    n = n/norm(n)
-    forceout[1:3] = n*pressure
-    forceout[4:6] .= 0.0
-    return forceout
-end
-
 function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol, peek, visualize)
+    # Parameters:
+    E = 200e3 * phun("MPa")
+    nu = 0.3
+    rho = 7850 * phun("KG/M^3")
+    thickness = 2.0 * phun("mm")
+    pressure = 100.0 * phun("kilo*Pa")
     CTE = 0.0
+    input = "barrel_w_stiffeners-s3.h5mesh"
+
+    function computetrac!(forceout, XYZ, tangents, feid, qpid)
+   		n = cross(tangents[:, 1], tangents[:, 2]) 
+        n = n / norm(n)
+        forceout[1:3] = n * pressure
+	    forceout[4:6] .= 0.0
+	    return forceout
+    end
+
+    to = time()
+    MPI.Init()
+    comm = MPI.COMM_WORLD
+    rank = MPI.Comm_rank(comm)
+    Np = MPI.Comm_size(comm)
+    rank == 0 && (@info "$(MPI.Get_library_version())")
+
+    BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
+    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    BLAS.set_num_threads(BLAS_THREADS)
+
         
     if !isfile(joinpath(dirname(@__FILE__()), input))
         success(run(`unzip -qq -d $(dirname(@__FILE__())) $(joinpath(dirname(@__FILE__()), "barrel_w_stiffeners-s3-mesh.zip"))`; wait = false))
