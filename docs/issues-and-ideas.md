@@ -507,3 +507,17 @@ while true
 end
 ```
 Done. Replaced all waitalls.
+
+-- Don't need update lhs of q?
+```
+    q.buffers.ns[ld] .= pre.buff_Phi * pre.buffKiPp
+    # _lhs_update!(q)
+    q.buffers.xt .= partition.Kxt_ff_factor \ p.buffers.xt
+    _lhs_update_xt!(q)
+    q
+end
+```
+
+-- Implement much higher orders of Legender polynomials.
+
+-- Use eigendecomposition of Kr_ff?
