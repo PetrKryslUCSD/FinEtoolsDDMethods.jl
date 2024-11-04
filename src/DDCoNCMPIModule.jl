@@ -327,8 +327,10 @@ function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     q    
 end
 
-struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm, T, IT, FACTOR}
+mutable struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm, T, IT, FACTOR}
     ddcomm::DDC
+    napps::Int
+    nskip::Int
     n::IT
     buff_Phi::SparseMatrixCSC{T, IT}
     Kr_ff_factor::FACTOR
@@ -338,6 +340,8 @@ end
 
 function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     comm = ddcomm.comm
+    napps = 0
+    nskip = 0
     partition = ddcomm.partition
     rank = ddcomm.partition.rank 
     n = size(Phi, 1)
@@ -369,23 +373,27 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     buff_Phi = P[pel.ldofs_own_only, :]
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
     buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
-    return TwoLevelPreConditioner(ddcomm, n, buff_Phi, Kr_ff_factor, buffPp, buffKiPp)
+    return TwoLevelPreConditioner(ddcomm, napps, nskip, n, buff_Phi, Kr_ff_factor, buffPp, buffKiPp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
     partition = p.ddcomm.partition
     _rhs_update_xt!(p)
-    # Narrow by the transformation 
-    ld = partition.entity_list.nonshared.ldofs_own_only
-    pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
-    # Communicate
-    pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
-    # Solve the reduced problem
-    pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
-    # Expand by the transformation 
     q.buffers.ns .= 0
-    ld = partition.entity_list.nonshared.ldofs_own_only
-    q.buffers.ns[ld] .= pre.buff_Phi * pre.buffKiPp
+    pre.napps += 1
+    if pre.napps > pre.nskip
+        # Narrow by the transformation 
+        ld = partition.entity_list.nonshared.ldofs_own_only
+        pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
+        # Communicate
+        pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
+        # Solve the reduced problem
+        pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
+        # Expand by the transformation 
+        ld = partition.entity_list.nonshared.ldofs_own_only
+        q.buffers.ns[ld] .= pre.buff_Phi * pre.buffKiPp
+        pre.napps = 0
+    end
     # _lhs_update!(q)
     q.buffers.xt .= partition.Kxt_ff_factor \ p.buffers.xt
     _lhs_update_xt!(q)
