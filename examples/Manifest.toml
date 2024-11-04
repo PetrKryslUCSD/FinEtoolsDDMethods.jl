@@ -6,9 +6,9 @@ project_hash = "ffc266a7eabb55cdb7b2dfae1291cc34bf9ae0b0"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
-git-tree-sha1 = "6a55b747d1812e699320963ffde36f1ebdda4099"
+git-tree-sha1 = "50c3c56a52972d78e8be9fd135bfb91c9574c140"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-version = "4.0.4"
+version = "4.1.1"
 weakdeps = ["StaticArrays"]
 
     [deps.Adapt.extensions]
@@ -245,7 +245,7 @@ version = "8.0.25"
 deps = ["CoNCMOR", "DataDrop", "FinEtools", "Krylov", "LinearAlgebra", "LinearOperators", "MPI", "Metis", "OrderedCollections", "ShellStructureTopo", "SparseArrays", "Statistics", "Test"]
 path = ".."
 uuid = "093fdad3-4fce-4574-aa49-c2a24de4f00d"
-version = "0.6.6"
+version = "0.7.0"
 
 [[deps.FinEtoolsDeforLinear]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "SuiteSparse", "Test"]
@@ -255,9 +255,9 @@ version = "3.0.4"
 
 [[deps.FinEtoolsFlexStructures]]
 deps = ["Arpack", "DataDrop", "Dierckx", "FinEtools", "FinEtoolsDeforLinear", "LinearAlgebra", "SparseArrays", "SparseMatricesCSR", "Statistics", "SymRCM", "Test"]
-git-tree-sha1 = "1f76067025879f9e11c4223ae80904ee966660cf"
+git-tree-sha1 = "b4a96d4889b51a6b6ed8ffeae18323e95695f524"
 uuid = "723391e6-6814-4d1d-921c-018f691214d8"
-version = "3.0.2"
+version = "3.0.3"
 
 [[deps.FinEtoolsHeatDiff]]
 deps = ["Arpack", "FinEtools", "LinearAlgebra", "SparseArrays", "Statistics", "Test"]
@@ -316,9 +316,9 @@ uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
 [[deps.JLLWrappers]]
 deps = ["Artifacts", "Preferences"]
-git-tree-sha1 = "f389674c99bfcde17dc57454011aa44d5a260a40"
+git-tree-sha1 = "be3dc50a92e5a386872a493a10050136d4703f9b"
 uuid = "692b3bcd-3c85-4b1f-b108-f13ce0eb3210"
-version = "1.6.0"
+version = "1.6.1"
 
 [[deps.JSON]]
 deps = ["Dates", "Mmap", "Parsers", "Unicode"]
@@ -328,9 +328,9 @@ version = "0.21.4"
 
 [[deps.JSON3]]
 deps = ["Dates", "Mmap", "Parsers", "PrecompileTools", "StructTypes", "UUIDs"]
-git-tree-sha1 = "eb3edce0ed4fa32f75a0a11217433c31d56bd48b"
+git-tree-sha1 = "1d322381ef7b087548321d3f878cb4c9bd8f8f9b"
 uuid = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
-version = "1.14.0"
+version = "1.14.1"
 
     [deps.JSON3.extensions]
     JSON3ArrowExt = ["ArrowTypes"]
@@ -346,9 +346,9 @@ version = "0.9.36"
 
 [[deps.Krylov]]
 deps = ["LinearAlgebra", "Printf", "SparseArrays"]
-git-tree-sha1 = "267dad6b4b7b5d529c76d40ff48d33f7e94cb834"
+git-tree-sha1 = "4f20a2df85a9e5d55c9e84634bbf808ed038cabd"
 uuid = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
-version = "0.9.6"
+version = "0.9.8"
 
 [[deps.LLVMOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -395,9 +395,9 @@ uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 
 [[deps.Libiconv_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "f9557a255370125b405568f9767d6d195822a175"
+git-tree-sha1 = "61dfdba58e585066d8bce214c5a51eaa0539f269"
 uuid = "94ce4f54-9a6c-5748-9c1c-f9c7231a4531"
-version = "1.17.0+0"
+version = "1.17.0+1"
 
 [[deps.LightXML]]
 deps = ["Libdl", "XML2_jll"]
@@ -445,9 +445,9 @@ version = "0.12.171"
 
 [[deps.LoweredCodeUtils]]
 deps = ["JuliaInterpreter"]
-git-tree-sha1 = "c2b5e92eaf5101404a58ce9c6083d595472361d6"
+git-tree-sha1 = "260dc274c1bc2cb839e758588c63d9c8b5e639d1"
 uuid = "6f1432cf-f94c-5a45-995e-cdbf5db27b0b"
-version = "3.0.2"
+version = "3.0.5"
 
 [[deps.METIS_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -650,9 +650,9 @@ version = "1.3.0"
 
 [[deps.Revise]]
 deps = ["CodeTracking", "Distributed", "FileWatching", "JuliaInterpreter", "LibGit2", "LoweredCodeUtils", "OrderedCollections", "REPL", "Requires", "UUIDs", "Unicode"]
-git-tree-sha1 = "0a20a01fbb3a9531f3325a94b6dcf95c404a1658"
+git-tree-sha1 = "7f4228017b83c66bd6aa4fddeb170ce487e53bc7"
 uuid = "295af30f-e4ad-537b-8983-00126c2a3abe"
-version = "3.6.0"
+version = "3.6.2"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -717,9 +717,9 @@ weakdeps = ["OffsetArrays", "StaticArrays"]
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]
-git-tree-sha1 = "eeafab08ae20c62c44c8399ccb9354a04b80db50"
+git-tree-sha1 = "777657803913ffc7e8cc20f0fd04b634f871af8f"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.9.7"
+version = "1.9.8"
 
     [deps.StaticArrays.extensions]
     StaticArraysChainRulesCoreExt = "ChainRulesCore"
@@ -823,21 +823,21 @@ version = "1.0.1"
 
 [[deps.VectorizationBase]]
 deps = ["ArrayInterface", "CPUSummary", "HostCPUFeatures", "IfElse", "LayoutPointers", "Libdl", "LinearAlgebra", "SIMDTypes", "Static", "StaticArrayInterface"]
-git-tree-sha1 = "e7f5b81c65eb858bed630fe006837b935518aca5"
+git-tree-sha1 = "4ab62a49f1d8d9548a1c8d1a75e5f55cf196f64e"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.21.70"
+version = "0.21.71"
 
 [[deps.WriteVTK]]
 deps = ["Base64", "CodecZlib", "FillArrays", "LightXML", "TranscodingStreams", "VTKBase"]
-git-tree-sha1 = "e453383a1486a9020a3323bf3665ea31106ebe9a"
+git-tree-sha1 = "1d8042d58334ab7947ce505709df7009da6f3375"
 uuid = "64499a7a-5c06-52f2-abe2-ccb03c286192"
-version = "1.21.0"
+version = "1.21.1"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]
-git-tree-sha1 = "1165b0443d0eca63ac1e32b8c0eb69ed2f4f8127"
+git-tree-sha1 = "6a451c6f33a176150f315726eba8b92fbfdb9ae7"
 uuid = "02c8fc9c-b97f-50b9-bbe4-9be30ff0a78a"
-version = "2.13.3+0"
+version = "2.13.4+0"
 
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
