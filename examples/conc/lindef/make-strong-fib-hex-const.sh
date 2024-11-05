@@ -102,11 +102,6 @@ flags()
             [ $# = 0 ] && error "No value specified"
             export NO="$1"
             shift;;
-        (--N)
-            shift
-            [ $# = 0 ] && error "No value specified"
-            export N="$1"
-            shift;;
         (--ref)
             shift
             [ $# = 0 ] && error "No value specified"
@@ -201,8 +196,9 @@ cd FinEtoolsDDMethods.jl/examples
 mpiexecjl julia --project=. conc/lindef/fib_mpi_driver.jl \
 --filename $FILENAME \
 --kind $KIND \
---n1 $N1 \
 --Nc $NC \
+--n1 $N1 \
+--No $NO \
 --ref $REF \
 --itmax  $ITMAX \
 --relrestol  $RELRESTOL \
