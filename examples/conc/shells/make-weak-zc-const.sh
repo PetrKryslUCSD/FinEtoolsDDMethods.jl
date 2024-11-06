@@ -39,10 +39,6 @@ help()
     echo "  {--ref} integer                -- Refinement factor"
     echo "  {--itmax} integer              -- Maximum number of iterations allowed"
     echo "  {--relrestol} float            -- Relative residual tolerance"
-    echo "  {--Ef} float                   -- Young's modulus of the fibres"
-    echo "  {--nuf} float                  -- Poisson ratio of the fibres"
-    echo "  {--Em} float                   -- Young's modulus of the matrix"
-    echo "  {--num} float                  -- Poisson ratio of the matrix"
     echo "  {--peek} true or false         -- Peek at the iterations?"
     echo "  {--visualize} true or false    -- Write out visualization files?"
     echo "  {-h|--help}                    -- Print this help message and exit"
@@ -139,7 +135,7 @@ flags()
 flags "$@"
 
 if [ -z "$FILENAME" ] ; then
-    FILENAME="fib-const-$KIND-ref=$REF-Nc=$NC-Np=$NP.json"
+    FILENAME="zc-weak-const-$KIND-Nepp=$NEPP-ref=$REF-Nc=$NC-Np=$NP.json"
 fi
 
 NE=$((48 * $REF * $REF))
@@ -156,7 +152,7 @@ fi
 cat <<EOF
 #!/usr/bin/env bash
 
-#SBATCH --job-name=job_fib
+#SBATCH --job-name=job_zc
 #SBATCH --ntasks-per-node=1
 #SBATCH --ntasks=$NP
 #SBATCH --time=01:45:00
