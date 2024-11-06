@@ -136,9 +136,6 @@ if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-const-Nepp=$NEPP-ref=$REF-Nc=$NC-Np=$NP.json"
 fi
 
-NE=$((48 * $REF * $REF))
-NP=$((NE / NEPP))
-
 QUEUE=short
 if [ $NP -gt 16 ] ; then
         QUEUE=medium
@@ -170,8 +167,9 @@ export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
 export BLAS_THREADS=2
 
 cd ~/a64fx/FinEtoolsDDMethods.jl/examples
-mpiexecjl julia --project=. conc/shells/zc_mpi_driver.jl \
+mpiexecjl -n $NP julia --project=. conc/shells/zc_mpi_driver.jl \
 --filename $FILENAME \
+--Np $NP \
 --Nc $NC \
 --n1 $N1 \
 --No $NO \

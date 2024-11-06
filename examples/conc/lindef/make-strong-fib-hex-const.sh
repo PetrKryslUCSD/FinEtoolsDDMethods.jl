@@ -193,7 +193,7 @@ export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
 export BLAS_THREADS=2
 
 cd FinEtoolsDDMethods.jl/examples
-mpiexecjl julia --project=. conc/lindef/fib_mpi_driver.jl \
+mpiexecjl -n $NP julia --project=. conc/lindef/fib_mpi_driver.jl \
 --filename $FILENAME \
 --kind $KIND \
 --Nc $NC \
