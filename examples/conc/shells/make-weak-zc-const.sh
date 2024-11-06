@@ -169,7 +169,7 @@ module load openmpi/gcc8/4.1.2
 export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
 export BLAS_THREADS=2
 
-cd FinEtoolsDDMethods.jl/examples
+cd ~/a64fx/FinEtoolsDDMethods.jl/examples
 mpiexecjl julia --project=. conc/shells/zc_mpi_driver.jl \
 --filename $FILENAME \
 --Nc $NC \
