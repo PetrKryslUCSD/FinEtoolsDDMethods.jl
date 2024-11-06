@@ -169,6 +169,7 @@ mpiexecjl -n $NP julia --project=. conc/shells/zc_mpi_driver.jl \
 --Nc $NC \
 --n1 $N1 \
 --No $NO \
+--Nepp $NEPP \
 --ref $REF \
 --itmax  $ITMAX \
 --relrestol  $RELRESTOL \
