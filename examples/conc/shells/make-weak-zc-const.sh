@@ -52,14 +52,10 @@ flags()
     export N1=6
     export NP=2
     export NO=5
-    export NEPP=1000
-    export REF=6
+    export NEPP=5000
+    export REF=0
     export ITMAX=2000
     export RELRESTOL=1.0e-6
-    export EF=1.00e5
-    export NUF=0.3
-    export EM=1.00e3
-    export NUM=0.4999
     export PEEK=true
     export VISUALIZE=false
 
@@ -133,7 +129,7 @@ flags()
 flags "$@"
 
 if [ -z "$FILENAME" ] ; then
-    FILENAME="zc-weak-const-Nepp=$NEPP-ref=$REF-Nc=$NC-Np=$NP.json"
+    FILENAME="zc-weak-const-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
 
 QUEUE=short
