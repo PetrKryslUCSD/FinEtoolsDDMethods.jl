@@ -30,7 +30,6 @@ help()
     usage_info
     echo
     echo "  {--filename} f                 -- Use filename to name the output files"
-    echo "  {--kind} hex or tet            -- Relative residual tolerance"
     echo "  {--Nc} integer                 -- Number of clusters"
     echo "  {--n1} integer                 -- Number 1D basis functions"
     echo "  {--Np} integer                 -- Number fine grid partitions"
@@ -57,7 +56,6 @@ flags()
     export REF=6
     export ITMAX=2000
     export RELRESTOL=1.0e-6
-    export KIND="hex"
     export EF=1.00e5
     export NUF=0.3
     export EM=1.00e3
@@ -135,7 +133,7 @@ flags()
 flags "$@"
 
 if [ -z "$FILENAME" ] ; then
-    FILENAME="zc-weak-const-$KIND-Nepp=$NEPP-ref=$REF-Nc=$NC-Np=$NP.json"
+    FILENAME="zc-weak-const-Nepp=$NEPP-ref=$REF-Nc=$NC-Np=$NP.json"
 fi
 
 NE=$((48 * $REF * $REF))
@@ -174,7 +172,6 @@ export BLAS_THREADS=2
 cd FinEtoolsDDMethods.jl/examples
 mpiexecjl julia --project=. conc/shells/zc_mpi_driver.jl \
 --filename $FILENAME \
---kind $KIND \
 --Nc $NC \
 --n1 $N1 \
 --No $NO \
