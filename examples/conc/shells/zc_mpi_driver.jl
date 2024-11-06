@@ -88,6 +88,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     MPI.Init()
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
+    @assert Np == MPI.Comm_size(comm)
     Np = MPI.Comm_size(comm)
     rank == 0 && (@info "$(MPI.Get_library_version())")
 
@@ -299,7 +300,7 @@ function parse_commandline()
         "--No"
         help = "Number of overlaps"
         arg_type = Int
-        default = 1
+        default = 5
         "--Np"
         help = "Number of partitions"
         arg_type = Int
@@ -308,6 +309,10 @@ function parse_commandline()
         help = "Refinement factor"
         arg_type = Int
         default = 7
+        "--Nepp"
+        help = "Number of elements per partition"
+        arg_type = Int
+        default = 0
         "--itmax"
         help = "Maximum number of iterations allowed"
         arg_type = Int
@@ -330,12 +335,22 @@ end
 
 p = parse_commandline()
 
+ref = p["ref"]
+Nepp = p["Nepp"]    
+Np = p["Np"]
+if Nepp == 0 && ref == 0
+    error("Either ref or Nepp must be specified")
+end
+if ref == 0
+    ref = Int(ceil(sqrt((Np * Nepp / 48))))
+end
+
 _execute_alt(
     p["filename"],
-    p["ref"],
+    ref,
     p["Nc"], 
     p["n1"],
-    p["Np"], 
+    Np,
     p["No"], 
     p["itmax"], 
     p["relrestol"],
