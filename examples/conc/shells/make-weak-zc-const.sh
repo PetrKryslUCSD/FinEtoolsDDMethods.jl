@@ -156,8 +156,8 @@ cat <<EOF
 #SBATCH --ntasks=$NP
 #SBATCH --ntasks-per-node=$NTPN
 #SBATCH --time=01:45:00
-#SBATCH -p short
-#SBATCH --output=out
+#SBATCH -p $QUEUE
+#SBATCH --output=$(basename "$FILENAME" .json).out
 
 export JULIA_DEPOT_PATH="~/a64fx/depot"
 export PATH=$PATH:"~/a64fx/depot/bin"
