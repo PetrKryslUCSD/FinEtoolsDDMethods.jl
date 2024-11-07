@@ -139,11 +139,14 @@ if [ -z "$FILENAME" ] ; then
 fi
 
 QUEUE=short
-if [ $NP -gt 16 ] ; then
+if [ $NP -gt $((16*NTPN)) ] ; then
         QUEUE=medium
 fi
-if [ $NP -gt 32 ] ; then
+if [ $NP -gt $((32*NTPN)) ] ; then
         QUEUE=large
+fi
+if [ $NP -gt $((64*NTPN)) ] ; then
+        QUEUE=all-nodes
 fi
 
 cat <<EOF
