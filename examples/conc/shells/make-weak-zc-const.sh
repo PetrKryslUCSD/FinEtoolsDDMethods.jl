@@ -58,7 +58,7 @@ flags()
     export RELRESTOL=1.0e-6
     export PEEK=true
     export VISUALIZE=false
-    export NTASKS_PER_NODE=1
+    export NTPN=1
 
     while test $# -gt 0
     do
@@ -118,10 +118,10 @@ flags()
             [ $# = 0 ] && error "No value specified"
             export VISUALIZE="$1"
             shift;;
-        (--ntasks_per_node)
+        (--Ntpn)
             shift
             [ $# = 0 ] && error "No value specified"
-            export NTASKS_PER_NODE="$1"
+            export NTPN="$1"
             shift;;
         (-h|--help)
             help;;
@@ -135,7 +135,7 @@ flags()
 flags "$@"
 
 if [ -z "$FILENAME" ] ; then
-    FILENAME="zc-weak-const-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
+    FILENAME="zc-weak-const-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
 
 QUEUE=short
@@ -151,7 +151,7 @@ cat <<EOF
 
 #SBATCH --job-name=job_zc
 #SBATCH --ntasks=$NP
-#SBATCH --ntasks-per-node=$NTASKS_PER_NODE
+#SBATCH --ntasks-per-node=$NTPN
 #SBATCH --time=01:45:00
 #SBATCH -p short
 #SBATCH --output=out
