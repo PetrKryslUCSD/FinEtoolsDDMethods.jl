@@ -58,6 +58,7 @@ flags()
     export RELRESTOL=1.0e-6
     export PEEK=true
     export VISUALIZE=false
+    export NTASKS_PER_NODE=1
 
     while test $# -gt 0
     do
@@ -117,6 +118,11 @@ flags()
             [ $# = 0 ] && error "No value specified"
             export VISUALIZE="$1"
             shift;;
+        (--ntasks_per_node)
+            shift
+            [ $# = 0 ] && error "No value specified"
+            export NTASKS_PER_NODE="$1"
+            shift;;
         (-h|--help)
             help;;
 #       (-V|--version)
@@ -144,22 +150,20 @@ cat <<EOF
 #!/usr/bin/env bash
 
 #SBATCH --job-name=job_zc
-#SBATCH --ntasks-per-node=1
 #SBATCH --ntasks=$NP
+#SBATCH --ntasks-per-node=$NTASKS_PER_NODE
 #SBATCH --time=01:45:00
-#SBATCH -p $QUEUE
-#SBATCH --output=$FILENAME.out
+#SBATCH -p short
+#SBATCH --output=out
 
-# Load OpenMPI and Julia
 export JULIA_DEPOT_PATH="~/a64fx/depot"
-export PATH=\$PATH:"~/a64fx/depot/bin"
+export PATH=$PATH:"~/a64fx/depot/bin"
 module load julia
 module load gcc/13.1.0
 module load slurm
-module load openmpi/gcc8/4.1.2
+module load mpich/gcc12.2/4.1.1
 
-# Automatically set the number of Julia threads depending on number of Slurm threads
-export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
+export JULIA_NUM_THREADS=1
 export BLAS_THREADS=2
 
 cd ~/a64fx/FinEtoolsDDMethods.jl/examples
