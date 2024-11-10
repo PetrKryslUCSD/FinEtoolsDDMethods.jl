@@ -20,7 +20,7 @@ to send to other partitions (again one per partition).
 The idea is that each partition is capable of performing part of an operation
 required on the overall stiffness matrix. In particular, multiplication of the
 stiffness matrix by a vector, construction of the global reduced matrix (all on
-the non-shared partition mesh). Each partition also needs to support the local
+the owned partition mesh). Each partition also needs to support the local
 preconditioning solve (on the extended partition mesh).
 """
 module PartitionCoNCModule
@@ -40,15 +40,15 @@ using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ..FinEtoolsDDMethods: allbytes
 using ShellStructureTopo
 
-# Node lists are constructed for the non-shared, and then by extending the
+# Node lists are constructed for the owned, and then by extending the
 # partitions with the shared nodes. Connected elements are identified.
 function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
-    # this is the non-shared node list
+    # this is the owned node list
     nsnl = findall(x -> x == i, node_to_partition)
     nocel = connectedelems(fes, nsnl, count(fens))
     bfes = meshboundary(subset(fes, nocel))
     cnl = connectednodes(bfes)
-    # mark the members of the extended partition: start with the non-shared nodes
+    # mark the members of the extended partition: start with the owned nodes
     ismember = fill(false, count(fens))
     ismember[nsnl] .= true 
     for _ in 1:No
@@ -69,7 +69,7 @@ function _construct_node_lists_1(fens, fes, n2e, No, node_to_partition, i)
     # the all node list consists of all the nodes reached within a given number of overlaps
     xtnl = findall(x -> x, ismember)
     return (
-        nonshared_nodes = nsnl,
+        own_nodes = nsnl,
         extended_nodes = vcat(nsnl, setdiff(xtnl, nsnl)),
     )
 end
@@ -126,17 +126,17 @@ function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     for i in eachindex(node_lists)
         xtel = connectedelems(fes, node_lists[i].extended_nodes, count(fens))
         uel = findall(x -> x == i, element_to_partition)
-        push!(element_lists, (nonshared_elements = uel, extended_elements = xtel))
+        push!(element_lists, (own_elements = uel, extended_elements = xtel))
     end # for i in eachindex(node_lists)
     return element_lists
 end
 
-function _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_partition)
+function _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition)
     Np = length(node_lists)
     comm_lists = [Int[] for i in 1:Np, j in 1:Np] # communication lists for each partition
     for p in eachindex(node_lists)
         l = node_lists[p]
-        for n in l.nonshared_nodes
+        for n in l.own_nodes
             for e in n2e.map[n]
                 for on in fes.conn[e]
                     op = node_to_partition[on]
@@ -186,6 +186,10 @@ struct EntityListsContainer{IT<:Integer}
     nodes::Vector{IT}
     # All elements that constitute the partition.
     elements::Vector{IT}
+    # Receive from nodes.
+    receive_nodes::Vector{Vector{IT}}
+    # Send to nodes.
+    send_nodes::Vector{Vector{IT}}
     # All global dofs for the partition.
     global_dofs::Vector{IT}
     # Number of own dofs.
@@ -201,6 +205,7 @@ struct EntityListsContainer{IT<:Integer}
 end
 
 function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_partition = Int[])
+    IT = eltype(fes.conn[1])
     if isempty(node_to_partition)
         femm = FEMMBase(IntegDomain(fes, PointRule()))
         C = connectionmatrix(femm, count(fens))
@@ -210,17 +215,17 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
     Np = maximum(node_to_partition)
     n2e = FENodeToFEMap(fes, count(fens))
     node_lists =  _construct_node_lists(fens, fes, n2e, No, Np, node_to_partition)
-    nonshared_comm = _construct_communication_lists_nonshared(node_lists, n2e, fes, node_to_partition)
+    own_comm = _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition)
     extended_comm = _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
     element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
-    list_of_entity_lists = []
+    list_of_entity_lists = @NamedTuple{own::EntityListsContainer{IT}, extended::EntityListsContainer{IT}}[]
     for i in 1:Np
-        # nonshared
-        nodes = node_lists[i].nonshared_nodes
-        elements = element_lists[i].nonshared_elements
-        receive_nodes_i = nonshared_comm.receive_nodes[i]
-        send_nodes_i = nonshared_comm.send_nodes[i]
-        global_dofs = _dof_list(node_lists[i].nonshared_nodes, dofnums, fr)
+        # own
+        nodes = node_lists[i].own_nodes
+        elements = element_lists[i].own_elements
+        receive_nodes_i = own_comm.receive_nodes[i]
+        send_nodes_i = own_comm.send_nodes[i]
+        global_dofs = _dof_list(node_lists[i].own_nodes, dofnums, fr)
         gdofs_own = deepcopy(global_dofs)
         num_own_dofs = length(gdofs_own)
         gdofs_other = [_dof_list(receive_nodes_i[j], dofnums, fr)
@@ -237,9 +242,11 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
                      for j in eachindex(send_nodes_i)]
         ldofs_other = [dof_glob2loc[gdofs_other[j]] for j in eachindex(gdofs_other)]
         ldofs_self = [dof_glob2loc[gdofs_self[j]] for j in eachindex(gdofs_self)]
-        nonshared = EntityListsContainer(
+        own = EntityListsContainer(
             nodes,
             elements,
+            receive_nodes_i,
+            send_nodes_i,
             global_dofs,
             num_own_dofs,
             ldofs_own_only,
@@ -253,7 +260,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
         receive_nodes_i = extended_comm.receive_nodes[i]
         send_nodes_i = extended_comm.send_nodes[i]
         global_dofs = _dof_list(node_lists[i].extended_nodes, dofnums, fr)
-        num_own_dofs = nonshared.num_own_dofs # the partitions own the same nodes
+        num_own_dofs = own.num_own_dofs # the partitions own the same nodes
         gdofs_own = deepcopy(global_dofs[1:num_own_dofs])
         dof_glob2loc = fill(0, prod(size(dofnums)))
         for j in eachindex(global_dofs)
@@ -269,6 +276,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
         extended = EntityListsContainer(
             nodes,
             elements,
+            receive_nodes_i,
+            send_nodes_i,
             global_dofs,
             num_own_dofs,
             ldofs_own_only,
@@ -276,7 +285,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
             ldofs_self,
             dof_glob2loc,
         )
-        push!(list_of_entity_lists, (nonshared = nonshared, extended = extended))
+        push!(list_of_entity_lists, (own = own, extended = extended))
     end
     return list_of_entity_lists
 end
@@ -335,7 +344,7 @@ mutable struct CoNCPartitionData{EL, T, IT, FACTOR}
     rank::IT
     # List of entities (nodes, elements, degrees of freedom).
     entity_list::EL
-    # The stiffness matrix assembled from the non-shared elements.
+    # The stiffness matrix assembled from the owned elements.
     Kns_ff::SparseMatrixCSC{T, IT}
     # The factor (LU) of the stiffness matrix assembled from the extended elements.
     Kxt_ff_factor::FACTOR
@@ -383,7 +392,7 @@ function CoNCPartitionData(cpi::CPI,
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
     # Compute the matrix for the non shared elements
-    el = entity_list.nonshared.elements
+    el = entity_list.own.elements
     Kns = make_matrix(subset(fes, el))
     # Trim to just the free degrees of freedom
     Kns_ff = Kns[fr, fr]
@@ -397,14 +406,14 @@ function CoNCPartitionData(cpi::CPI,
         rhs .+= make_interior_load(subset(fes, el))[fr]
     end
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
-    el = setdiff(entity_list.extended.elements, entity_list.nonshared.elements)
+    el = setdiff(entity_list.extended.elements, entity_list.own.elements)
     Kadd = make_matrix(subset(fes, el))
     Kxt_ff = Kns_ff + Kadd[fr, fr]
     Kadd = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
     d = entity_list.extended.global_dofs
     Kxt_ff = Kxt_ff[d, d]
-    d = entity_list.nonshared.global_dofs
+    d = entity_list.own.global_dofs
     Kns_ff = Kns[d, d]
     Kns = nothing
     return CoNCPartitionData(rank, entity_list, Kns_ff, lu(Kxt_ff), rhs)

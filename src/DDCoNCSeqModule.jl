@@ -9,29 +9,29 @@ Implementation for sequential execution.
 The module provides the `PartitionedVector` as a mechanism for working with
 partitions. The partitioned vector defines a mechanism for storing and
 communicating data for each partition. The data is stored in two buffers: one
-for the non-shared degrees of, and one for the extended degrees of freedom. The
+for the owned degrees of, and one for the extended degrees of freedom. The
 buffers are stored in a vector of vectors, one for each partition.
 
-The non-shared degrees of freedom are the degrees of freedom that are owned
+The owned degrees of freedom are the degrees of freedom that are owned
 exclusively by a partition. Nevertheless, the partition needs also access to
 degrees of freedom owned by other partitions.
 
-(i) Multiplication of the stiffness matrix by a vector. The non-shared
+(i) Multiplication of the stiffness matrix by a vector. The owned
 partitioning is used. 
 
-(ii) Preparation of the two-level preconditioner. The non-shared partitioning is
+(ii) Preparation of the two-level preconditioner. The owned partitioning is
 used. 
 
 (iii) Solution of the systems of equations at the level of the partitions (level
 1 of the two-level Schwarz preconditioner). The extended partitioning is used.
 
 Here, the local degrees of freedom numbering is such that
-`partition_list[i].nonshared.ldofs_other[j]` are degrees
+`partition_list[i].own.ldofs_other[j]` are degrees
 of freedom that partition `i` receives from partition `j`, and
-`partition_list[j].nonshared.ldofs_self[i]` are degrees of
+`partition_list[j].own.ldofs_self[i]` are degrees of
 freedom that partition `j` sends to partition `i`.
 
-`_lhs_update!` and `_rhs_update!` are functions that update the nonshared
+`_lhs_update!` and `_rhs_update!` are functions that update the owned
 degrees of freedom. The first is analogous to scatter, whereas the second is
 analogous to gather. 
 
@@ -110,9 +110,9 @@ end
 function _make_buffers(::Type{T}, partition_list) where {T}
     buffers = _Buffers{T}[]
     for partition in partition_list
-        ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
+        ns = fill(zero(T), length(partition.entity_list.own.global_dofs))
         xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
-        elns = partition.entity_list.nonshared
+        elns = partition.entity_list.own
         elxt = partition.entity_list.extended
         lengths = [
             max(length(elns.ldofs_other[j]), length(elns.ldofs_self[j]), 
@@ -156,7 +156,7 @@ Copy a global vector into a partitioned vector.
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     partition_list = a.ddcomm.partition_list
     for i in eachindex(partition_list)
-        a.buffers[i].ns .= v[partition_list[i].entity_list.nonshared.global_dofs]
+        a.buffers[i].ns .= v[partition_list[i].entity_list.own.global_dofs]
     end
     a
 end
@@ -170,8 +170,8 @@ function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
     partition_list = a.ddcomm.partition_list
     for i in eachindex(partition_list)
         el = partition_list[i].entity_list
-        ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
-        lod = el.nonshared.dof_glob2loc[ownd]
+        ownd = el.own.global_dofs[1:el.own.num_own_dofs]
+        lod = el.own.dof_glob2loc[ownd]
         v[ownd] .= a.buffers[i].ns[lod]
     end
     v
@@ -246,7 +246,7 @@ function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     partition_list = y.ddcomm.partition_list
     result = zero(eltype(x.buffers[1].ns))
     for i in eachindex(partition_list)
-        own = 1:partition_list[i].entity_list.nonshared.num_own_dofs
+        own = 1:partition_list[i].entity_list.own.num_own_dofs
         result += dot(y.buffers[i].ns[own], x.buffers[i].ns[own])
     end
     return result
@@ -256,7 +256,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     partition_list = p.ddcomm.partition_list
     # Start all sends
     for self in eachindex(partition_list)
-        ldofs_self = partition_list[self].entity_list.nonshared.ldofs_self
+        ldofs_self = partition_list[self].entity_list.own.ldofs_self
         bs = p.buffers[self]
         for other in eachindex(ldofs_self)
             if !isempty(ldofs_self[other])
@@ -267,7 +267,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     end
     # Start all receives
     for self in eachindex(partition_list)
-        ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+        ldofs_other = partition_list[self].entity_list.own.ldofs_other
         bs = p.buffers[self]
         for other in eachindex(ldofs_other)
             bo = p.buffers[other]
@@ -280,7 +280,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     # Wait for all receives
     # Unpack from buffers
     for self in eachindex(partition_list)
-        ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+        ldofs_other = partition_list[self].entity_list.own.ldofs_other
         bs = p.buffers[self]
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
@@ -291,10 +291,10 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     end
     # original _rhs_update!
     # for self in eachindex(partition_list)
-    #     ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+    #     ldofs_other = partition_list[self].entity_list.own.ldofs_other
     #     for other in eachindex(ldofs_other)
     #         if !isempty(ldofs_other[other])
-    #             ldofs_self = partition_list[other].entity_list.nonshared.ldofs_self
+    #             ldofs_self = partition_list[other].entity_list.own.ldofs_self
     #             p.buffers[self].ns[ldofs_other[other]] .= p.buffers[other].ns[ldofs_self[self]]
     #         end
     #     end
@@ -305,7 +305,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     partition_list = q.ddcomm.partition_list
     # Start all sends
     for self in eachindex(partition_list)
-        ldofs_other = partition_list[self].entity_list.nonshared.ldofs_other
+        ldofs_other = partition_list[self].entity_list.own.ldofs_other
         bs = q.buffers[self]
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
@@ -317,7 +317,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     # Start all receives
     requests = []
     for self in eachindex(partition_list)
-        ldofs_self = partition_list[self].entity_list.nonshared.ldofs_self
+        ldofs_self = partition_list[self].entity_list.own.ldofs_self
         bs = q.buffers[self]
         for other in eachindex(ldofs_self)
             bo = q.buffers[other]
@@ -331,7 +331,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     # Wait for all receives
     # Unpack from buffers
     for self in eachindex(partition_list)
-        ldofs_self = partition_list[self].entity_list.nonshared.ldofs_self
+        ldofs_self = partition_list[self].entity_list.own.ldofs_self
         bs = q.buffers[self]
         for other in eachindex(ldofs_self)
             if !isempty(ldofs_self[other])
@@ -343,10 +343,10 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     # original _lhs_update!
     # partition_list = q.ddcomm.partition_list
     # for self in eachindex(partition_list)
-    #     ldofs_self = partition_list[self].entity_list.nonshared.ldofs_self
+    #     ldofs_self = partition_list[self].entity_list.own.ldofs_self
     #     for other in eachindex(ldofs_self)
     #         if !isempty(ldofs_self[other])
-    #             ldofs_other = partition_list[other].entity_list.nonshared.ldofs_other
+    #             ldofs_other = partition_list[other].entity_list.own.ldofs_other
     #             q.buffers[self].ns[ldofs_self[other]] .+= q.buffers[other].ns[ldofs_other[self]]
     #         end
     #     end
@@ -380,7 +380,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCSeqComm{PD} 
     sizehint!(buff_Phis, length(partition_list))
     Kr_ff = spzeros(nr, nr)
     for i in eachindex(partition_list)
-        pel = partition_list[i].entity_list.nonshared
+        pel = partition_list[i].entity_list.own
         # First we work with all the degrees of freedom on the partition
         P = Phi[pel.global_dofs, :]
         Kr_ff += (P' * partition_list[i].Kns_ff * P)
@@ -399,13 +399,13 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     _rhs_update_xt!(p)
     pre.buffPp .= zero(eltype(pre.buffPp))
     for self in eachindex(partition_list)
-        ld = partition_list[self].entity_list.nonshared.ldofs_own_only
+        ld = partition_list[self].entity_list.own.ldofs_own_only
         pre.buffPp .+= pre.buff_Phis[self]' * p.buffers[self].ns[ld]
     end
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     for self in eachindex(partition_list)
         q.buffers[self].ns .= 0
-        ld = partition_list[self].entity_list.nonshared.ldofs_own_only
+        ld = partition_list[self].entity_list.own.ldofs_own_only
         q.buffers[self].ns[ld] .= pre.buff_Phis[self] * pre.buffKiPp
     end
     _lhs_update!(q)
@@ -418,7 +418,7 @@ end
 
 function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     partition_list = p.ddcomm.partition_list
-    # Copy data from nonshared to extended
+    # Copy data from owned to extended
     for self in eachindex(partition_list)
         psx = partition_list[self].entity_list.extended
         p.buffers[self].xt .= 0
@@ -508,7 +508,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
                 bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
             end
         end
-        ld = partition_list[self].entity_list.nonshared.ldofs_own_only
+        ld = partition_list[self].entity_list.own.ldofs_own_only
         q.buffers[self].ns[ld] .+= q.buffers[self].xt[ld]
     end
     # Original _lhs_update_xt!
@@ -520,7 +520,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     #             q.buffers[self].xt[ldofs_self[other]] .+= q.buffers[other].xt[ldofs_other[self]]
     #         end
     #     end
-    #     qin = partition_list[self].entity_list.nonshared
+    #     qin = partition_list[self].entity_list.own
     #     ld = qin.ldofs_own_only
     #     q.buffers[self].ns[ld] .+= q.buffers[self].xt[ld]
     # end

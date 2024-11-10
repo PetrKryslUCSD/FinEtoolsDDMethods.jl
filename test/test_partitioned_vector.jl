@@ -11,7 +11,7 @@ using FinEtoolsDDMethods.CGModule: pcg_seq
 using FinEtoolsDDMethods.CoNCUtilitiesModule: patch_coordinates
 using FinEtoolsDDMethods.PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions 
 using FinEtoolsDDMethods.DDCoNCSeqModule: make_partitions, PartitionedVector, aop!, vec_copyto!, vec_dot
-using FinEtoolsDDMethods.DDCoNCSeqModule: NONSHARED, EXTENDED, rhs_update!, rhs_update_xt!
+using FinEtoolsDDMethods.DDCoNCSeqModule: rhs_update!, rhs_update_xt!
 using FinEtoolsDDMethods: set_up_timers
 using SymRCM
 using Metis
@@ -232,16 +232,16 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
         b = PartitionedVector(Float64, partition_list)
         vec_copyto!(b, p)
         for i in eachindex(partition_list)
-            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list.nonshared.global_dofs]) < 1e-10
+            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list.own.global_dofs]) < 1e-10
         end
         rhs_update!(b)
         for i in eachindex(partition_list)
-            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list.nonshared.global_dofs]) < 1e-10
+            @test norm(b.buff_ns[i] - p[partition_list[i].entity_list.own.global_dofs]) < 1e-10
         end
         for i in eachindex(partition_list)
             pie = partition_list[i].entity_list[EXTENDED]
             ld = pie.ldofs_own_only
-            @test norm(b.buff_ns[i][ld] - p[partition_list[i].entity_list.nonshared.global_dofs[ld]]) < 1e-10
+            @test norm(b.buff_ns[i][ld] - p[partition_list[i].entity_list.own.global_dofs[ld]]) < 1e-10
         end
         rhs_update_xt!(b)
         for i in eachindex(partition_list)

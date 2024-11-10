@@ -11,7 +11,7 @@ run(cmd)
 
 cmd = `$(mpiexecjl) -n 7 julia --project=. ./conc/shells/barrel_mpi_driver.jl`
 run(cmd)
-@info "======================================\nExpected 69 iterations" # why? 68 in serial
+@info "======================================\nExpected 69 iterations" 
 
 
 cmd = `$(mpiexecjl) -n 7 julia --project=. ./conc/shells/hyp_mpi_driver.jl`

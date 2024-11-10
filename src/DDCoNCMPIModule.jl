@@ -9,29 +9,29 @@ Implementation for MPI execution.
 The module provides the `PartitionedVector` as a mechanism for working with
 partitions. The partitioned vector defines a mechanism for storing and
 communicating data for each partition. The data is stored in two buffers: one
-for the non-shared degrees of, and one for the extended degrees of freedom. The
+for the owned degrees of, and one for the extended degrees of freedom. The
 buffers are stored in a vector of vectors, one for each partition.
 
-The non-shared degrees of freedom are the degrees of freedom that are owned
+The owned degrees of freedom are the degrees of freedom that are owned
 exclusively by a partition. Nevertheless, the partition needs also access to
 degrees of freedom owned by other partitions.
 
-(i) Multiplication of the stiffness matrix by a vector. The non-shared
+(i) Multiplication of the stiffness matrix by a vector. The owned
 partitioning is used. 
 
-(ii) Preparation of the two-level preconditioner. The non-shared partitioning is
+(ii) Preparation of the two-level preconditioner. The owned partitioning is
 used. 
 
 (iii) Solution of the systems of equations at the level of the partitions (level
 1 of the two-level Schwarz preconditioner). The extended partitioning is used.
 
 Here, the local degrees of freedom numbering is such that
-`p.partition_list[i].entity_list.nonshared.ldofs_other[j]` are degrees
+`p.partition_list[i].entity_list.own.ldofs_other[j]` are degrees
 of freedom that partition `i` receives from partition `j`, and
-`p.partition_list[j].entity_list.nonshared.ldofs_self[i]` are degrees of
+`p.partition_list[j].entity_list.own.ldofs_self[i]` are degrees of
 freedom that partition `j` sends to partition `i`.
 
-`_lhs_update!` and `_rhs_update!` are functions that update the nonshared
+`_lhs_update!` and `_rhs_update!` are functions that update the owned
 degrees of freedom. The first is analogous to scatter, whereas the second is
 analogous to gather. 
 
@@ -103,9 +103,9 @@ struct PartitionedVector{DDC<:DDCoNCMPIComm, T<:Number}
 end
 
 function _make_buffers(::Type{T}, partition) where {T}
-    ns = fill(zero(T), length(partition.entity_list.nonshared.global_dofs))
+    ns = fill(zero(T), length(partition.entity_list.own.global_dofs))
     xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
-    elns = partition.entity_list.nonshared
+    elns = partition.entity_list.own
     elxt = partition.entity_list.extended
     lengths = [
         max(length(elns.ldofs_other[j]), length(elns.ldofs_self[j]),
@@ -144,7 +144,7 @@ Copy a global vector into a partitioned vector.
 """
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     partition = a.ddcomm.partition
-    a.buffers.ns .= v[partition.entity_list.nonshared.global_dofs]
+    a.buffers.ns .= v[partition.entity_list.own.global_dofs]
     a
 end
 
@@ -176,15 +176,15 @@ function vec_collect(inp::PV) where {PV<:PartitionedVector}
     end
     if rank == 0
         el = loel[1]
-        ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
-        lod = el.nonshared.dof_glob2loc[ownd]
+        ownd = el.own.global_dofs[1:el.own.num_own_dofs]
+        lod = el.own.dof_glob2loc[ownd]
         v[ownd] .= a.buffers.ns[lod]
         for r in 1:Np-1
             ns = MPI.recv(comm; source=r)
             i = r + 1
             el = loel[i]
-            ownd = el.nonshared.global_dofs[1:el.nonshared.num_own_dofs]
-            lod = el.nonshared.dof_glob2loc[ownd]
+            ownd = el.own.global_dofs[1:el.own.num_own_dofs]
+            lod = el.own.dof_glob2loc[ownd]
             v[ownd] .= ns[lod]
         end
     end
@@ -239,7 +239,7 @@ Compute the dot product of two partitioned vectors.
 """
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     partition = y.ddcomm.partition
-    own = 1:partition.entity_list.nonshared.num_own_dofs
+    own = 1:partition.entity_list.own.num_own_dofs
     result = dot(y.buffers.ns[own], x.buffers.ns[own])
     return MPI.Allreduce(result, MPI.SUM, y.ddcomm.comm)
 end
@@ -249,8 +249,8 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     partition = p.ddcomm.partition
     # Start all sends
     bs = p.buffers
-    ldofs_self = partition.entity_list.nonshared.ldofs_self
-    ldofs_other = partition.entity_list.nonshared.ldofs_other
+    ldofs_self = partition.entity_list.own.ldofs_self
+    ldofs_other = partition.entity_list.own.ldofs_other
     # Start all receives
     recvrequests = MPI.Request[]
     for other in eachindex(ldofs_other)
@@ -286,8 +286,8 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     comm = q.ddcomm.comm
     partition = q.ddcomm.partition    
     bs = q.buffers
-    ldofs_other = partition.entity_list.nonshared.ldofs_other
-    ldofs_self = partition.entity_list.nonshared.ldofs_self
+    ldofs_other = partition.entity_list.own.ldofs_other
+    ldofs_self = partition.entity_list.own.ldofs_self
     # Start all receives
     recvrequests = MPI.Request[]
     for other in eachindex(ldofs_self)
@@ -348,7 +348,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     nr = size(Phi, 2)
     Kr_ff = spzeros(nr, nr)
     i = topartitionnumber(rank)
-    pel = ddcomm.list_of_entity_lists[i].nonshared
+    pel = ddcomm.list_of_entity_lists[i].own
     # First we work with all the degrees of freedom on the partition
     P = Phi[pel.global_dofs, :]
     Kr_ff += (P' * partition.Kns_ff * P)
@@ -383,14 +383,14 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     pre.napps += 1
     if pre.napps > pre.nskip
         # Narrow by the transformation 
-        ld = partition.entity_list.nonshared.ldofs_own_only
+        ld = partition.entity_list.own.ldofs_own_only
         pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
         # Communicate
         pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
         # Solve the reduced problem
         pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
         # Expand by the transformation 
-        ld = partition.entity_list.nonshared.ldofs_own_only
+        ld = partition.entity_list.own.ldofs_own_only
         q.buffers.ns[ld] .= pre.buff_Phi * pre.buffKiPp
         pre.napps = 0
     end
@@ -406,7 +406,7 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     bs = p.buffers
     ldofs_self = partition.entity_list.extended.ldofs_self
     ldofs_other = partition.entity_list.extended.ldofs_other
-    # Copy data from nonshared to extended
+    # Copy data from owned to extended
     psx = partition.entity_list.extended
     bs.xt .= 0
     ld = psx.ldofs_own_only
@@ -477,8 +477,8 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
         n = length(ldofs_self[other])
         bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
     end
-    # Update the nonshared
-    ld = partition.entity_list.nonshared.ldofs_own_only
+    # Update the owned
+    ld = partition.entity_list.own.ldofs_own_only
     bs.ns[ld] .+= bs.xt[ld]
 end
 

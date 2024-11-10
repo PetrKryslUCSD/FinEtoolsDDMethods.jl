@@ -180,7 +180,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     
     K_ff_2 = spzeros(size(K_ff, 1), size(K_ff, 1))
     for partition in partition_list
-        d = partition.entity_list.nonshared.global_dofs
+        d = partition.entity_list.own.global_dofs
         K_ff_2[d, d] += partition.Kns_ff
     end
     # @show norm(K_ff_2)
@@ -196,7 +196,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     t1 = time()
     Kr_ff = spzeros(size(Phi, 2), size(Phi, 2))
     for partition in partition_list
-        d = partition.entity_list.nonshared.global_dofs
+        d = partition.entity_list.own.global_dofs
         P = Phi[d, :]
         Kr_ff += (P' * partition.Kns_ff * P)
     end
