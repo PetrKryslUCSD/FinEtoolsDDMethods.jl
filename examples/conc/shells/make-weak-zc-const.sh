@@ -48,7 +48,7 @@ help()
 flags()
 {
     export FILENAME=""
-    export NC=100
+    export NC=0 # let the software compute this
     export N1=6
     export NP=2
     export NO=5
