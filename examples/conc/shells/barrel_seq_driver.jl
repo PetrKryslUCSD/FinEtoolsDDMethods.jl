@@ -59,11 +59,6 @@ function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol
     end
 
     to = time()
-    MPI.Init()
-    comm = MPI.COMM_WORLD
-    rank = MPI.Comm_rank(comm)
-    Np = MPI.Comm_size(comm)
-    rank == 0 && (@info "$(MPI.Get_library_version())")
 
     BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
     rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
