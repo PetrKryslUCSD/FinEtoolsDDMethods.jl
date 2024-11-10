@@ -2,25 +2,30 @@
 
 This is the `examples` folder.
 There are two sub folders: 
-- `schur`: Schur-complement-based solver using domain decomposition and conjugate gradients
-on the complement matrix. Some of the examples are parallelized with MPI.
-- `conc`: coherent node cluster (CoNC) model reduction is used as a global solver in a preconditioned conjugate gradient based on the decomposition at two levels:
-local (classical additive Schwarz based on overlapping subdomains), and global (reduced model based on coherent clusters). The examples do not run in parallel yet.
+- `schur`: Schur-complement-based solver using domain decomposition and
+conjugate gradients on the complement matrix. Some of the examples are
+parallelized with MPI.
+- `conc`: coherent node cluster (CoNC) model reduction is used as a global
+solver in a preconditioned conjugate gradient based on the decomposition at two
+levels: local (classical additive Schwarz based on overlapping subdomains), and
+global (reduced model based on coherent clusters). The examples do not run in
+parallel yet.
 
 ## Setting up the MPI environment
 
-For parallel execution, the Julia environment first needs to be set up.
-This needs to be done for the architecture on which the code will execute.
+For parallel execution, the Julia environment first needs to be set up. This
+needs to be done for the architecture on which the code will execute.
 
 Please do:
 
-- Clone the package, change into the `examples` folder, activate and instantiate this environment.
+- Clone the package, change into the `examples` folder, activate and instantiate
+  this environment.
 - Request the binary `OpenMPI_jll`
 ```
 using MPIPreferences
 MPIPreferences.use_jll_binary("OpenMPI_jll")
 ```
-or `MPICH`
+or `MPICH` (preferred on Ookami)
 ```
 using MPIPreferences
 MPIPreferences.use_jll_binary("MPICH_jll")
@@ -29,6 +34,7 @@ Or, use the trampoline
 ```
 MPIPreferences.use_jll_binary( "MPItrampoline_jll")
 ```
+Nothing needs to be done to test with MPI on Windows 11.
 - Install the helper script `mpiexecjl`
 ```
 using MPI
@@ -160,4 +166,11 @@ and submitted with `bash make_zc.sh 4 short > zc.sh ; sbatch zc.sh`. For OpenMPI
 In order to precompile Julia, use interactive command line:
 ```
 srun -N 1 -n 48 -t 00:30:00 -p short --pty bash
+```
+
+```
+for Np in 2 4 8 16 32 64 128 256 ; do 
+    bash conc/shells/make-weak-zc-const.sh --Nepp 10000 --Np $Np --Ntpn 2 > do-$Np.sh; 
+    sbatch do-$Np.sh; 
+done
 ```
