@@ -200,11 +200,13 @@ struct EntityListsContainer{IT<:Integer}
     dof_glob2loc::Vector{IT}
 end
 
-function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr)
-    femm = FEMMBase(IntegDomain(fes, PointRule()))
-    C = connectionmatrix(femm, count(fens))
-    g = Metis.graph(C; check_hermitian=true)
-    node_to_partition = Metis.partition(g, Np; alg=:KWAY)
+function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_partition = Int[])
+    if isempty(node_to_partition)
+        femm = FEMMBase(IntegDomain(fes, PointRule()))
+        C = connectionmatrix(femm, count(fens))
+        g = Metis.graph(C; check_hermitian=true)
+        node_to_partition = Metis.partition(g, Np; alg=:KWAY)
+    end
     Np = maximum(node_to_partition)
     n2e = FENodeToFEMap(fes, count(fens))
     node_lists =  _construct_node_lists(fens, fes, n2e, No, Np, node_to_partition)
@@ -304,10 +306,14 @@ struct CoNCPartitioningInfo{NF<:NodalField{T, IT} where {T, IT}, EL}
     list_of_entity_lists::EL
 end
 
-function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}) where {T, IT}
+function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}, node_to_partition) where {T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
-    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr)
+    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr, node_to_partition)
     return CoNCPartitioningInfo(u, list_of_entity_lists)
+end
+
+function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}) where {T, IT}
+    return CoNCPartitioningInfo(fens, fes, Np, No, u, Int[])
 end
 
 function mean_partition_size(cpi::CoNCPartitioningInfo)
