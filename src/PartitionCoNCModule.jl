@@ -128,20 +128,22 @@ function _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
         uel = findall(x -> x == i, element_to_partition)
         push!(element_lists, (own_elements = uel, extended_elements = xtel))
     end # for i in eachindex(node_lists)
-    return element_lists
+    return element_lists, element_to_partition
 end
 
-function _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition)
+function _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition, element_to_partition)
     Np = length(node_lists)
     comm_lists = [Int[] for i in 1:Np, j in 1:Np] # communication lists for each partition
     for p in eachindex(node_lists)
         l = node_lists[p]
         for n in l.own_nodes
             for e in n2e.map[n]
-                for on in fes.conn[e]
-                    op = node_to_partition[on]
-                    if op != p
-                        push!(comm_lists[p, op], on)
+                if element_to_partition[e] == p # only if owned element
+                    for on in fes.conn[e]
+                        op = node_to_partition[on]
+                        if op != p
+                            push!(comm_lists[p, op], on)
+                        end
                     end
                 end
             end
@@ -215,9 +217,9 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
     Np = maximum(node_to_partition)
     n2e = FENodeToFEMap(fes, count(fens))
     node_lists =  _construct_node_lists(fens, fes, n2e, No, Np, node_to_partition)
-    own_comm = _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition)
+    element_lists, element_to_partition = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
+    own_comm = _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition, element_to_partition)
     extended_comm = _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
-    element_lists = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     list_of_entity_lists = @NamedTuple{own::EntityListsContainer{IT}, extended::EntityListsContainer{IT}}[]
     for i in 1:Np
         # own
@@ -345,7 +347,7 @@ mutable struct CoNCPartitionData{EL, T, IT, FACTOR}
     # List of entities (nodes, elements, degrees of freedom).
     entity_list::EL
     # The stiffness matrix assembled from the owned elements.
-    Kns_ff::SparseMatrixCSC{T, IT}
+    Kown_ff::SparseMatrixCSC{T, IT}
     # The factor (LU) of the stiffness matrix assembled from the extended elements.
     Kxt_ff_factor::FACTOR
     # A buffer for the righthand side vector.
@@ -391,16 +393,16 @@ function CoNCPartitionData(cpi::CPI,
     entity_list = cpi.list_of_entity_lists[rank+1]
     fr = dofrange(cpi.u, DOF_KIND_FREE)
     dr = dofrange(cpi.u, DOF_KIND_DATA)
-    # Compute the matrix for the non shared elements
+    # Compute the matrix for the owned elements
     el = entity_list.own.elements
-    Kns = make_matrix(subset(fes, el))
+    Kown = make_matrix(subset(fes, el))
     # Trim to just the free degrees of freedom
-    Kns_ff = Kns[fr, fr]
+    Kown_ff = Kown[fr, fr]
     # Compute the right hand side contribution
     u_d = gathersysvec(cpi.u, DOF_KIND_DATA)
-    rhs = zeros(eltype(cpi.u.values), size(Kns_ff, 1))
+    rhs = zeros(eltype(cpi.u.values), size(Kown_ff, 1))
     if norm(u_d, Inf) > 0
-        rhs += - Kns[fr, dr] * u_d
+        rhs += - Kown[fr, dr] * u_d
     end
     if make_interior_load !== nothing
         rhs .+= make_interior_load(subset(fes, el))[fr]
@@ -408,15 +410,15 @@ function CoNCPartitionData(cpi::CPI,
     # Compute the matrix for the remaining (overlapping - nonoverlapping) elements
     el = setdiff(entity_list.extended.elements, entity_list.own.elements)
     Kadd = make_matrix(subset(fes, el))
-    Kxt_ff = Kns_ff + Kadd[fr, fr]
+    Kxt_ff = Kown_ff + Kadd[fr, fr]
     Kadd = nothing
     # Reduce the matrix to adjust the degrees of freedom referenced
     d = entity_list.extended.global_dofs
     Kxt_ff = Kxt_ff[d, d]
     d = entity_list.own.global_dofs
-    Kns_ff = Kns[d, d]
-    Kns = nothing
-    return CoNCPartitionData(rank, entity_list, Kns_ff, lu(Kxt_ff), rhs)
+    Kown_ff = Kown[d, d]
+    Kown = nothing
+    return CoNCPartitionData(rank, entity_list, Kown_ff, lu(Kxt_ff), rhs)
 end
 
 function partition_size(cpd::CoNCPartitionData)
