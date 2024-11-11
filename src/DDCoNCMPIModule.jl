@@ -69,7 +69,7 @@ import ..CGModule: vec_dot
 import Base: deepcopy
 
 torank(i) = i - 1
-topartitionnumber(i) = i + 1
+topartitionnumber(r) = r + 1
 
 """
     DDCoNCMPIComm{MPIC, EL, PD<:CoNCPartitionData}
@@ -91,10 +91,10 @@ function DDCoNCMPIComm(comm, cpi, fes, make_matrix, make_interior_load)
 end
 
 struct _Buffers{T}
-    ns::Vector{T}
-    xt::Vector{T}
-    recv::Vector{Vector{T}}
-    send::Vector{Vector{T}}
+    ownv::Vector{T}
+    extv::Vector{T}
+    vrecvv::Vector{Vector{T}}
+    vsendv::Vector{Vector{T}}
 end
 
 struct PartitionedVector{DDC<:DDCoNCMPIComm, T<:Number}
@@ -103,22 +103,22 @@ struct PartitionedVector{DDC<:DDCoNCMPIComm, T<:Number}
 end
 
 function _make_buffers(::Type{T}, partition) where {T}
-    ns = fill(zero(T), length(partition.entity_list.own.global_dofs))
-    xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
-    elns = partition.entity_list.own
-    elxt = partition.entity_list.extended
+    ownv = fill(zero(T), length(partition.entity_list.own.global_dofs))
+    extv = fill(zero(T), length(partition.entity_list.extended.global_dofs))
+    ownel = partition.entity_list.own
+    extel = partition.entity_list.extended
     lengths = [
-        max(length(elns.ldofs_other[j]), length(elns.ldofs_self[j]),
-            length(elxt.ldofs_other[j]), length(elxt.ldofs_self[j]))
-        for j in eachindex(elns.ldofs_other)
+        max(length(ownel.ldofs_other[j]), length(ownel.ldofs_self[j]),
+            length(extel.ldofs_other[j]), length(extel.ldofs_self[j]))
+        for j in eachindex(ownel.ldofs_other)
     ]
-    recv = [
-        fill(zero(T), lengths[j]) for j in eachindex(elns.ldofs_other)
+    vrecvv = [
+        fill(zero(T), lengths[j]) for j in eachindex(ownel.ldofs_other)
     ]
-    send = [
-        fill(zero(T), lengths[j]) for j in eachindex(elns.ldofs_self)
+    vsendv = [
+        fill(zero(T), lengths[j]) for j in eachindex(ownel.ldofs_self)
     ]
-    return _Buffers(ns, xt, recv, send)
+    return _Buffers(ownv, extv, vrecvv, vsendv)
 end
 
 function PartitionedVector(::Type{T}, ddcomm::DDC) where {T, DDC<:DDCoNCMPIComm}
@@ -133,7 +133,7 @@ end
 Copy a single value into the partitioned vector.
 """
 function vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
-    a.buffers.ns .= v   
+    a.buffers.ownv .= v   
     a
 end
 
@@ -144,7 +144,7 @@ Copy a global vector into a partitioned vector.
 """
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     partition = a.ddcomm.partition
-    a.buffers.ns .= v[partition.entity_list.own.global_dofs]
+    a.buffers.ownv .= v[partition.entity_list.own.global_dofs]
     a
 end
 
@@ -172,20 +172,20 @@ function vec_collect(inp::PV) where {PV<:PartitionedVector}
     gdim = a.ddcomm.gdim
     v = zeros(gdim)
     if rank > 0
-        MPI.send(a.buffers.ns, comm; dest=0)
+        MPI.send(a.buffers.ownv, comm; dest=0)
     end
     if rank == 0
         el = loel[1]
         ownd = el.own.global_dofs[1:el.own.num_own_dofs]
         lod = el.own.dof_glob2loc[ownd]
-        v[ownd] .= a.buffers.ns[lod]
+        v[ownd] .= a.buffers.ownv[lod]
         for r in 1:Np-1
-            ns = MPI.recv(comm; source=r)
+            ov = MPI.recv(comm; source=r)
             i = r + 1
             el = loel[i]
             ownd = el.own.global_dofs[1:el.own.num_own_dofs]
             lod = el.own.dof_glob2loc[ownd]
-            v[ownd] .= ns[lod]
+            v[ownd] .= ov[lod]
         end
     end
     return MPI.bcast(v, comm; root=0)
@@ -199,7 +199,7 @@ Copy one partitioned vector to another.
 The contents of `x` is copied into `y`.
 """
 function vec_copyto!(y::PV, x::PV) where {PV<:PartitionedVector}
-    @. y.buffers.ns = x.buffers.ns
+    @. y.buffers.ownv = x.buffers.ownv
     y
 end
 
@@ -218,7 +218,7 @@ end
 Compute `y = a y + x`.
 """
 function vec_aypx!(y::PV, a, x::PV) where {PV<:PartitionedVector}
-    @. y.buffers.ns = a * y.buffers.ns + x.buffers.ns
+    @. y.buffers.ownv = a * y.buffers.ownv + x.buffers.ownv
     y
 end
 
@@ -228,7 +228,7 @@ end
 Compute `y = y + a x`.
 """
 function vec_ypax!(y::PV, a, x::PV) where {PV<:PartitionedVector}
-    @. y.buffers.ns = y.buffers.ns + a * x.buffers.ns
+    @. y.buffers.ownv = y.buffers.ownv + a * x.buffers.ownv
     y
 end
 
@@ -240,7 +240,7 @@ Compute the dot product of two partitioned vectors.
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     partition = y.ddcomm.partition
     own = 1:partition.entity_list.own.num_own_dofs
-    result = dot(y.buffers.ns[own], x.buffers.ns[own])
+    result = dot(y.buffers.ownv[own], x.buffers.ownv[own])
     return MPI.Allreduce(result, MPI.SUM, y.ddcomm.comm)
 end
 
@@ -256,7 +256,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
-            push!(recvrequests, MPI.Irecv!(view(bs.recv[other], 1:n), comm; source=torank(other)))
+            push!(recvrequests, MPI.Irecv!(view(bs.vrecvv[other], 1:n), comm; source=torank(other)))
         end
     end
     # Start all sends
@@ -264,8 +264,8 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
-            bs.send[other][1:n] .= bs.ns[ldofs_self[other]]
-            push!(sendrequests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
+            bs.vsendv[other][1:n] .= bs.ownv[ldofs_self[other]]
+            push!(sendrequests, MPI.Isend(view(bs.vsendv[other], 1:n), comm; dest=torank(other)))
         end
     end
     # Wait for all receives, unpack. 
@@ -278,7 +278,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
         end
         other = topartitionnumber(status[].source)
         n = length(ldofs_other[other])
-        bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
+        bs.ownv[ldofs_other[other]] .= bs.vrecvv[other][1:n]
     end
 end
 
@@ -293,7 +293,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
-            push!(recvrequests, MPI.Irecv!(view(bs.recv[other], 1:n), comm; source=torank(other)))
+            push!(recvrequests, MPI.Irecv!(view(bs.vrecvv[other], 1:n), comm; source=torank(other)))
         end
     end
     # Start all sends
@@ -301,8 +301,8 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
-            bs.send[other][1:n] .= bs.ns[ldofs_other[other]]
-            push!(sendrequests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
+            bs.vsendv[other][1:n] .= bs.ownv[ldofs_other[other]]
+            push!(sendrequests, MPI.Isend(view(bs.vsendv[other], 1:n), comm; dest=torank(other)))
         end
     end
     MPI.Waitall(sendrequests)
@@ -315,14 +315,14 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         end
         other = topartitionnumber(status[].source)
         n = length(ldofs_self[other])
-        bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
+        bs.ownv[ldofs_self[other]] .+= bs.vrecvv[other][1:n]
     end
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     _rhs_update!(p)
     partition = p.ddcomm.partition
-    q.buffers.ns .= partition.Kns_ff * p.buffers.ns
+    q.buffers.ownv .= partition.Kown_ff * p.buffers.ownv
     _lhs_update!(q)  
     q    
 end
@@ -351,7 +351,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     pel = ddcomm.list_of_entity_lists[i].own
     # First we work with all the degrees of freedom on the partition
     P = Phi[pel.global_dofs, :]
-    Kr_ff += (P' * partition.Kns_ff * P)
+    Kr_ff += (P' * partition.Kown_ff * P)
     # Now we need to add all those sparse matrices together. Here it is done on
     # the root process and the result is farmed out to all the other
     # partitions.
@@ -379,23 +379,23 @@ end
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
     partition = p.ddcomm.partition
     _rhs_update_xt!(p)
-    q.buffers.ns .= 0
+    q.buffers.ownv .= 0
     pre.napps += 1
-    if pre.napps > pre.nskip
+    if pre.napps > pre.ownvkip
         # Narrow by the transformation 
         ld = partition.entity_list.own.ldofs_own_only
-        pre.buffPp .= pre.buff_Phi' * p.buffers.ns[ld]
+        pre.buffPp .= pre.buff_Phi' * p.buffers.ownv[ld]
         # Communicate
         pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
         # Solve the reduced problem
         pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
         # Expand by the transformation 
         ld = partition.entity_list.own.ldofs_own_only
-        q.buffers.ns[ld] .= pre.buff_Phi * pre.buffKiPp
+        q.buffers.ownv[ld] .= pre.buff_Phi * pre.buffKiPp
         pre.napps = 0
     end
     # _lhs_update!(q)
-    q.buffers.xt .= partition.Kxt_ff_factor \ p.buffers.xt
+    q.buffers.extv .= partition.Kxt_ff_factor \ p.buffers.extv
     _lhs_update_xt!(q)
     q
 end
@@ -408,15 +408,15 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     ldofs_other = partition.entity_list.extended.ldofs_other
     # Copy data from owned to extended
     psx = partition.entity_list.extended
-    bs.xt .= 0
+    bs.extv .= 0
     ld = psx.ldofs_own_only
-    bs.xt[ld] .= bs.ns[ld]
+    bs.extv[ld] .= bs.ownv[ld]
     # Start all receives
     recvrequests = MPI.Request[]
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
-            push!(recvrequests, MPI.Irecv!(view(bs.recv[other], 1:n), comm; source=torank(other)))
+            push!(recvrequests, MPI.Irecv!(view(bs.vrecvv[other], 1:n), comm; source=torank(other)))
         end
     end
     # Start all sends
@@ -424,8 +424,8 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
-            bs.send[other][1:n] .= bs.xt[ldofs_self[other]]
-            push!(sendrequests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
+            bs.vsendv[other][1:n] .= bs.extv[ldofs_self[other]]
+            push!(sendrequests, MPI.Isend(view(bs.vsendv[other], 1:n), comm; dest=torank(other)))
         end
     end
     MPI.Waitall(sendrequests)
@@ -438,7 +438,7 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
         end
         other = topartitionnumber(status[].source)
         n = length(ldofs_other[other])
-        bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
+        bs.extv[ldofs_other[other]] .= bs.vrecvv[other][1:n]
     end
 end
 
@@ -453,7 +453,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_self)
         if !isempty(ldofs_self[other])
             n = length(ldofs_self[other])
-            push!(recvrequests, MPI.Irecv!(view(bs.recv[other], 1:n), comm; source=torank(other)))
+            push!(recvrequests, MPI.Irecv!(view(bs.vrecvv[other], 1:n), comm; source=torank(other)))
         end
     end
     # Start all sends
@@ -461,8 +461,8 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
     for other in eachindex(ldofs_other)
         if !isempty(ldofs_other[other])
             n = length(ldofs_other[other])
-            bs.send[other][1:n] .= bs.xt[ldofs_other[other]]
-            push!(sendrequests, MPI.Isend(view(bs.send[other], 1:n), comm; dest=torank(other)))
+            bs.vsendv[other][1:n] .= bs.extv[ldofs_other[other]]
+            push!(sendrequests, MPI.Isend(view(bs.vsendv[other], 1:n), comm; dest=torank(other)))
         end
     end
     MPI.Waitall(sendrequests)
@@ -475,11 +475,11 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
         end
         other = topartitionnumber(status[].source)
         n = length(ldofs_self[other])
-        bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
+        bs.extv[ldofs_self[other]] .+= bs.vrecvv[other][1:n]
     end
     # Update the owned
     ld = partition.entity_list.own.ldofs_own_only
-    bs.ns[ld] .+= bs.xt[ld]
+    bs.ownv[ld] .+= bs.extv[ld]
 end
 
 function rhs(ddcomm::DDC) where {DDC<:DDCoNCMPIComm} 

@@ -96,10 +96,10 @@ function _make_partitions(cpi, fes, make_matrix, make_interior_load)
 end
 
 struct _Buffers{T}
-    ns::Vector{T}
-    xt::Vector{T}
-    recv::Vector{Vector{T}}
-    send::Vector{Vector{T}}
+    ownv::Vector{T}
+    extv::Vector{T}
+    vrecvv::Vector{Vector{T}}
+    vsendv::Vector{Vector{T}}
 end
 
 struct PartitionedVector{DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}, T<:Number}
@@ -110,22 +110,22 @@ end
 function _make_buffers(::Type{T}, partition_list) where {T}
     buffers = _Buffers{T}[]
     for partition in partition_list
-        ns = fill(zero(T), length(partition.entity_list.own.global_dofs))
-        xt = fill(zero(T), length(partition.entity_list.extended.global_dofs))
-        elns = partition.entity_list.own
-        elxt = partition.entity_list.extended
+        ownv = fill(zero(T), length(partition.entity_list.own.global_dofs))
+        extv = fill(zero(T), length(partition.entity_list.extended.global_dofs))
+        ownel = partition.entity_list.own
+        extel = partition.entity_list.extended
         lengths = [
-            max(length(elns.ldofs_other[j]), length(elns.ldofs_self[j]), 
-                length(elxt.ldofs_other[j]), length(elxt.ldofs_self[j]))
-            for j in eachindex(elns.ldofs_other)
+            max(length(ownel.ldofs_other[j]), length(ownel.ldofs_self[j]), 
+                length(extel.ldofs_other[j]), length(extel.ldofs_self[j]))
+            for j in eachindex(ownel.ldofs_other)
         ]
-        recv = [
-            fill(zero(T), lengths[j]) for j in eachindex(elns.ldofs_other)
+        vrecvv = [
+            fill(zero(T), lengths[j]) for j in eachindex(ownel.ldofs_other)
         ]
-        send = [
-            fill(zero(T), lengths[j]) for j in eachindex(elns.ldofs_self)
+        vsendv = [
+            fill(zero(T), lengths[j]) for j in eachindex(ownel.ldofs_self)
         ]
-        push!(buffers, _Buffers(ns, xt, recv, send))
+        push!(buffers, _Buffers(ownv, extv, vrecvv, vsendv))
     end
     return buffers
 end
@@ -143,7 +143,7 @@ Copy a single value into the partitioned vector.
 function vec_copyto!(a::PV, v::T) where {PV<:PartitionedVector, T}
     partition_list = a.ddcomm.partition_list
     for i in eachindex(partition_list)
-        a.buffers[i].ns .= v   
+        a.buffers[i].ownv .= v   
     end
     a
 end
@@ -156,7 +156,7 @@ Copy a global vector into a partitioned vector.
 function vec_copyto!(a::PV, v::Vector{T}) where {PV<:PartitionedVector, T}
     partition_list = a.ddcomm.partition_list
     for i in eachindex(partition_list)
-        a.buffers[i].ns .= v[partition_list[i].entity_list.own.global_dofs]
+        a.buffers[i].ownv .= v[partition_list[i].entity_list.own.global_dofs]
     end
     a
 end
@@ -172,7 +172,7 @@ function vec_copyto!(v::Vector{T}, a::PV) where {PV<:PartitionedVector, T}
         el = partition_list[i].entity_list
         ownd = el.own.global_dofs[1:el.own.num_own_dofs]
         lod = el.own.dof_glob2loc[ownd]
-        v[ownd] .= a.buffers[i].ns[lod]
+        v[ownd] .= a.buffers[i].ownv[lod]
     end
     v
 end
@@ -183,7 +183,7 @@ end
 Collect the partitioned vector into a global vector.
 """
 function vec_collect(a::PV) where {PV<:PartitionedVector}
-    v = zeros(eltype(a.buffers[1].ns), a.ddcomm.gdim)
+    v = zeros(eltype(a.buffers[1].ownv), a.ddcomm.gdim)
     return vec_copyto!(v, a)
 end
 
@@ -197,7 +197,7 @@ The contents of `x` is copied into `y`.
 function vec_copyto!(y::PV, x::PV) where {PV<:PartitionedVector}
     partition_list = y.ddcomm.partition_list
     for i in eachindex(partition_list)
-        @. y.buffers[i].ns = x.buffers[i].ns
+        @. y.buffers[i].ownv = x.buffers[i].ownv
     end
     y
 end
@@ -219,7 +219,7 @@ Compute `y = a y + x`.
 function vec_aypx!(y::PV, a, x::PV) where {PV<:PartitionedVector}
     partition_list = y.ddcomm.partition_list
     for i in eachindex(partition_list)
-        @. y.buffers[i].ns = a * y.buffers[i].ns + x.buffers[i].ns
+        @. y.buffers[i].ownv = a * y.buffers[i].ownv + x.buffers[i].ownv
     end
     y
 end
@@ -232,7 +232,7 @@ Compute `y = y + a x`.
 function vec_ypax!(y::PV, a, x::PV) where {PV<:PartitionedVector}
     partition_list = y.ddcomm.partition_list
     for i in eachindex(partition_list)
-        @. y.buffers[i].ns = y.buffers[i].ns + a * x.buffers[i].ns
+        @. y.buffers[i].ownv = y.buffers[i].ownv + a * x.buffers[i].ownv
     end
     y
 end
@@ -244,10 +244,10 @@ Compute the dot product of two partitioned vectors.
 """
 function vec_dot(x::PV, y::PV) where {PV<:PartitionedVector}
     partition_list = y.ddcomm.partition_list
-    result = zero(eltype(x.buffers[1].ns))
+    result = zero(eltype(x.buffers[1].ownv))
     for i in eachindex(partition_list)
         own = 1:partition_list[i].entity_list.own.num_own_dofs
-        result += dot(y.buffers[i].ns[own], x.buffers[i].ns[own])
+        result += dot(y.buffers[i].ownv[own], x.buffers[i].ownv[own])
     end
     return result
 end
@@ -261,7 +261,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_self)
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
-                bs.send[other][1:n] .= bs.ns[ldofs_self[other]]
+                bs.vsendv[other][1:n] .= bs.ownv[ldofs_self[other]]
             end
         end
     end
@@ -273,7 +273,7 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
             bo = p.buffers[other]
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
-                bs.recv[other][1:n] .= bo.send[self][1:n]
+                bs.vrecvv[other][1:n] .= bo.vsendv[self][1:n]
             end
         end
     end
@@ -285,20 +285,10 @@ function _rhs_update!(p::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
-                bs.ns[ldofs_other[other]] .= bs.recv[other][1:n]
+                bs.ownv[ldofs_other[other]] .= bs.vrecvv[other][1:n]
             end
         end
     end
-    # original _rhs_update!
-    # for self in eachindex(partition_list)
-    #     ldofs_other = partition_list[self].entity_list.own.ldofs_other
-    #     for other in eachindex(ldofs_other)
-    #         if !isempty(ldofs_other[other])
-    #             ldofs_self = partition_list[other].entity_list.own.ldofs_self
-    #             p.buffers[self].ns[ldofs_other[other]] .= p.buffers[other].ns[ldofs_self[self]]
-    #         end
-    #     end
-    # end
 end
 
 function _lhs_update!(q::PV) where {PV<:PartitionedVector}
@@ -310,12 +300,11 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
-                bs.send[other][1:n] .= bs.ns[ldofs_other[other]]
+                bs.vsendv[other][1:n] .= bs.ownv[ldofs_other[other]]
             end
         end
     end
     # Start all receives
-    requests = []
     for self in eachindex(partition_list)
         ldofs_self = partition_list[self].entity_list.own.ldofs_self
         bs = q.buffers[self]
@@ -323,8 +312,7 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
             bo = q.buffers[other]
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
-                bs.recv[other][1:n] .= bo.send[self][1:n]
-                push!(requests, 1)
+                bs.vrecvv[other][1:n] .= bo.vsendv[self][1:n]
             end
         end
     end
@@ -336,28 +324,17 @@ function _lhs_update!(q::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_self)
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
-                bs.ns[ldofs_self[other]] .+= bs.recv[other][1:n]
+                bs.ownv[ldofs_self[other]] .+= bs.vrecvv[other][1:n]
             end
         end
     end
-    # original _lhs_update!
-    # partition_list = q.ddcomm.partition_list
-    # for self in eachindex(partition_list)
-    #     ldofs_self = partition_list[self].entity_list.own.ldofs_self
-    #     for other in eachindex(ldofs_self)
-    #         if !isempty(ldofs_self[other])
-    #             ldofs_other = partition_list[other].entity_list.own.ldofs_other
-    #             q.buffers[self].ns[ldofs_self[other]] .+= q.buffers[other].ns[ldofs_other[self]]
-    #         end
-    #     end
-    # end
 end
 
 function aop!(q::PV, p::PV) where {PV<:PartitionedVector}
     partition_list = p.ddcomm.partition_list
     _rhs_update!(p)
     for i in eachindex(partition_list)
-        q.buffers[i].ns .= partition_list[i].Kns_ff * p.buffers[i].ns
+        q.buffers[i].ownv .= partition_list[i].Kown_ff * p.buffers[i].ownv
     end
     _lhs_update!(q)
     q    
@@ -383,7 +360,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCSeqComm{PD} 
         pel = partition_list[i].entity_list.own
         # First we work with all the degrees of freedom on the partition
         P = Phi[pel.global_dofs, :]
-        Kr_ff += (P' * partition_list[i].Kns_ff * P)
+        Kr_ff += (P' * partition_list[i].Kown_ff * P)
         # the transformation matrices are now resized to only the own dofs
         ld = pel.ldofs_own_only
         push!(buff_Phis, P[ld, :])
@@ -400,17 +377,17 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     pre.buffPp .= zero(eltype(pre.buffPp))
     for self in eachindex(partition_list)
         ld = partition_list[self].entity_list.own.ldofs_own_only
-        pre.buffPp .+= pre.buff_Phis[self]' * p.buffers[self].ns[ld]
+        pre.buffPp .+= pre.buff_Phis[self]' * p.buffers[self].ownv[ld]
     end
     pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
     for self in eachindex(partition_list)
-        q.buffers[self].ns .= 0
+        q.buffers[self].ownv .= 0
         ld = partition_list[self].entity_list.own.ldofs_own_only
-        q.buffers[self].ns[ld] .= pre.buff_Phis[self] * pre.buffKiPp
+        q.buffers[self].ownv[ld] .= pre.buff_Phis[self] * pre.buffKiPp
     end
     _lhs_update!(q)
     for self in eachindex(partition_list)
-        q.buffers[self].xt .= partition_list[self].Kxt_ff_factor \ p.buffers[self].xt
+        q.buffers[self].extv .= partition_list[self].Kxt_ff_factor \ p.buffers[self].extv
     end
     _lhs_update_xt!(q)
     q
@@ -421,9 +398,9 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
     # Copy data from owned to extended
     for self in eachindex(partition_list)
         psx = partition_list[self].entity_list.extended
-        p.buffers[self].xt .= 0
+        p.buffers[self].extv .= 0
         ld = psx.ldofs_own_only
-        p.buffers[self].xt[ld] .= p.buffers[self].ns[ld]
+        p.buffers[self].extv[ld] .= p.buffers[self].ownv[ld]
     end
     # Start all sends
     for self in eachindex(partition_list)
@@ -432,7 +409,7 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_self)
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
-                bs.send[other][1:n] .= bs.xt[ldofs_self[other]]
+                bs.vsendv[other][1:n] .= bs.extv[ldofs_self[other]]
             end
         end
     end
@@ -444,7 +421,7 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
             bo = p.buffers[other]
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
-                bs.recv[other][1:n] .= bo.send[self][1:n]
+                bs.vrecvv[other][1:n] .= bo.vsendv[self][1:n]
             end
         end
     end
@@ -456,20 +433,10 @@ function _rhs_update_xt!(p::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
-                bs.xt[ldofs_other[other]] .= bs.recv[other][1:n]
+                bs.extv[ldofs_other[other]] .= bs.vrecvv[other][1:n]
             end
         end
     end
-    # Original _rhs_update_xt!
-    # for self in eachindex(partition_list)
-    #     ldofs_other = partition_list[self].entity_list.extended.ldofs_other
-    #     for other in eachindex(ldofs_other)
-    #         if !isempty(ldofs_other[other])
-    #             ldofs_self = partition_list[other].entity_list.extended.ldofs_self
-    #             p.buffers[self].xt[ldofs_other[other]] .= p.buffers[other].xt[ldofs_self[self]]
-    #         end
-    #     end
-    # end
 end
 
 function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
@@ -481,7 +448,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_other)
             if !isempty(ldofs_other[other])
                 n = length(ldofs_other[other])
-                bs.send[other][1:n] .= bs.xt[ldofs_other[other]]
+                bs.vsendv[other][1:n] .= bs.extv[ldofs_other[other]]
             end
         end
     end
@@ -493,7 +460,7 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
             bo = q.buffers[other]
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
-                bs.recv[other][1:n] .= bo.send[self][1:n]
+                bs.vrecvv[other][1:n] .= bo.vsendv[self][1:n]
             end
         end
     end
@@ -505,25 +472,12 @@ function _lhs_update_xt!(q::PV) where {PV<:PartitionedVector}
         for other in eachindex(ldofs_self)
             if !isempty(ldofs_self[other])
                 n = length(ldofs_self[other])
-                bs.xt[ldofs_self[other]] .+= bs.recv[other][1:n]
+                bs.extv[ldofs_self[other]] .+= bs.vrecvv[other][1:n]
             end
         end
         ld = partition_list[self].entity_list.own.ldofs_own_only
-        q.buffers[self].ns[ld] .+= q.buffers[self].xt[ld]
+        q.buffers[self].ownv[ld] .+= q.buffers[self].extv[ld]
     end
-    # Original _lhs_update_xt!
-    # for self in eachindex(partition_list)
-    #     ldofs_self = partition_list[self].entity_list.extended.ldofs_self
-    #     for other in eachindex(ldofs_self)
-    #         if !isempty(ldofs_self[other])
-    #             ldofs_other = partition_list[other].entity_list.extended.ldofs_other
-    #             q.buffers[self].xt[ldofs_self[other]] .+= q.buffers[other].xt[ldofs_other[self]]
-    #         end
-    #     end
-    #     qin = partition_list[self].entity_list.own
-    #     ld = qin.ldofs_own_only
-    #     q.buffers[self].ns[ld] .+= q.buffers[self].xt[ld]
-    # end
 end
 
 function rhs(ddcomm::DDC) where {DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionData}}
