@@ -381,7 +381,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
     _rhs_update_xt!(p)
     q.buffers.ownv .= 0
     pre.napps += 1
-    if pre.napps > pre.ownvkip
+    if pre.napps > pre.nskip
         # Narrow by the transformation 
         ld = partition.entity_list.own.ldofs_own_only
         pre.buffPp .= pre.buff_Phi' * p.buffers.ownv[ld]
@@ -394,7 +394,7 @@ function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVecto
         q.buffers.ownv[ld] .= pre.buff_Phi * pre.buffKiPp
         pre.napps = 0
     end
-    # _lhs_update!(q)
+    # Level 1
     q.buffers.extv .= partition.Kxt_ff_factor \ p.buffers.extv
     _lhs_update_xt!(q)
     q
