@@ -35,6 +35,8 @@ help()
     echo "  {--Np} integer                 -- Number fine grid partitions"
     echo "  {--No} integer                 -- Number of overlaps"
     echo "  {--Nepp} integer               -- Number of elements per partition "
+    echo "  {--NM} integer                 -- Numerator of the growth factor"
+    echo "  {--DN} integer                 -- Denominator of the growth factor"
     echo "  {--ref} integer                -- Refinement factor"
     echo "  {--itmax} integer              -- Maximum number of iterations allowed"
     echo "  {--relrestol} float            -- Relative residual tolerance"
@@ -146,7 +148,7 @@ flags()
 
 flags "$@"
 
-Nc=$((16 + NP *  / 5))
+Nc=$((16 + NP * DN / 5))
 
 if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP-NM=$NM-DN=$DN.json"
