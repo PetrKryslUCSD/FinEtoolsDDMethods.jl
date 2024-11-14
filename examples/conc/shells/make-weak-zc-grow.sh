@@ -148,7 +148,7 @@ flags()
 
 flags "$@"
 
-Nc=$((16 + NP * DN / 5))
+NC=$((16 + NP * DN / 5))
 
 if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP-NM=$NM-DN=$DN.json"
