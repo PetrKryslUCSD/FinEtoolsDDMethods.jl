@@ -52,6 +52,8 @@ flags()
     export N1=6
     export NP=2
     export NO=5
+    export DN=5
+    export NM=6
     export NEPP=5000
     export REF=0
     export ITMAX=2000
@@ -123,6 +125,16 @@ flags()
             [ $# = 0 ] && error "No value specified"
             export NTPN="$1"
             shift;;
+        (--DN)
+            shift
+            [ $# = 0 ] && error "No value specified"
+            export DN="$1"
+            shift;;
+        (--NM)
+            shift
+            [ $# = 0 ] && error "No value specified"
+            export NM="$1"
+            shift;;
         (-h|--help)
             help;;
 #       (-V|--version)
@@ -134,10 +146,10 @@ flags()
 
 flags "$@"
 
-Nc=$((16 + Np * 6 / 5))
+Nc=$((16 + NP *  / 5))
 
 if [ -z "$FILENAME" ] ; then
-    FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
+    FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP-NM=$NM-DN=$DN.json"
 fi
 
 QUEUE=short
