@@ -148,10 +148,12 @@ flags()
 
 flags "$@"
 
-NC=$((16 + NP * DN / 5))
+NT=$((N1*(N1+1)/2))
+NC=$((4*NP))
 
 if [ -z "$FILENAME" ] ; then
-    FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP-NM=$NM-DN=$DN.json"
+    # FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP-NM=$NM-DN=$DN.json"
+    FILENAME="zc-weak-grow-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
 
 QUEUE=short
