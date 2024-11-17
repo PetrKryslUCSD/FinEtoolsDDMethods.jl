@@ -7,11 +7,6 @@ run(cmd)
 @info "======================================\nExpected 26 iterations"
 
 
-cmd = `julia --project=. ./conc/shells/barrel_seq_driver.jl`
-run(cmd)
-@info "======================================\nExpected 69 iterations"
-
-
 cmd = `julia --project=. ./conc/shells/hyp_seq_driver.jl`
 run(cmd)
 @info "======================================\nExpected 28 iterations"
@@ -20,4 +15,9 @@ run(cmd)
 cmd = `julia --project=. ./conc/lindef/fib_seq_driver.jl --Np 7`
 run(cmd)
 @info "======================================\nExpected 67 iterations"
+
+
+cmd = `julia --project=. ./conc/shells/barrel_seq_driver.jl`
+run(cmd)
+@info "======================================\nExpected 69 iterations"
 
