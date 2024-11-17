@@ -57,16 +57,15 @@ using LinearAlgebra
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ShellStructureTopo
-using MPI
-
 using ..PartitionCoNCModule: CoNCPartitioningInfo, CoNCPartitionData, npartitions
 using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
-
 import ..CGModule: vec_copyto!
 import ..CGModule: vec_aypx!
 import ..CGModule: vec_ypax!
 import ..CGModule: vec_dot
 import Base: deepcopy
+
+using MPI
 
 torank(i) = i - 1
 topartitionnumber(r) = r + 1
@@ -329,8 +328,6 @@ end
 
 mutable struct TwoLevelPreConditioner{DDC<:DDCoNCMPIComm, T, IT, FACTOR}
     ddcomm::DDC
-    napps::Int
-    nskip::Int
     n::IT
     buff_Phi::SparseMatrixCSC{T, IT}
     Kr_ff_factor::FACTOR
@@ -340,8 +337,6 @@ end
 
 function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     comm = ddcomm.comm
-    napps = 0
-    nskip = 0
     partition = ddcomm.partition
     rank = ddcomm.partition.rank 
     n = size(Phi, 1)
@@ -373,29 +368,28 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     buff_Phi = P[pel.ldofs_own_only, :]
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
     buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
-    return TwoLevelPreConditioner(ddcomm, napps, nskip, n, buff_Phi, Kr_ff_factor, buffPp, buffKiPp)
+    return TwoLevelPreConditioner(ddcomm, n, buff_Phi, Kr_ff_factor, buffPp, buffKiPp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}
     partition = p.ddcomm.partition
     _rhs_update_xt!(p)
     q.buffers.ownv .= 0
-    pre.napps += 1
-    if pre.napps > pre.nskip
-        # Narrow by the transformation 
-        ld = partition.entity_list.own.ldofs_own_only
-        pre.buffPp .= pre.buff_Phi' * p.buffers.ownv[ld]
-        # Communicate
-        pre.buffPp .= MPI.Allreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
-        # Solve the reduced problem
-        pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
-        # Expand by the transformation 
-        ld = partition.entity_list.own.ldofs_own_only
-        q.buffers.ownv[ld] .= pre.buff_Phi * pre.buffKiPp
-        pre.napps = 0
-    end
+    # Level 2, narrow by the transformation 
+    ld = partition.entity_list.own.ldofs_own_only
+    pre.buffPp .= pre.buff_Phi' * p.buffers.ownv[ld]
+    # Level 2, communicate
+    req = MPI.Iallreduce!(pre.buffPp, MPI.SUM, pre.ddcomm.comm)
     # Level 1
     q.buffers.extv .= partition.Kxt_ff_factor \ p.buffers.extv
+    # Level 2, wait for the communication
+    MPI.Wait(req)
+    # Level 2, solve the reduced problem
+    pre.buffKiPp .= pre.Kr_ff_factor \ pre.buffPp
+    # Level 2, expand by the transformation 
+    ld = partition.entity_list.own.ldofs_own_only
+    q.buffers.ownv[ld] .= pre.buff_Phi * pre.buffKiPp
+    
     _lhs_update_xt!(q)
     q
 end
