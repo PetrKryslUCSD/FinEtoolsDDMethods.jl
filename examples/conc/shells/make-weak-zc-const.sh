@@ -140,7 +140,7 @@ if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-const-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
 
-if [ "$MACHINE" -eq "OOKAMI" ] ; then
+if [ "$MACHINE" = "OOKAMI" ] ; then
     QUEUE=short
     if [ $NP -gt $((16*NTPN)) ] ; then
             QUEUE=medium
@@ -189,7 +189,7 @@ EOF
 fi
 
 
-if [ "$MACHINE" -eq "EXPANSE" ] ; then
+if [ "$MACHINE" = "EXPANSE" ] ; then
     QUEUE=compute
 
 cat <<EOF
