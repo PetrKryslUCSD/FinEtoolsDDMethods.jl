@@ -195,6 +195,7 @@ if [ "$MACHINE" = "EXPANSE" ] ; then
 cat <<EOF
 #!/usr/bin/env bash
 
+#SBATCH --account=csd876
 #SBATCH --job-name=job_zc
 #SBATCH --ntasks=$NP
 #SBATCH --ntasks-per-node=$NTPN
