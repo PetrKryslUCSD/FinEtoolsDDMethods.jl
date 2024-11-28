@@ -6,7 +6,8 @@ Domain decomposition methods: solvers and algorithms used with FinEtools applica
 
 ## News
 
-- 08/29/2024: Cleanup of the interface. Sequential, MPI, threaded execution supported.
+- 11/28/2024: Paper about the 2-level Schwarz implementation of a CG solver [accepted](https://www.sciencedirect.com/science/article/pii/S0045782524008120) for publication 
+in Computer Methods in Applied Mechanics and Engineering.
 
 ## Capabilities and limitations
 
@@ -30,3 +31,7 @@ to almost incompressible elasticity and general shells.
 
 Paper in the [accepted form](https://www.sciencedirect.com/science/article/pii/S0045782524008120)
 is compatible with version 0.4.2.
+
+## Old news
+
+- 08/29/2024: Cleanup of the interface. Sequential, MPI, threaded execution supported.
