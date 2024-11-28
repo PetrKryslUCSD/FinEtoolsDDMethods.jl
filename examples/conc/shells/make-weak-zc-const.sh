@@ -29,7 +29,7 @@ help()
 {
     usage_info
     echo
-    echo "  {--machine} m                  -- Running on machine m (OOKAMI or EXPANSE)"
+    echo "  {--machine} m                  -- Running on machine m (ookami or expanse)"
     echo "  {--filename} f                 -- Use filename to name the output files"
     echo "  {--Nc} integer                 -- Number of clusters"
     echo "  {--n1} integer                 -- Number 1D basis functions"
@@ -48,7 +48,7 @@ help()
 
 flags()
 {
-    export MACHINE="OOKAMI"
+    export MACHINE="" # no default
     export FILENAME=""
     export NC=0 # let the software compute this
     export N1=6
@@ -65,6 +65,11 @@ flags()
     while test $# -gt 0
     do
         case "$1" in
+        (--machine)
+            shift
+            [ $# = 0 ] && error "No machine name specified"
+            export MACHINE="$1"
+            shift;;
         (--filename)
             shift
             [ $# = 0 ] && error "No file name specified"
@@ -140,7 +145,11 @@ if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-const-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
 
-if [ "$MACHINE" = "OOKAMI" ] ; then
+if [ -z "$MACHINE" ] ; then
+    error "No machine specified"
+fi
+
+if [ "$MACHINE" = "ookami" ] ; then
     QUEUE=short
     if [ $NP -gt $((16*NTPN)) ] ; then
             QUEUE=medium
@@ -189,7 +198,7 @@ EOF
 fi
 
 
-if [ "$MACHINE" = "EXPANSE" ] ; then
+if [ "$MACHINE" = "expanse" ] ; then
     QUEUE=compute
 
 cat <<EOF
