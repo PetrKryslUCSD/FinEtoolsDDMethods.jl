@@ -220,7 +220,7 @@ module load sdsc
 module load cpu
 module load gcc/10.2.0
 module load slurm
-module load openmpi
+module load openmpi/4.1.3
 export PATH=$PATH:~/julia-1.10.6/bin:~/.julia/bin
 
 export JULIA_NUM_THREADS=1
