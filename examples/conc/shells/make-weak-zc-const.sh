@@ -204,13 +204,14 @@ if [ "$MACHINE" = "expanse" ] ; then
 cat <<EOF
 #!/usr/bin/env bash
 
-#SBATCH --account=csd876
 #SBATCH --job-name=job_zc
+#SBATCH --output=$(basename "$FILENAME" .json).out
+#SBATCH --partition=$QUEUE
 #SBATCH --ntasks=$NP
 #SBATCH --ntasks-per-node=$NTPN
-#SBATCH --time=01:45:00
-#SBATCH -p $QUEUE
-#SBATCH --output=$(basename "$FILENAME" .json).out
+#SBATCH --account=csd876
+#SBATCH --export=ALL
+#SBATCH -t 01:30:00
 
 module load sdsc
 module load cpu
