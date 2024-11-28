@@ -28,3 +28,5 @@ Paper [submitted](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4902156) f
 the coherent node cluster conjugate gradient preconditioner with applications 
 to almost incompressible elasticity and general shells.
 
+Paper in the [accepted form](https://www.sciencedirect.com/science/article/pii/S0045782524008120)
+is compatible with version 0.4.2.

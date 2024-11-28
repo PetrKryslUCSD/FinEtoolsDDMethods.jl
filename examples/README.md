@@ -125,52 +125,34 @@ or
 mpiexec -n 5 julia --project=. ./conc/shells/zc_mpi_driver.jl
 ```
 
+### Ookami
+
 Batch execution on the Ookami A64FX nodes is described with a `sbatch` script.
-The batch file may be generated with the script `make_zc.sh`
+The batch file may be generated with the script `make-weak-zc-const.sh`
+and submitted with `sbatch`
 ```
-n=$1
-q=$2
-cat <<EOF
-#!/usr/bin/env bash
-
-#SBATCH --job-name=job_zc
-#SBATCH --ntasks-per-node=1
-#SBATCH --ntasks=$n
-#SBATCH --time=01:45:00
-#SBATCH -p $q
-
-# specify message size threshold for using the UCX Rendevous Protocol
-#export UCX_RNDV_THRESH=65536
-
-# use high-performance rc transports where possible
-#export UCX_TLS=rc
-
-# Load OpenMPI and Julia
-export JULIA_DEPOT_PATH="~/a64fx/depot"
-module load julia
-module load gcc/13.1.0
-module load slurm
-module load openmpi/gcc8/4.1.2
-
-# Automatically set the number of Julia threads depending on number of Slurm threads
-export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:=1}
-export BLAS_THREADS=2
-
-cd FinEtoolsDDMethods.jl/examples
-mpiexec julia --project=. conc/shells/zc_mpi_driver.jl --n1 6 --Nc 200 --ref 200
-EOF
-
+for Np in 384 ; do 
+  bash conc/shells/make-weak-zc-const.sh --machine ookami --Nepp 1000 --Np $Np --Ntpn 64 > do-$Np.sh; 
+  sbatch do-$Np.sh; 
+done
 ```
-and submitted with `bash make_zc.sh 4 short > zc.sh ; sbatch zc.sh`. For OpenMPI replace `mpiexec` with `/lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl `.;
+For OpenMPI replace `mpiexec` with `/lustre/home/pkrysl/a64fx/depot/bin/mpiexecjl `.
 
 In order to precompile Julia, use interactive command line:
 ```
 srun -N 1 -n 48 -t 00:30:00 -p short --pty bash
 ```
 
+### Expanse
+
+Expanse's standard compute nodes are each powered by two 64-core AMD EPYC 7742 processors and contain 256 GB of DDR4 memory.
+
+Batch execution on the Expanse A64FX nodes is described with a `sbatch` script.
+The batch file may be generated with the script `make-weak-zc-const.sh`
+and submitted with `sbatch` (note the machine specification)
 ```
-for Np in 2 4 8 16 32 64 128 256 ; do 
-    bash conc/shells/make-weak-zc-const.sh --Nepp 10000 --Np $Np --Ntpn 2 > do-$Np.sh; 
-    sbatch do-$Np.sh; 
+for Np in 384 ; do 
+  bash conc/shells/make-weak-zc-const.sh --machine expanse --Nepp 1000 --Np $Np --Ntpn 64 > do-$Np.sh; 
+  sbatch do-$Np.sh; 
 done
 ```
