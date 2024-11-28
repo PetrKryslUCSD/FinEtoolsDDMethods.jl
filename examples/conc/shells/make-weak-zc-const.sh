@@ -201,12 +201,15 @@ fi
 if [ "$MACHINE" = "expanse" ] ; then
     QUEUE=compute
 
+    NNodes=$((NP/NTPN))
+
 cat <<EOF
 #!/usr/bin/env bash
 
 #SBATCH --job-name=job_zc
 #SBATCH --output=$(basename "$FILENAME" .json).out
 #SBATCH --partition=$QUEUE
+#SBATCH --nodes=$NNodes
 #SBATCH --ntasks=$NP
 #SBATCH --ntasks-per-node=$NTPN
 #SBATCH --account=csd876
