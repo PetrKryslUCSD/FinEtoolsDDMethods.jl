@@ -29,6 +29,7 @@ help()
 {
     usage_info
     echo
+    echo "  {--machine} m                  -- Running on machine m (OOKAMI or EXPANSE)"
     echo "  {--filename} f                 -- Use filename to name the output files"
     echo "  {--Nc} integer                 -- Number of clusters"
     echo "  {--n1} integer                 -- Number 1D basis functions"
@@ -47,6 +48,7 @@ help()
 
 flags()
 {
+    export MACHINE="OOKAMI"
     export FILENAME=""
     export NC=0 # let the software compute this
     export N1=6
@@ -138,16 +140,17 @@ if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-const-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
 
-QUEUE=short
-if [ $NP -gt $((16*NTPN)) ] ; then
-        QUEUE=medium
-fi
-if [ $NP -gt $((32*NTPN)) ] ; then
-        QUEUE=large
-fi
-if [ $NP -gt $((64*NTPN)) ] ; then
-        QUEUE=all-nodes
-fi
+if [ "$MACHINE" -eq "OOKAMI" ] ; then
+    QUEUE=short
+    if [ $NP -gt $((16*NTPN)) ] ; then
+            QUEUE=medium
+    fi
+    if [ $NP -gt $((32*NTPN)) ] ; then
+            QUEUE=large
+    fi
+    if [ $NP -gt $((64*NTPN)) ] ; then
+            QUEUE=all-nodes
+    fi
 
 cat <<EOF
 #!/usr/bin/env bash
@@ -183,6 +186,46 @@ mpiexecjl -n $NP julia --project=. conc/shells/zc_mpi_driver.jl \
 --peek  $PEEK \
 --visualize  $VISUALIZE 
 EOF
+fi
+
+
+if [ "$MACHINE" -eq "EXPANSE" ] ; then
+    QUEUE=compute
+
+cat <<EOF
+#!/usr/bin/env bash
+
+#SBATCH --job-name=job_zc
+#SBATCH --ntasks=$NP
+#SBATCH --ntasks-per-node=$NTPN
+#SBATCH --time=01:45:00
+#SBATCH -p $QUEUE
+#SBATCH --output=$(basename "$FILENAME" .json).out
+
+module load sdsc
+module load cpu
+module load gcc/10.2.0
+export PATH=$PATH:~/julia-1.10.6/bin:~/.julia/bin
+
+export JULIA_NUM_THREADS=1
+export BLAS_THREADS=2
+
+cd ~/FinEtoolsDDMethods.jl/examples
+mpiexecjl -n $NP julia --project=. conc/shells/zc_mpi_driver.jl \
+--filename $FILENAME \
+--Np $NP \
+--Nc $NC \
+--n1 $N1 \
+--No $NO \
+--Nepp $NEPP \
+--ref $REF \
+--itmax  $ITMAX \
+--relrestol  $RELRESTOL \
+--peek  $PEEK \
+--visualize  $VISUALIZE 
+EOF
+fi
+
 
 
 
