@@ -7,7 +7,7 @@ usage_info()
 {
     echo "Usage:"
     echo "for Np in 16 32 64 ; do "
-    echo "   bash $arg0.sh --Np \$Np > do-\$Np.sh; "
+    echo "   bash $arg0.sh --machine expanse --Np \$Np > do-\$Np.sh; "
     echo "   sbatch do-\$Np.sh; "
     echo "done"
 }
@@ -167,7 +167,7 @@ cat <<EOF
 #SBATCH --job-name=job_zc
 #SBATCH --ntasks=$NP
 #SBATCH --ntasks-per-node=$NTPN
-#SBATCH --time=00:45:00
+#SBATCH --time=01:45:00
 #SBATCH -p $QUEUE
 #SBATCH --output=$(basename "$FILENAME" .json).out
 
@@ -215,7 +215,7 @@ cat <<EOF
 #SBATCH --mem=0
 #SBATCH --account=csd876
 #SBATCH --export=ALL
-#SBATCH -t 00:30:00
+#SBATCH -t 01:30:00
 
 module load sdsc
 module load cpu
