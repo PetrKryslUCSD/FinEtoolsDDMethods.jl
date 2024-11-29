@@ -221,7 +221,7 @@ module load cpu
 # module load gcc/10.2.0
 module load slurm
 # module load openmpi/4.1.3
-module load intel mvapich2
+module load mvapich2
 export PATH=$PATH:~/julia-1.10.6/bin:~/.julia/bin
 
 export JULIA_NUM_THREADS=1
