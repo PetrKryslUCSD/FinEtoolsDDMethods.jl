@@ -212,7 +212,7 @@ cat <<EOF
 #SBATCH --nodes=$NNodes
 #SBATCH --ntasks=$NP
 #SBATCH --ntasks-per-node=$NTPN
-#SBATCH --mem=0 # 0 means all memory on the node
+#SBATCH --mem=0
 #SBATCH --account=csd876
 #SBATCH --export=ALL
 #SBATCH -t 01:30:00
