@@ -141,6 +141,8 @@ flags()
 
 flags "$@"
 
+NNodes=$((NP/NTPN))
+
 if [ -z "$FILENAME" ] ; then
     FILENAME="zc-weak-const-Ntpn=$NTPN-Nepp=$NEPP-Nc=$NC-Np=$NP.json"
 fi
@@ -166,6 +168,7 @@ cat <<EOF
 
 #SBATCH --job-name=job_zc
 #SBATCH --ntasks=$NP
+#SBATCH --nodes=$NNodes
 #SBATCH --ntasks-per-node=$NTPN
 #SBATCH --time=00:45:00
 #SBATCH -p $QUEUE
@@ -200,8 +203,6 @@ fi
 
 if [ "$MACHINE" = "expanse" ] ; then
     QUEUE=compute
-
-    NNodes=$((NP/NTPN))
 
 cat <<EOF
 #!/usr/bin/env bash
