@@ -153,13 +153,13 @@ fi
 
 if [ "$MACHINE" = "ookami" ] ; then
     QUEUE=short
-    if [ $NP -gt $((16*NTPN)) ] ; then
+    if [ $NP -gt $((32*NTPN)) ] ; then
             QUEUE=medium
     fi
-    if [ $NP -gt $((32*NTPN)) ] ; then
+    if [ $NP -gt $((40*NTPN)) ] ; then
             QUEUE=large
     fi
-    if [ $NP -gt $((64*NTPN)) ] ; then
+    if [ $NP -gt $((80*NTPN)) ] ; then
             QUEUE=all-nodes
     fi
 
