@@ -368,7 +368,9 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
         Kr_ff = MPI.recv(comm; source=0)
         println("$(rank): Time to receive Kr_ff: ", time() - t)
     end
+    t = time()
     Kr_ff_factor = lu(Kr_ff)
+    (rank == 0) && println("Time to factorize Kr_ff: ", time() - t)
     # the transformation matrices are now resized to only the own dofs
     buff_Phi = P[pel.ldofs_own_only, :]
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
