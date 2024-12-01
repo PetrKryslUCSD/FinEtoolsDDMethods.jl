@@ -350,7 +350,10 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     # Now we need to add all those sparse matrices together. Here it is done on
     # the root process and the result is farmed out to all the other
     # partitions.
+    t = time()
     ks = MPI.gather(Kr_ff, comm; root=0)
+    (rank == 0) && println("Time to gather the local Kr_ff: ", time() - t)
+    t = time()
     if rank == 0
         Kr_ff = spzeros(nr, nr)
         for k in ks
@@ -360,8 +363,10 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
             MPI.send(Kr_ff, comm; dest=i)
         end
     end
+    (rank == 0) && println("Time to compute and send Kr_ff: ", time() - t)
     if rank > 0
         Kr_ff = MPI.recv(comm; source=0)
+        println("$(rank): Time to receive Kr_ff: ", time() - t)
     end
     Kr_ff_factor = lu(Kr_ff)
     # the transformation matrices are now resized to only the own dofs
