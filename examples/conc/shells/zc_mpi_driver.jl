@@ -90,7 +90,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     rank = MPI.Comm_rank(comm)
     @assert Np == MPI.Comm_size(comm)
     Np = MPI.Comm_size(comm)
-    rank == 0 && (@info "$(MPI.versioninfo())")
+    # rank == 0 && (@info "$(MPI.versioninfo())")
     rank == 0 && (@info "$(MPI.Get_library_version())")
 
     BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
