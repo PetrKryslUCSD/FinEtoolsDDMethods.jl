@@ -352,22 +352,25 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCMPIComm}
     # partitions.
     t = time()
     ks = MPI.gather(Kr_ff, comm; root=0)
-    (rank == 0) && println("Time to gather the local Kr_ff: ", time() - t)
+    (rank == 0) && println("Time to gather Kr_ff: ", time() - t)
     t = time()
     if rank == 0
         Kr_ff = spzeros(nr, nr)
         for k in ks
             Kr_ff += k
         end
-        for i in 1:MPI.Comm_size(comm)-1
-            MPI.send(Kr_ff, comm; dest=i)
-        end
+        # for i in 1:MPI.Comm_size(comm)-1
+        #     MPI.send(Kr_ff, comm; dest=i)
+        # end
     end
-    (rank == 0) && println("Time to compute and send Kr_ff: ", time() - t)
-    if rank > 0
-        Kr_ff = MPI.recv(comm; source=0)
-        println("$(rank): Time to receive Kr_ff: ", time() - t)
-    end
+    # (rank == 0) && println("Time to compute and send Kr_ff: ", time() - t)
+    # if rank > 0
+    #     Kr_ff = MPI.recv(comm; source=0)
+    #     println("$(rank): Time to receive Kr_ff: ", time() - t)
+    # end
+    t = time()
+    Kr_ff = MPI.bcast(Kr_ff, 0, comm)
+    (rank == 0) && println("Time to broadcast Kr_ff: ", time() - t)
     t = time()
     Kr_ff_factor = lu(Kr_ff)
     (rank == 0) && println("Time to factorize Kr_ff: ", time() - t)
