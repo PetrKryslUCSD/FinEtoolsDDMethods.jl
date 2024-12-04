@@ -116,11 +116,11 @@ function _execute(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, visuali
     @info("Number of elements: $(count(fes))")
     @info("Number of free dofs = $(nfreedofs(dchi))")
 
-    nl = selectnode(fens; box = Float64[10.0 10.0 1.0 1.0 0 0], tolerance = tolerance)
+    nl = selectnode(fens; box = Float64[10.0 10.0 1.0 1.0 0 0], inflate = tolerance)
     loadbdry1 = FESetP1(reshape(nl, 1, 1))
     lfemm1 = FEMMBase(IntegDomain(loadbdry1, PointRule()))
     fi1 = ForceIntensity(Float64[0, 0, +0.6e6, 0, 0, 0]);
-    nl = selectnode(fens; box = Float64[10.0 10.0 -1.0 -1.0 0 0], tolerance = tolerance)
+    nl = selectnode(fens; box = Float64[10.0 10.0 -1.0 -1.0 0 0], inflate = tolerance)
     loadbdry2 = FESetP1(reshape(nl, 1, 1))
     lfemm2 = FEMMBase(IntegDomain(loadbdry2, PointRule()))
     fi2 = ForceIntensity(Float64[0, 0, -0.6e6, 0, 0, 0]);
@@ -305,10 +305,10 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     dr = dofrange(dchi, DOF_KIND_DATA)
     
     bfes = meshboundary(fes)
-    el = selectelem(fens, bfes, box = Float64[10.0 10.0 1.0 1.0 -1 1], tolerance = tolerance)
+    el = selectelem(fens, bfes, box = Float64[10.0 10.0 1.0 1.0 -1 1], inflate = tolerance)
     lfemm1 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
     fi1 = ForceIntensity(Float64[0, 0, +0.6e6, 0, 0, 0]);
-    el = selectelem(fens, bfes, box = Float64[10.0 10.0 -1.0 -1.0 -1 1], tolerance = tolerance)
+    el = selectelem(fens, bfes, box = Float64[10.0 10.0 -1.0 -1.0 -1 1], inflate = tolerance)
     lfemm2 = FEMMBase(IntegDomain(subset(bfes, el), GaussRule(1, 2)))
     fi2 = ForceIntensity(Float64[0, 0, -0.6e6, 0, 0, 0]);
     F = distribloads(lfemm1, geom0, dchi, fi1, 1) + distribloads(lfemm2, geom0, dchi, fi2, 1);
