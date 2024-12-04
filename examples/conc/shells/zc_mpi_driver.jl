@@ -99,6 +99,7 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
 
     rank == 0 && (@info "Number of processes/partitions: $Np")
 
+    t1 = time()
     fens1, fes1 = Q4quadrilateral(xyz[[1, 2, 5, 4], :], ref * 2, ref * 1) 
     fens2, fes2 = Q4quadrilateral(xyz[[4, 5, 8, 7], :], ref * 2, ref * 1) 
     fens, fes1, fes2 = mergemeshes(fens1, fes1,  fens2, fes2, tolerance)
@@ -172,6 +173,8 @@ function _execute_alt(filename, ref, Nc, n1, Np, No, itmax, relrestol, peek, vis
     rank == 0 && (@info("Number of nodes: $(count(fens))"))
     rank == 0 && (@info("Number of elements: $(count(fes))"))
     rank == 0 && (@info("Number of free dofs = $(nfreedofs(dchi))"))
+
+    rank == 0 && (@info("Startup ($(round(time() - t1, digits=3)) [s])"))
 
     function make_matrix(fes)
         femm1 = deepcopy(femm) # for thread safety
