@@ -38,6 +38,7 @@ import LinearAlgebra: mul!, eigen
 using Statistics: mean
 using ..FENodeToPartitionMapModule: FENodeToPartitionMap
 using ..FinEtoolsDDMethods: allbytes
+using ..FinEtoolsDDMethods: set_up_timers, update_timer!, reset_timers!
 using ShellStructureTopo
 
 # Node lists are constructed for the owned, and then by extending the
@@ -207,20 +208,26 @@ struct EntityListsContainer{IT<:Integer}
 end
 
 function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_partition = Int[])
+    timers = set_up_timers("partition", "helper_lists", "list_of_entity_lists",)
     IT = eltype(fes.conn[1])
     if isempty(node_to_partition)
+        t_ = time()
         femm = FEMMBase(IntegDomain(fes, PointRule()))
         C = connectionmatrix(femm, count(fens))
-        g = Metis.graph(C; check_hermitian=true)
+        @time g = Metis.graph(C; check_hermitian=true)
         node_to_partition = Metis.partition(g, Np; alg=:KWAY)
+        update_timer!(timers, "partition", time() - t_)
     end
     Np = maximum(node_to_partition)
+    t_ = time()
     n2e = FENodeToFEMap(fes, count(fens))
     node_lists =  _construct_node_lists(fens, fes, n2e, No, Np, node_to_partition)
     element_lists, element_to_partition = _construct_element_lists(fens, fes, n2e, node_lists, node_to_partition)
     own_comm = _construct_communication_lists_own(node_lists, n2e, fes, node_to_partition, element_to_partition)
     extended_comm = _construct_communication_lists_extended(node_lists, n2e, fes, node_to_partition)
+    update_timer!(timers, "helper_lists", time() - t_)
     list_of_entity_lists = @NamedTuple{own::EntityListsContainer{IT}, extended::EntityListsContainer{IT}}[]
+    t_ = time()
     for i in 1:Np
         # own
         nodes = node_lists[i].own_nodes
@@ -289,6 +296,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
         )
         push!(list_of_entity_lists, (own = own, extended = extended))
     end
+    update_timer!(timers, "list_of_entity_lists", time() - t_)
+    @show timers
     return list_of_entity_lists
 end
 
@@ -319,7 +328,7 @@ end
 
 function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}, node_to_partition) where {T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
-    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr, node_to_partition)
+    @time list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr, node_to_partition)
     return CoNCPartitioningInfo(u, list_of_entity_lists)
 end
 
