@@ -61,7 +61,7 @@ function _execute_alt(filename, ref, stabilize, Nc, n1, Np, No, itmax, relrestol
     to = time()
 
     BLAS_THREADS = parse(Int, """$(get(ENV, "BLAS_THREADS", 1))""")
-    rank == 0 && (@info "BLAS_THREADS = $(BLAS_THREADS)")
+    @info "BLAS_THREADS = $(BLAS_THREADS)"
     BLAS.set_num_threads(BLAS_THREADS)
 
         
