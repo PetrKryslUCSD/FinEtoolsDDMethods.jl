@@ -285,11 +285,11 @@ function parse_commandline()
         "--Nc"
         help = "Number of clusters"
         arg_type = Int
-        default = 2
+        default = 300
         "--n1"
         help = "Number 1D basis functions"
         arg_type = Int
-        default = 5
+        default = 4
         "--No"
         help = "Number of overlaps"
         arg_type = Int
@@ -297,7 +297,7 @@ function parse_commandline()
         "--Np"
         help = "Number of partitions"
         arg_type = Int
-        default = 7
+        default = 3
         "--ref"
         help = "Refinement factor"
         arg_type = Int
