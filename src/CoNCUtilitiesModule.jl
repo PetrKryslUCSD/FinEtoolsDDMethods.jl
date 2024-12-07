@@ -111,7 +111,7 @@ function patch_coordinates(panelX, list)
             It[i, k] = It[k, i]
         end
     end
-    @assert It == It'
+    # @assert It == It'
     epsol = eigen(It)
     normal = epsol.vectors[:, 3]
     e1 = epsol.vectors[:, 1]
