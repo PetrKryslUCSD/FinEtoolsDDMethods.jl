@@ -215,7 +215,7 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
         femm = FEMMBase(IntegDomain(fes, PointRule()))
         C = connectionmatrix(femm, count(fens))
         @time g = Metis.graph(C; check_hermitian=true)
-        node_to_partition = Metis.partition(g, Np; alg=:KWAY)
+        @show node_to_partition = Metis.partition(g, Np; alg=:KWAY) # DEBUG
         update_timer!(timers, "partition", time() - t_)
     end
     Np = maximum(node_to_partition)
@@ -328,7 +328,7 @@ end
 
 function CoNCPartitioningInfo(fens, fes, Np, No, u::NodalField{T, IT}, node_to_partition) where {T, IT}
     fr = dofrange(u, DOF_KIND_FREE)
-    @time list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr, node_to_partition)
+    list_of_entity_lists = _make_list_of_entity_lists(fens, fes, Np, No, u.dofnums, fr, node_to_partition)
     return CoNCPartitioningInfo(u, list_of_entity_lists)
 end
 
