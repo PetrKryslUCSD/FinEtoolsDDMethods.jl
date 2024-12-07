@@ -344,6 +344,7 @@ struct TwoLevelPreConditioner{DDC<:DDCoNCSeqComm{PD} where {PD<:CoNCPartitionDat
     ddcomm::DDC
     n::IT
     buff_Phis::Vector{SparseMatrixCSC{T, IT}}
+    Kr_ff::SparseMatrixCSC{T, IT} # DEBUG
     Kr_ff_factor::FACTOR
     buffPp::Vector{T}
     buffKiPp::Vector{T}
@@ -368,7 +369,7 @@ function TwoLevelPreConditioner(ddcomm::DDC, Phi) where {DDC<:DDCoNCSeqComm{PD} 
     Kr_ff_factor = lu(Kr_ff)
     buffPp = fill(zero(eltype(Kr_ff_factor)), nr)
     buffKiPp = fill(zero(eltype(Kr_ff_factor)), nr)
-    return TwoLevelPreConditioner(ddcomm, n, buff_Phis, Kr_ff_factor, buffPp, buffKiPp)
+    return TwoLevelPreConditioner(ddcomm, n, buff_Phis, Kr_ff, Kr_ff_factor, buffPp, buffKiPp)
 end
 
 function (pre::TwoLevelPreConditioner)(q::PV, p::PV) where {PV<:PartitionedVector}

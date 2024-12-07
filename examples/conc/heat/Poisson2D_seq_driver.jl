@@ -115,6 +115,8 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
+    DataDrop.empty_hdf5_file("Kr_ff.h5")
+    DataDrop.store_matrix("Kr_ff", M!.Kr_ff)
     @info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
 
     t0 = time()
