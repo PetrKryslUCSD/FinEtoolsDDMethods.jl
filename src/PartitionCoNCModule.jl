@@ -214,8 +214,8 @@ function _make_list_of_entity_lists(fens, fes, Np, No, dofnums, fr, node_to_part
         t_ = time()
         femm = FEMMBase(IntegDomain(fes, PointRule()))
         C = connectionmatrix(femm, count(fens))
-        @time g = Metis.graph(C; check_hermitian=true)
-        @show node_to_partition = Metis.partition(g, Np; alg=:KWAY) # DEBUG
+        g = Metis.graph(C; check_hermitian=true)
+        node_to_partition = Metis.partition(g, Np; alg=:KWAY) # introduces randomness
         update_timer!(timers, "partition", time() - t_)
     end
     Np = maximum(node_to_partition)
