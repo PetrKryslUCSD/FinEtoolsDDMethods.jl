@@ -80,6 +80,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     cpi = CoNCPartitioningInfo(fens, fes, Np, No, Temp) 
+    DataDrop.store_json("cpi.json", cpi) # DEBUG
     @info("Create partitioning info ($(round(time() - t1, digits=3)) [s])")
     t2 = time()
     ddcomm = DDCoNCSeqComm(nothing, cpi, fes, make_matrix, make_interior_load)
@@ -115,7 +116,7 @@ function _execute_alt(filename, kind, mesher, volrule, N, Nc, n1, Np, No, itmax,
 
     t1 = time()
     M! = TwoLevelPreConditioner(ddcomm, Phi)
-    DataDrop.empty_hdf5_file("Kr_ff.h5")
+    DataDrop.empty_hdf5_file("Kr_ff.h5") # DEBUG
     DataDrop.store_matrix("Kr_ff", M!.Kr_ff)
     @info("Create preconditioner ($(round(time() - t1, digits=3)) [s])")
 
